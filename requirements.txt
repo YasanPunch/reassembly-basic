@@ -1,0 +1,5 @@
+numpy
+scipy
+open3d>=0.17.0 # Ensure a recent version for features like FPFH and registration
+trimesh>=3.0 # For mesh processing
+matplotlib # For visualization

@@ -1,0 +1,18 @@
+{
+    "voxel_downsample_size": 7.0,
+    "normal_estimation_radius": 14.0,
+    "normal_estimation_max_nn": 30,
+    "fpfh_feature_radius": 35.0,
+    "fpfh_feature_max_nn": 100,
+    "ransac_distance_threshold_factor": 1.5,
+    "ransac_edge_length_factor": 0.9,
+    "ransac_iterations": 4000000, 
+    "ransac_n_points": 4,
+    "ransac_confidence": 0.999,
+    "icp_max_correspondence_distance_factor": 2.0, 
+    "icp_relative_fitness": 1e-6,
+    "icp_relative_rmse": 1e-6,
+    "icp_max_iteration": 50,
+    "min_match_score": 0.3, 
+    "max_assembly_overlap_factor": 0.6
+}

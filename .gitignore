@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.env
+.venv
+venv/
+venv-reassembly/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Data - you might want to commit sample data, but not large datasets
+# data/input_fragments/* # Uncomment if you don't want to commit example fragments
+# data/output_assembly/*
+
+# Notebooks
+.ipynb_checkpoints
+
+# Build artifacts
+dist/
+build/
+*.egg
+
+# OS specific
+.DS_Store
+Thumbs.db
