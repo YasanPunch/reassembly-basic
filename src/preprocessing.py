@@ -3,6 +3,7 @@ import numpy as np
 
 print("DEBUG: preprocessing.py top level executed")
 
+
 def preprocess_fragment(mesh, params):
     """
     Preprocesses a single fragment mesh.
@@ -21,11 +22,11 @@ def preprocess_fragment(mesh, params):
     # 1. Convert mesh to point cloud (e.g., by sampling or using vertices)
     # For simplicity, we'll use vertex positions, but sampling might be better for dense meshes.
     # If the mesh is very dense, voxel downsampling on the mesh first, then converting to PCD is also an option.
-    
+
     # pcd = mesh.sample_points_poisson_disk(number_of_points=5000) # Alternative
     # Or, more simply if we want to preserve some original structure from vertices:
     pcd = o3d.geometry.PointCloud()
-    pcd.points = mesh.vertices # Use mesh vertices directly
+    pcd.points = mesh.vertices  # Use mesh vertices directly
 
     # 2. Voxel downsampling of the point cloud
     voxel_size = params.get("voxel_downsample_size", 0.01)
@@ -33,7 +34,7 @@ def preprocess_fragment(mesh, params):
         # print(f"Before downsampling: {len(pcd.points)} points")
         pcd = pcd.voxel_down_sample(voxel_size)
         # print(f"After downsampling: {len(pcd.points)} points")
-    
+
     # 3. (Optional) Statistical outlier removal
     # This can help clean up noisy scans but might remove valid sparse geometry.
     # Use with caution.
@@ -43,17 +44,20 @@ def preprocess_fragment(mesh, params):
     #     print(f"After outlier removal: {len(pcd.points)} points")
 
     # 4. Estimate normals (important for FPFH and ICP)
-    if len(pcd.points) > 0 :
+    if len(pcd.points) > 0:
         radius_normal = params.get("normal_estimation_radius", voxel_size * 2)
         max_nn_normal = params.get("normal_estimation_max_nn", 30)
         pcd.estimate_normals(
-            search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=max_nn_normal))
-        pcd.orient_normals_consistent_tangent_plane(k=15) # Make normals consistent
+            search_param=o3d.geometry.KDTreeSearchParamHybrid(
+                radius=radius_normal, max_nn=max_nn_normal
+            )
+        )
+        pcd.orient_normals_consistent_tangent_plane(k=15)  # Make normals consistent
 
     return pcd
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from io_utils import load_fragment
     import json
 
@@ -61,11 +65,13 @@ if __name__ == '__main__':
     dummy_params = {
         "voxel_downsample_size": 0.05,
         "normal_estimation_radius": 0.1,
-        "normal_estimation_max_nn": 30
+        "normal_estimation_max_nn": 30,
     }
-    
+
     # Ensure dummy_data/input_fragments/cube1.obj exists from io_utils test
-    cube_mesh = load_fragment('../../dummy_data/input_fragments/cube1.obj') # Assuming called from src
+    cube_mesh = load_fragment(
+        "../../dummy_data/input_fragments/cube1.obj"
+    )  # Assuming called from src
     if not cube_mesh:
         # If io_utils.py was run, it created dummy_data at project root.
         # If this script is run from src/, path should be ../dummy_data
@@ -86,12 +92,12 @@ if __name__ == '__main__':
                             f 4 1 5 8
                             """
         import os
-        if not os.path.exists('../dummy_data/input_fragments'):
-            os.makedirs('../dummy_data/input_fragments')
-        with open('../dummy_data/input_fragments/cube1.obj', 'w') as f:
-            f.write(cube_obj_content)
-        cube_mesh = load_fragment('../dummy_data/input_fragments/cube1.obj')
 
+        if not os.path.exists("../dummy_data/input_fragments"):
+            os.makedirs("../dummy_data/input_fragments")
+        with open("../dummy_data/input_fragments/cube1.obj", "w") as f:
+            f.write(cube_obj_content)
+        cube_mesh = load_fragment("../dummy_data/input_fragments/cube1.obj")
 
     if cube_mesh:
         print("Original cube mesh vertices:", len(cube_mesh.vertices))
@@ -104,3 +110,4 @@ if __name__ == '__main__':
             print("Processed PCD is empty.")
     else:
         print("Failed to load cube mesh for preprocessing test.")
+
