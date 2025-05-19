@@ -1,57 +1,63 @@
 import open3d as o3d
 import numpy as np
-from src.utils.geometry_utils import compute_fpfh_features #, get_mesh_boundary_vertices
+from src.utils.geometry_utils import compute_fpfh_features
 
 print("DEBUG: feature_extraction.py top level executed") 
 
-def extract_features_from_pcd(pcd, params):
+def extract_features_from_pcd(pcd_from_fracture_surface, params): # Renamed input for clarity
     """
-    Extracts FPFH features from a preprocessed point cloud.
+    Extracts FPFH features from a preprocessed point cloud,
+    which is assumed to be derived from segmented fracture surfaces.
+
     Args:
-        pcd (o3d.geometry.PointCloud): Input point cloud, assumed to be preprocessed
-                                       (downsampled, normals estimated).
+        pcd_from_fracture_surface (o3d.geometry.PointCloud): Input point cloud,
+                                   assumed to be downsampled and have normals.
         params (dict): Dictionary of parameters from config.
     Returns:
         tuple: (o3d.pipelines.registration.Feature, o3d.geometry.PointCloud)
-               FPFH features and the point cloud they correspond to (which might be
-               further processed, e.g., boundary points only).
+               FPFH features and the point cloud they correspond to.
     """
-    if not pcd.has_points():
-        print("Warning: Point cloud is empty, cannot extract features.")
+    if pcd_from_fracture_surface is None or not pcd_from_fracture_surface.has_points():
+        print("    FeatureExtraction: Input PCD is None or empty. Cannot extract features.")
         return None, None
-    if not pcd.has_normals():
-        print("Warning: Point cloud has no normals, estimating them now for FPFH.")
-        radius_normal = params.get("normal_estimation_radius", params["voxel_downsample_size"] * 2)
+        
+    if not pcd_from_fracture_surface.has_normals():
+        # This should ideally be handled in preprocessing, but as a fallback:
+        print("    FeatureExtraction: Warning - Input PCD has no normals. Estimating now.")
+        voxel_size = params["voxel_downsample_size"] # Get for radii calculation
+        radius_normal = params.get("normal_estimation_radius", voxel_size * 2.0) # Use absolute or factor
         max_nn_normal = params.get("normal_estimation_max_nn", 30)
-        pcd.estimate_normals(
+        pcd_from_fracture_surface.estimate_normals(
             search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=max_nn_normal))
+        # Orientation should also ideally be done in preprocessing
+        try:
+            pcd_from_fracture_surface.orient_normals_consistent_tangent_plane(k=params.get("orient_normals_k", 15))
+        except RuntimeError:
+            pass # Ignore if orientation fails here, normals are still there
 
-    # For a "basic" application, we'll compute FPFH features on the entire downsampled point cloud.
-    # A more advanced approach might try to identify "break surfaces" or use `get_mesh_boundary_vertices`
-    # on the original mesh, then sample points on those surfaces and compute features.
-    # However, `get_mesh_boundary_vertices` can be tricky with complex/noisy meshes.
 
-    # Example for using boundary points (can be unstable):
-    # boundary_pcd = get_mesh_boundary_vertices(original_mesh) # original_mesh would need to be passed
-    # if boundary_pcd and boundary_pcd.has_points():
-    #     print(f"Using {len(boundary_pcd.points)} boundary points for feature extraction.")
-    #     # Downsample boundary points if too many, estimate normals, then FPFH
-    #     target_pcd_for_features = boundary_pcd.voxel_down_sample(params["voxel_downsample_size"])
-    #     if not target_pcd_for_features.has_points(): target_pcd_for_features = pcd # fallback
-    # else:
-    #     print("No boundary points found or used, using full preprocessed PCD for features.")
-    target_pcd_for_features = pcd # Use the whole preprocessed PCD
-
-    if not target_pcd_for_features.has_points():
-        print("Target PCD for features is empty.")
-        return None, None
-
-    voxel_size = params["voxel_downsample_size"] # Use this as a basis for radii
-    radius_feature = params.get("fpfh_feature_radius", voxel_size * 5)
+    # FPFH computation parameters
+    voxel_size = params["voxel_downsample_size"] # Basis for FPFH radius if using factor
+    # Use absolute radius from config, or calculate if factor is preferred
+    radius_feature = params.get("fpfh_feature_radius", voxel_size * 5.0) 
+    max_nn_feature = params.get("fpfh_feature_max_nn", 100)
     
-    fpfh = compute_fpfh_features(target_pcd_for_features, voxel_size, 
-                                 params["normal_estimation_radius"], radius_feature)
-    return fpfh, target_pcd_for_features
+    print(f"    FeatureExtraction: Computing FPFH with radius_feature={radius_feature:.3f} on {len(pcd_from_fracture_surface.points)} points.")
+    
+    # The compute_fpfh_features in geometry_utils already handles KDTreeSearchParamHybrid
+    # but it uses its own internal normal estimation. We want to use the normals we already computed.
+    # So, we call o3d.pipelines.registration.compute_fpfh_feature directly.
+    
+    fpfh = o3d.pipelines.registration.compute_fpfh_feature(
+        pcd_from_fracture_surface,
+        o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=max_nn_feature))
+    
+    if fpfh is None or fpfh.num() == 0:
+        print("    FeatureExtraction: FPFH computation failed or yielded empty features.")
+        return None, pcd_from_fracture_surface # Return the PCD even if features are None
+
+    print(f"    FeatureExtraction: Extracted {fpfh.num()} FPFH features (dim: {fpfh.dimension()}).")
+    return fpfh, pcd_from_fracture_surface # Return the pcd it was computed on
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 import open3d as o3d
 import numpy as np
 
-print("DEBUG: alignment.py top level executed") # <--- ADD THIS
+print("DEBUG: alignment.py top level executed")
 
 def execute_global_registration(source_pcd, target_pcd, source_fpfh, target_fpfh, params):
     """

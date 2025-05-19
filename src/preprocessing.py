@@ -1,106 +1,160 @@
 import open3d as o3d
 import numpy as np
+import copy
+from src.segmentation import extract_fracture_surface_mesh
 
 print("DEBUG: preprocessing.py top level executed")
 
-def preprocess_fragment(mesh, params):
+def preprocess_fragment(fragment_info, params, viz_collector=None): 
     """
-    Preprocesses a single fragment mesh.
-    - Voxel downsamples the mesh to create a point cloud.
-    - Removes statistical outliers from the point cloud.
+    Preprocesses a single fragment:
+    1. Identifies fracture surfaces.
+    2. Samples points densely from these fracture surfaces.
+    3. Downsamples this point cloud.
+    4. Estimates normals.
+
     Args:
-        mesh (o3d.geometry.TriangleMesh): The input mesh.
+        fragment_info (dict): Dict containing 'mesh' (original o3d.geometry.TriangleMesh)
+                              and 'name'.
         params (dict): Dictionary of parameters from config.
+        viz_collector (list, optional): List to append visualization data to.
+
     Returns:
-        o3d.geometry.PointCloud: Preprocessed point cloud.
+        tuple: (o3d.geometry.PointCloud, o3d.geometry.TriangleMesh or None)
+               - Preprocessed point cloud (from fracture surface, downsampled, with normals).
+               - The extracted fracture surface mesh itself (for visualization/debug).
+               Returns (None, None) if processing fails.
     """
-    if not mesh.has_vertices():
-        print("Warning: Mesh has no vertices, cannot preprocess.")
-        return o3d.geometry.PointCloud()
+    original_mesh = fragment_info['mesh'] # Get mesh from fragment_info
+    fragment_name = fragment_info['name'] # Get name from fragment_info
+    original_index = fragment_info['original_index'] # Get for logging
 
-    # 1. Convert mesh to point cloud (e.g., by sampling or using vertices)
-    # For simplicity, we'll use vertex positions, but sampling might be better for dense meshes.
-    # If the mesh is very dense, voxel downsampling on the mesh first, then converting to PCD is also an option.
+    if not original_mesh.has_vertices():
+        print(f"    Preprocessing: Original mesh {fragment_name} has no vertices.")
+        if viz_collector is not None:
+            viz_collector.append({
+                'step': 'preprocessing_failed_no_vertices', 
+                'name': fragment_name
+            })
+        return None, None
+
+    # --- Step 1: Identify and Extract Fracture Surface Mesh ---
+    print(f"    Preprocessing: Segmenting fracture surface for {fragment_name}...")
+    fracture_surface_mesh_o3d = extract_fracture_surface_mesh(original_mesh, fragment_name, params)
+
+    if viz_collector is not None:
+        log_entry = {
+            'step': 'segmentation_result', 
+            'name': fragment_name,
+            'original_index': original_index,
+            'original_mesh_type': 'mesh',
+            'original_mesh_vertices': np.asarray(original_mesh.vertices),
+            'original_mesh_triangles': np.asarray(original_mesh.triangles),
+        }
+        if fracture_surface_mesh_o3d and fracture_surface_mesh_o3d.has_triangles():
+            log_entry.update({
+                'fracture_mesh_type': 'mesh',
+                'fracture_mesh_vertices': np.asarray(fracture_surface_mesh_o3d.vertices),
+                'fracture_mesh_triangles': np.asarray(fracture_surface_mesh_o3d.triangles),
+            })
+        else:
+            log_entry['fracture_mesh_type'] = None # Indicate no fracture mesh found
+        viz_collector.append(log_entry)
+
+    # ... (rest of the logic: pcd_target_sampling, dense sampling) ...
+    if fracture_surface_mesh_o3d is None or not fracture_surface_mesh_o3d.has_triangles():
+        print(f"    Preprocessing: No usable fracture surface found for {fragment_name}. Using whole mesh as fallback.")
+        pcd_target_sampling = original_mesh
+    else:
+        pcd_target_sampling = fracture_surface_mesh_o3d
     
-    # pcd = mesh.sample_points_poisson_disk(number_of_points=5000) # Alternative
-    # Or, more simply if we want to preserve some original structure from vertices:
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = mesh.vertices # Use mesh vertices directly
+    # --- Step 2: Sample points DENSELY from the target surface ---
+    num_dense_sample_points = params.get("fracture_surface_dense_sample_points", 5000)
+    print(f"    Preprocessing: Densely sampling {num_dense_sample_points} points from target surface of {fragment_name}...")
+    if len(pcd_target_sampling.vertices) < 3:
+        print(f"    Preprocessing: Target surface for {fragment_name} has < 3 vertices. Cannot sample points.")
+        pcd = o3d.geometry.PointCloud()
+    else:
+        if not pcd_target_sampling.has_triangles():
+             print(f"    Preprocessing: Target surface for {fragment_name} has no triangles. Using vertices directly.")
+             pcd = o3d.geometry.PointCloud()
+             pcd.points = pcd_target_sampling.vertices
+        else:
+            pcd = pcd_target_sampling.sample_points_poisson_disk(number_of_points=num_dense_sample_points)
 
-    # 2. Voxel downsampling of the point cloud
+    if not pcd.has_points():
+        print(f"    Preprocessing: Dense sampling yielded no points for {fragment_name}.")
+        if viz_collector is not None:
+             viz_collector.append({'step': 'dense_sampling_failed', 'name': fragment_name, 'original_index': original_index})
+        return None, fracture_surface_mesh_o3d
+
+    if viz_collector is not None:
+        viz_collector.append({
+            'step': 'dense_sampling_result',
+            'name': fragment_name,
+            'original_index': original_index,
+            'type': 'pointcloud',
+            'points': np.asarray(pcd.points),
+            'colors': np.asarray(pcd.colors) if pcd.has_colors() else None,
+            # Normals not computed yet
+        })
+        
+    # --- Step 3: Voxel Downsampling ---
     voxel_size = params.get("voxel_downsample_size", 0.01)
+    print(f"    Preprocessing: Voxel downsampling points for {fragment_name} with voxel_size={voxel_size}...")
     if voxel_size > 0 and len(pcd.points) > 0:
-        # print(f"Before downsampling: {len(pcd.points)} points")
-        pcd = pcd.voxel_down_sample(voxel_size)
-        # print(f"After downsampling: {len(pcd.points)} points")
-    
-    # 3. (Optional) Statistical outlier removal
-    # This can help clean up noisy scans but might remove valid sparse geometry.
-    # Use with caution.
-    # if len(pcd.points) > 0:
-    #     cl, ind = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
-    #     pcd = pcd.select_by_index(ind)
-    #     print(f"After outlier removal: {len(pcd.points)} points")
+        pcd_downsampled = pcd.voxel_down_sample(voxel_size)
+        print(f"      Downsampled from {len(pcd.points)} to {len(pcd_downsampled.points)} points.")
+        pcd = pcd_downsampled
+    else:
+        print(f"      Skipping voxel downsampling for {fragment_name}.")
 
-    # 4. Estimate normals (important for FPFH and ICP)
+    if not pcd.has_points():
+        print(f"    Preprocessing: Point cloud became empty after downsampling for {fragment_name}.")
+        if viz_collector is not None:
+             viz_collector.append({'step': 'downsampling_failed', 'name': fragment_name, 'original_index': original_index})
+        return None, fracture_surface_mesh_o3d # Return the original fracture_surface_mesh_o3d
+        
+    if viz_collector is not None:
+        viz_collector.append({
+            'step': 'downsampled_pcd_for_features_result',
+            'name': fragment_name,
+            'original_index': original_index,
+            'type': 'pointcloud',
+            'points': np.asarray(pcd.points),
+            'colors': np.asarray(pcd.colors) if pcd.has_colors() else None,
+        })
+
+    # --- Step 4: Add Noise ---
+    if params.get("add_preprocessing_noise", True) and len(pcd.points) > 0:
+        noise_factor = params.get("preprocessing_noise_factor", 0.01)
+        noise_magnitude = voxel_size * noise_factor
+        noise = np.random.uniform(-noise_magnitude, noise_magnitude, size=np.asarray(pcd.points).shape)
+        pcd.points = o3d.utility.Vector3dVector(np.asarray(pcd.points) + noise)
+
+    # --- Step 5: Estimate Normals ---
+    print(f"    Preprocessing: Estimating normals for {fragment_name} ({len(pcd.points)} points)...")
     if len(pcd.points) > 0 :
-        radius_normal = params.get("normal_estimation_radius", voxel_size * 2)
+        radius_normal_factor = params.get("normal_radius_factor", 2.0) # Ensure this is in config or use absolute
+        radius_normal = params.get("normal_estimation_radius", voxel_size * params.get("normal_radius_factor", 2.0))
         max_nn_normal = params.get("normal_estimation_max_nn", 30)
+        
         pcd.estimate_normals(
             search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=max_nn_normal))
-        pcd.orient_normals_consistent_tangent_plane(k=15) # Make normals consistent
-
-    return pcd
-
-
-if __name__ == '__main__':
-    from io_utils import load_fragment
-    import json
-
-    # Create a dummy config for testing
-    dummy_params = {
-        "voxel_downsample_size": 0.05,
-        "normal_estimation_radius": 0.1,
-        "normal_estimation_max_nn": 30
-    }
-    
-    # Ensure dummy_data/input_fragments/cube1.obj exists from io_utils test
-    cube_mesh = load_fragment('../../dummy_data/input_fragments/cube1.obj') # Assuming called from src
-    if not cube_mesh:
-        # If io_utils.py was run, it created dummy_data at project root.
-        # If this script is run from src/, path should be ../dummy_data
-        cube_obj_content = """
-                            v 0.0 0.0 0.0
-                            v 1.0 0.0 0.0
-                            v 1.0 1.0 0.0
-                            v 0.0 1.0 0.0
-                            v 0.0 0.0 1.0
-                            v 1.0 0.0 1.0
-                            v 1.0 1.0 1.0
-                            v 0.0 1.0 1.0
-                            f 1 2 3 4
-                            f 5 6 7 8
-                            f 1 2 6 5
-                            f 2 3 7 6
-                            f 3 4 8 7
-                            f 4 1 5 8
-                            """
-        import os
-        if not os.path.exists('../dummy_data/input_fragments'):
-            os.makedirs('../dummy_data/input_fragments')
-        with open('../dummy_data/input_fragments/cube1.obj', 'w') as f:
-            f.write(cube_obj_content)
-        cube_mesh = load_fragment('../dummy_data/input_fragments/cube1.obj')
-
-
-    if cube_mesh:
-        print("Original cube mesh vertices:", len(cube_mesh.vertices))
-        processed_pcd = preprocess_fragment(cube_mesh, dummy_params)
-        print("Processed PCD points:", len(processed_pcd.points))
-        if len(processed_pcd.points) > 0:
-            print("Processed PCD has normals:", processed_pcd.has_normals())
-            # o3d.visualization.draw_geometries([processed_pcd])
-        else:
-            print("Processed PCD is empty.")
+        
+        try:
+            pcd.orient_normals_consistent_tangent_plane(k=params.get("orient_normals_k", 15))
+        except RuntimeError as e:
+            print(f"    Warning: orient_normals_consistent_tangent_plane failed for {fragment_name}: {e}")
     else:
-        print("Failed to load cube mesh for preprocessing test.")
+        print(f"    Preprocessing: No points to estimate normals for {fragment_name}.")
+        if viz_collector is not None:
+             viz_collector.append({'step': 'normal_estimation_failed_no_points', 'name': fragment_name, 'original_index': original_index})
+        return None, fracture_surface_mesh_o3d # Return original fracture_surface_mesh_o3d
+
+    # After normals are estimated, log the PCD again IF it's substantially different for viz
+    # Or assume the 'downsampled_pcd_for_features_result' is what gets features computed on.
+    # For simplicity, we assume the PCD logged at 'downsampled_pcd_for_features_result' is what goes to feature extraction.
+    
+    print(f"    Preprocessing: Finished for {fragment_name}. Final PCD for features has {len(pcd.points)} points.")
+    return pcd, fracture_surface_mesh_o3d
