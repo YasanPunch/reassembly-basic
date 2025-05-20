@@ -8,7 +8,7 @@ print("DEBUG: preprocessing.py top level executed")
 def preprocess_fragment(fragment_info, params, viz_collector=None): 
     """
     Preprocesses a single fragment:
-    1. Identifies fracture surfaces.
+    1. Identifies fracture surfaces using normal-based segmentation.
     2. Samples points densely from these fracture surfaces.
     3. Downsamples this point cloud.
     4. Estimates normals.
@@ -41,6 +41,13 @@ def preprocess_fragment(fragment_info, params, viz_collector=None):
     # --- Step 1: Identify and Extract Fracture Surface Mesh ---
     print(f"    Preprocessing: Segmenting fracture surface for {fragment_name}...")
     fracture_surface_mesh_o3d = extract_fracture_surface_mesh(original_mesh, fragment_name, params)
+
+    # Visualization parameters for interactive verification
+    if params.get('visualize_segmentation', False):
+        from src.segmentation import visualize_segmentation
+        vis_geometries = visualize_segmentation(original_mesh, fracture_surface_mesh_o3d, fragment_name)
+        o3d.visualization.draw_geometries(vis_geometries, 
+                                         window_name=f"Segmentation Result: {fragment_name}")
 
     if viz_collector is not None:
         log_entry = {

@@ -13,7 +13,7 @@
     "icp_relative_fitness": 1e-6,
     "icp_relative_rmse": 1e-6,
     "icp_max_iteration": 50,
-    "min_match_score": 0.4, 
+    "min_match_score": 0.3,
     
     "min_boundary_edges_for_fracture_face": 2,
     "fracture_surface_dense_sample_points": 10000,
@@ -24,5 +24,12 @@
     "max_assembly_overlap_factor_aabb": 0.95, 
     "overlap_check_sample_points": 300,
     "overlap_penetration_allowance_ratio": 0.25,
-    "overlap_penetration_depth_factor": 0.25
+    "overlap_penetration_depth_factor": 0.25,
+    
+    "use_normal_based_segmentation": true,
+    "use_boundary_edge_detection": false,
+    "normal_cluster_eps": 0.03,
+    "normal_cluster_min_samples": 100,
+    "roughness_threshold": 0.4,
+    "visualize_segmentation": true
 }

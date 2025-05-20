@@ -255,6 +255,40 @@ def replay_visualization_log(log_filepath, fragments_data_map=None):
         else: print("    No geometries to draw for this step.")
     
     print("\n--- Replay Finished ---")
+    
+# Add this function to src/utils/visualization_utils.py
+
+def visualize_segmentation_results(original_mesh, fracture_surface, fragment_name=""):
+    """
+    Visualizes segmentation results showing original mesh and extracted fracture surface.
+    Args:
+        original_mesh (o3d.geometry.TriangleMesh): Original mesh
+        fracture_surface (o3d.geometry.TriangleMesh): Extracted fracture surface
+        fragment_name (str): Name of the fragment for window title
+    """
+    vis_geometries = []
+    
+    # Original mesh - make it semi-transparent gray
+    original_mesh_vis = copy.deepcopy(original_mesh)
+    original_mesh_vis.paint_uniform_color([0.7, 0.7, 0.7])  # Gray
+    original_mesh_vis.compute_vertex_normals()
+    vis_geometries.append(original_mesh_vis)
+    
+    # Add wireframe for better structure visibility
+    edges = o3d.geometry.LineSet.create_from_triangle_mesh(original_mesh_vis)
+    edges.paint_uniform_color([0.5, 0.5, 0.5])  # Darker gray for edges
+    vis_geometries.append(edges)
+    
+    # Fracture surface - bright color
+    if fracture_surface and fracture_surface.has_triangles():
+        fracture_surface_vis = copy.deepcopy(fracture_surface)
+        fracture_surface_vis.paint_uniform_color([1.0, 0.0, 0.0])  # Red for fracture
+        fracture_surface_vis.compute_vertex_normals()
+        vis_geometries.append(fracture_surface_vis)
+    
+    # Display
+    window_title = f"Segmentation Result: {fragment_name}" if fragment_name else "Segmentation Result"
+    o3d.visualization.draw_geometries(vis_geometries, window_name=window_title)
 
 # Placeholder for a more advanced interactive viewer (complex to implement quickly)
 def interactive_step_visualization(log_data, original_fragments_list):

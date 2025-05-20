@@ -285,6 +285,8 @@ if __name__ == "__main__":
     # Example for visualizing a few pairwise matches from main (simpler than full interactive)
     parser.add_argument("--num_viz_pairwise", type=int, default=0,
                         help="Number of top pairwise matches to visualize directly during runtime (0 for none).")
+    parser.add_argument("--visualize_segmentation", action="store_true",
+                    help="Enable visualization of segmentation results for each fragment.")
 
 
     # Ensure default config exists if not specified
