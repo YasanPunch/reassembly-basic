@@ -77,7 +77,9 @@ This project is a basic application to analyze pieces (fragments) of a 3D model 
     ```bash
     python src/main.py
     or
-    python -m src.main #most reliable
+    python -m src.main
+    or #best for debugging
+    python -m src.main --visualize_steps_file data/my_run_log.pkl
     ```
     You can also specify command-line arguments:
     ```bash
@@ -85,7 +87,7 @@ This project is a basic application to analyze pieces (fragments) of a 3D model 
     ```
     *   `--input_dir`: Directory containing input fragments.
     *   `--output_dir`: Directory where the reconstructed model will be saved.
-    *   `--config_file`: Path to the parameters JSON file.
+    *   `--config_file`: Path to the parameters JSON file. (Usually reconstruction_params.json)
     *   `--visualize`: If present, enables Open3D visualizations of some steps (e.g., the final assembly).
 
 4.  **Check the output:**

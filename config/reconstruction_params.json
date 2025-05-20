@@ -1,8 +1,8 @@
 {
-    "voxel_downsample_size": 7.0,
+    "voxel_downsample_size": 3.0,
     "normal_estimation_radius": 14.0,
     "normal_estimation_max_nn": 30,
-    "fpfh_feature_radius": 35.0,
+    "fpfh_feature_radius": 10.0,
     "fpfh_feature_max_nn": 100,
     "ransac_distance_threshold_factor": 1.5,
     "ransac_edge_length_factor": 0.9,
@@ -13,16 +13,16 @@
     "icp_relative_fitness": 1e-6,
     "icp_relative_rmse": 1e-6,
     "icp_max_iteration": 50,
-    "min_match_score": 0.3, 
+    "min_match_score": 0.4, 
     
-    "min_boundary_edges_for_fracture_face": 1,
+    "min_boundary_edges_for_fracture_face": 2,
     "fracture_surface_dense_sample_points": 10000,
     "add_preprocessing_noise": true,
     "preprocessing_noise_factor": 0.01,
     "orient_normals_k": 15,
     
-    "max_assembly_overlap_factor_aabb": 0.9, 
+    "max_assembly_overlap_factor_aabb": 0.95, 
     "overlap_check_sample_points": 300,
-    "overlap_penetration_allowance_ratio": 0.15,
+    "overlap_penetration_allowance_ratio": 0.25,
     "overlap_penetration_depth_factor": 0.25
 }
