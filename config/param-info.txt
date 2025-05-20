@@ -1,0 +1,336 @@
+# Parameter Information for 3D Model Fragment Reconstructor
+
+This file describes the parameters used in the `reconstruction_params.json` (and similar) configuration files.
+Parameters are grouped by the stage of the pipeline they primarily affect.
+
+# ==============================================================================
+# I. Preprocessing, Point Cloud Generation, and Initial Segmentation
+# (Mainly affects src/preprocessing.py, src/segmentation.py)
+# ==============================================================================
+
+# --- Point Cloud Generation from Mesh ---
+voxel_downsample_size: (float)
+    Purpose: The size of the voxel grid used for downsampling point clouds.
+    Affects:
+        - Density of the point cloud used for feature extraction (`pcd_for_features`).
+        - Scale reference for many distance-based thresholds (RANSAC, ICP, overlap checks).
+    Guidance: CRITICAL. Must be set according to the scale of your input fragments.
+              Smaller values = more detail, slower processing, more memory.
+              Larger values = less detail, faster processing.
+              A good starting point might be 1-5% of the smallest fragment's characteristic dimension.
+
+fracture_surface_dense_sample_points: (int)
+    Purpose: Number of points to densely sample from the identified fracture surface mesh(es)
+             before downsampling to `pcd_for_features`.
+    Affects: Initial density and coverage of points on the fracture surface.
+    Guidance: Higher values ensure better coverage of the fracture surface before downsampling.
+              5000-20000 is often a reasonable range.
+
+add_preprocessing_noise: (boolean)
+    Purpose: If true, adds a small amount of random noise to the `pcd_for_features`
+             before normal estimation.
+    Affects: Can sometimes help break perfect symmetries or test robustness.
+    Guidance: Usually `false` for standard runs. `true` for experimentation.
+
+preprocessing_noise_factor: (float)
+    Purpose: Multiplicative factor of `voxel_downsample_size` to determine noise magnitude.
+             Only used if `add_preprocessing_noise` is true.
+    Affects: Amount of noise added.
+    Guidance: Small values like 0.01-0.05.
+
+# --- Normal Estimation (for `pcd_for_features` and fallbacks) ---
+normal_estimation_radius: (float)
+    Purpose: Radius used in KDTree search for normal estimation.
+    Affects: Smoothness and local detail capture of estimated normals.
+    Guidance: Typically 1 to 5 times `voxel_downsample_size`.
+
+normal_estimation_max_nn: (int)
+    Purpose: Maximum number of neighbors considered for normal estimation within the `normal_estimation_radius`.
+    Affects: Normal estimation quality, especially in dense areas.
+    Guidance: 10-30 is common.
+
+orient_normals_k: (int)
+    Purpose: Number of neighbors (k) used for `orient_normals_consistent_tangent_plane`.
+    Affects: Consistency of normal orientations.
+    Guidance: 10-20 is common.
+
+# --- Initial Segmentation: Control Flags ---
+use_normal_based_segmentation: (boolean)
+    Purpose: If true, enables the primary segmentation strategy based on clustering face normals
+             and refining segments. If false, might fall back to simpler methods or no effective segmentation.
+    Guidance: CRITICAL. `true` is recommended for the advanced pipeline.
+
+use_boundary_edge_detection: (boolean)
+    Purpose: If true, segmentation logic in `segmentation.py` may incorporate results from
+             identifying faces adjacent to open mesh boundaries. Can be a fallback or supplemental.
+    Guidance: `false` if `use_normal_based_segmentation` is robust. `true` can help for meshes
+              with clear open boundaries corresponding to fractures.
+
+visualize_segmentation: (boolean)
+    Purpose: If true, enables interactive visualization and selection of fracture surface segments
+             for each fragment using Open3D GUI.
+    Affects: User workflow; allows manual override/guidance of segmentation.
+    Guidance: `true` for careful processing of complex fragments or when automated segmentation struggles.
+              `false` for batch processing or when defaults are trusted. This is the primary switch for interactive segmentation.
+
+# --- Initial Segmentation: Face Clustering by Normals (DBSCAN) ---
+normal_cluster_eps: (float)
+    Purpose: Epsilon (distance) parameter for DBSCAN when clustering face normals. Controls how
+             similar normals must be to be grouped. Angle-like, smaller means stricter.
+    Affects: Granularity of initial surface patches.
+    Guidance: CRITICAL for segmentation. Values often in 0.05-0.3 range. Depends on mesh "angularity".
+              Smaller `eps` -> more, smaller clusters. Larger `eps` -> fewer, larger clusters.
+
+normal_cluster_min_samples: (int)
+    Purpose: Minimum number of faces required to form a dense region (cluster) in DBSCAN normal clustering.
+    Affects: Filters out very small patches or noisy normal groups.
+    Guidance: CRITICAL for segmentation. 5-100. Larger values for cleaner, more significant patches.
+
+# --- Initial Segmentation: Roughness Heuristic (for non-interactive selection guidance) ---
+# Note: `calculate_cluster_curvature` is used. "Roughness" here refers to variance in normal orientations.
+roughness_threshold: (float)
+    Purpose: Threshold applied to the output of `calculate_cluster_curvature` (std dev of normal angles).
+             Segments with curvature above this are considered "rougher" and more likely fracture candidates.
+    Affects: Heuristic selection of fracture surfaces if not using interactive mode.
+    Guidance: 0.1-0.5. Higher values mean only very non-flat surfaces are considered "rough".
+
+# --- Initial Segmentation: Boundary Method Fallback ---
+min_boundary_edges_for_fracture_face: (int)
+    Purpose: Minimum number of a face's edges that must be on the mesh boundary for that face
+             to be considered a fracture candidate (used by the boundary-based method).
+    Affects: Fracture candidate selection if `use_boundary_edge_detection` is involved or as a fallback.
+    Guidance: 1 or 2. `1` includes faces merely touching a boundary. `2` for faces more "on" the boundary.
+
+# ==============================================================================
+# II. Segmentation Refinement (src/segmentation.py)
+# These parameters control the recursive refinement of initially clustered segments.
+# ==============================================================================
+
+segment_refinement_enabled: (boolean)
+    Purpose: Master switch to enable or disable the recursive segment refinement process.
+    Affects: Quality and granularity of final segments used for fracture surface selection.
+    Guidance: `true` for detailed segmentation. `false` to use only initial clusters.
+
+refinement_min_face_count_absolute: (int)
+    Purpose: An initial segment must have at least this many faces to be considered for refinement.
+    Affects: Prevents refining very small initial segments.
+    Guidance: e.g., 50-200.
+
+refinement_min_face_percentage: (float)
+    Purpose: An initial segment must constitute at least this percentage of the total fragment faces
+             to be considered for refinement (alternative to absolute count).
+    Affects: Similar to `refinement_min_face_count_absolute`.
+    Guidance: e.g., 0.01 (1%) to 0.1 (10%).
+
+refinement_min_faces_for_coherency_check: (int)
+    Purpose: Minimum number of faces a segment (or sub-segment) must have to undergo PCA/planar badness calculations.
+    Affects: Stability of badness scores; avoids unreliable metrics on tiny segments.
+    Guidance: 10-30.
+
+refinement_min_faces_for_roughness_check: (int)
+    Purpose: Minimum faces for a segment to undergo the roughness homogeneity check.
+    Affects: Stability of the roughness homogeneity test.
+    Guidance: 10-30.
+
+refinement_check_roughness_homogeneity: (boolean)
+    Purpose: If true, segments can be split if their per-face roughness values are not homogeneous.
+    Affects: Refinement decisions.
+    Guidance: `true` to consider local roughness variations.
+
+refinement_roughness_std_dev_threshold: (float)
+    Purpose: Standard deviation threshold for per-face roughness values (in radians). If std dev
+             exceeds this, the segment is considered non-homogeneous in roughness.
+    Affects: Sensitivity of the roughness homogeneity check.
+    Guidance: e.g., 0.1-0.3 radians.
+
+roughness_neighbor_k: (int)
+    Purpose: Number of neighboring faces used to calculate per-face roughness metric.
+    Affects: Scale of local roughness calculation.
+    Guidance: 3-10.
+
+# --- Parameters for Badness Score Calculation (Planar Fit Component) ---
+# These are used to NORMALIZE distances/angles when calculating `calculate_planar_badness_score`.
+# The actual decision to split uses `refinement_planar_split_badness_thresh`.
+refinement_coherency_plane_fit_normal_angle_dev_deg: (float)
+    Purpose: Expected average angular deviation (degrees) of face normals from a fitted plane normal.
+             Used for normalizing the angle component of planar_badness_score.
+    Affects: Scaling of the planar badness score.
+    Guidance: e.g., 10-45 degrees.
+
+refinement_coherency_plane_fit_dist_dev_factor: (float)
+    Purpose: Factor of segment's max extent, defining expected average distance deviation of face
+             centroids from a fitted plane. Used for normalizing distance component of planar_badness_score.
+    Affects: Scaling of the planar badness score.
+    Guidance: e.g., 0.05-0.2 (5%-20% of extent).
+
+# --- Parameters for Splitting Segments by Re-clustering ---
+refinement_split_strict_eps_factor: (float)
+    Purpose: Multiplicative factor applied to the initial `normal_cluster_eps` to get a stricter
+             epsilon for re-clustering a segment that needs to be split.
+    Affects: How aggressively a "bad" segment is broken down.
+    Guidance: 0.5-0.9 (e.g., 0.7 means 70% of original eps).
+
+refinement_split_min_samples_factor: (float)
+    Purpose: Factor for `normal_cluster_min_samples` when re-clustering.
+    Affects: Minimum size of sub-clusters during a split.
+    Guidance: 0.5-1.0.
+
+# --- Refinement Recursion and Final Segment Size ---
+refinement_max_recursion_depth: (int)
+    Purpose: Maximum depth for the recursive `refine_segment` calls.
+    Affects: Prevents infinite recursion; limits refinement complexity.
+    Guidance: 2-5.
+
+refinement_min_final_segment_size: (int)
+    Purpose: The minimum number of faces a segment must have after all refinements to be
+             kept as a candidate for fracture surface selection.
+    Affects: Filters out tiny, likely irrelevant, refined segments.
+    Guidance: CRITICAL for final segment quality. 10-100s, depends on desired fracture surface detail.
+
+# --- "Dominant Keep" Logic: For large, fairly coherent segments to avoid over-splitting ---
+refinement_dominant_keep_min_faces: (int)
+    Purpose: Minimum faces for a segment to be eligible for the "dominant keep" logic (i.e.,
+             kept without further splitting if its badness scores are below dominant thresholds).
+    Affects: Protects large, reasonably good surfaces.
+    Guidance: e.g., 200-1000, depending on typical fragment face counts.
+
+refinement_dominant_keep_pca_badness_thresh: (float)
+    Purpose: PCA badness score threshold for "dominant keep". If score is below this (and other conditions met),
+             the segment is kept. Score = 1.0 - (variance_explained_by_1st_PCA_component_of_normals).
+    Affects: Tolerance for normal spread in dominant segments.
+    Guidance: e.g., 0.3-0.5. (A score of 0.3 means 1st PCA component explains 70% of variance). Lower is stricter.
+
+refinement_dominant_keep_planar_badness_thresh: (float)
+    Purpose: Planar badness score threshold for "dominant keep".
+    Affects: Tolerance for planarity deviations in dominant segments.
+    Guidance: e.g., 2.0-4.0. (Score is sum of normalized distance/angle deviations). Lower is stricter.
+
+# --- Standard Splitting Logic: Thresholds for deciding to split a segment ---
+refinement_pca_split_badness_thresh: (float)
+    Purpose: PCA badness score threshold for deciding to split a segment (if not kept by dominant logic).
+             If score exceeds this, segment is considered non-coherent and split.
+    Affects: Sensitivity to normal spread for splitting.
+    Guidance: Typically stricter (lower) than `refinement_dominant_keep_pca_badness_thresh`. e.g., 0.2-0.4.
+
+refinement_planar_split_badness_thresh: (float)
+    Purpose: Planar badness score threshold for splitting a segment.
+    Affects: Sensitivity to planarity deviations for splitting.
+    Guidance: Typically stricter (lower) than `refinement_dominant_keep_planar_badness_thresh`. e.g., 1.5-3.0.
+
+# ==============================================================================
+# III. Feature Extraction (src/feature_extraction.py)
+# FPFH features computed on `pcd_for_features`.
+# ==============================================================================
+
+fpfh_feature_radius: (float)
+    Purpose: Radius for FPFH feature computation.
+    Affects: Scale of geometric properties captured by FPFH.
+    Guidance: CRITICAL. Typically 2-10 times `voxel_downsample_size`.
+
+fpfh_feature_max_nn: (int)
+    Purpose: Maximum number of neighbors considered for FPFH computation within `fpfh_feature_radius`.
+    Affects: FPFH descriptor quality.
+    Guidance: 50-100 is common.
+
+# ==============================================================================
+# IV. Alignment: RANSAC (Global Registration)
+# (src/alignment.py, used by src/matching.py)
+# ==============================================================================
+
+ransac_distance_threshold_factor: (float)
+    Purpose: Factor multiplied by `voxel_downsample_size` to get the RANSAC inlier distance threshold.
+    Affects: Determines how close points must be to be considered part of a consensus set.
+    Guidance: 1.0-2.0.
+
+ransac_edge_length_factor: (float)
+    Purpose: Factor for `CorrespondenceCheckerBasedOnEdgeLength`. Ratio of edge lengths between
+             source and target correspondences.
+    Affects: Filters correspondences based on local structure preservation.
+    Guidance: 0.8-0.99.
+
+ransac_iterations: (int)
+    Purpose: Maximum number of RANSAC iterations.
+    Affects: Probability of finding a good model; computation time.
+    Guidance: 10,000 to 4,000,000+. Higher for more complex scenes or lower inlier ratios.
+
+ransac_n_points: (int)
+    Purpose: Number of points sampled in each RANSAC iteration to estimate a transformation.
+    Affects: Minimum number of correspondences to define a hypothesis.
+    Guidance: 3 or 4 for 3D point cloud registration.
+
+ransac_confidence: (float)
+    Purpose: Desired probability that the RANSAC algorithm finds the optimal solution.
+    Affects: RANSAC convergence criteria (can influence effective iterations).
+    Guidance: 0.99-0.999.
+
+# ==============================================================================
+# V. Alignment: ICP (Local Refinement)
+# (src/alignment.py, used by src/matching.py)
+# ==============================================================================
+
+icp_max_correspondence_distance_factor: (float)
+    Purpose: Factor multiplied by `voxel_downsample_size` to determine the max correspondence
+             distance for ICP. Points further apart than this won't be matched.
+    Affects: ICP convergence range and robustness to initial misalignment.
+    Guidance: 1.5-3.0.
+
+icp_relative_fitness: (float)
+    Purpose: ICP convergence criterion: stops if fitness improvement is less than this value.
+    Affects: ICP termination.
+    Guidance: Small value, e.g., 1e-6 or 1e-7.
+
+icp_relative_rmse: (float)
+    Purpose: ICP convergence criterion: stops if RMSE improvement is less than this value.
+    Affects: ICP termination.
+    Guidance: Small value, e.g., 1e-6 or 1e-7.
+
+icp_max_iteration: (int)
+    Purpose: Maximum number of ICP iterations.
+    Affects: ICP refinement quality; computation time.
+    Guidance: 30-100.
+
+# ==============================================================================
+# VI. Matching and Assembly
+# (src/matching.py, src/assembly.py)
+# ==============================================================================
+
+min_match_score: (float)
+    Purpose: Minimum ICP fitness score for a pairwise alignment to be considered valid.
+    Affects: Quality of pairwise matches used in assembly.
+    Guidance: CRITICAL. 0.1-0.9. Higher values mean stricter matching. Depends on data quality.
+
+# --- Assembly Overlap Check Parameters ---
+max_assembly_overlap_factor_aabb: (float)
+    Purpose: Maximum allowed ratio of intersection volume to self-volume for AABBs of two meshes
+             being checked for overlap. (A coarse check).
+    Affects: Initial filtering of grossly overlapping placements.
+    Guidance: 0.7-0.95. (e.g., 0.9 means up to 90% of smaller AABB can be in intersection).
+
+overlap_check_sample_points: (int)
+    Purpose: Number of points sampled on one mesh's surface to check signed distance against the other mesh.
+    Affects: Accuracy/granularity of the fine-grained overlap check.
+    Guidance: 100-1000. More points = more accurate but slower.
+
+overlap_penetration_allowance_ratio: (float)
+    Purpose: Maximum ratio of `overlap_check_sample_points` that are allowed to penetrate the other mesh
+             beyond a certain depth.
+    Affects: Tolerance for interpenetration.
+    Guidance: 0.05-0.25 (5%-25% of points).
+
+overlap_penetration_depth_factor: (float)
+    Purpose: Factor of `voxel_downsample_size`. Sampled points penetrating deeper than
+             `voxel_downsample_size * overlap_penetration_depth_factor` are counted as "penetrating".
+    Affects: Definition of "penetration" depth.
+    Guidance: 0.1-0.5. Negative sign is handled internally in `check_overlap`.
+
+# ==============================================================================
+# Obsolete / Implicitly Replaced Parameters (from older configs or design iterations)
+# ==============================================================================
+# refinement_min_segment_size_for_checks:
+#     No longer directly used. Functionality covered by specific checks' min_face parameters
+#     (e.g., `refinement_min_faces_for_coherency_check`).
+
+# refinement_coherency_normal_pca_ratio_threshold:
+#     Previously for a boolean PCA coherency check. Now, `calculate_pca_badness_score` is used,
+#     and decisions are based on `refinement_dominant_keep_pca_badness_thresh` or
+#     `refinement_pca_split_badness_thresh`.
