@@ -28,8 +28,37 @@
     
     "use_normal_based_segmentation": true,
     "use_boundary_edge_detection": false,
-    "normal_cluster_eps": 0.03,
-    "normal_cluster_min_samples": 100,
-    "roughness_threshold": 0.4,
-    "visualize_segmentation": true
+    "normal_cluster_eps": 0.05, 
+    "normal_cluster_min_samples": 75,
+    "roughness_threshold": 0.4, 
+    "visualize_segmentation": true,
+
+    "segment_refinement_enabled": true,
+    "refinement_min_face_count_absolute": 100, 
+    "refinement_min_face_percentage": 0.05,   
+    "refinement_min_segment_size_for_checks": 75,
+    "refinement_min_faces_for_coherency_check": 30, 
+    "refinement_min_faces_for_roughness_check": 20,
+    "refinement_check_roughness_homogeneity": false,
+    "refinement_roughness_std_dev_threshold": 0.25, 
+    "roughness_neighbor_k": 5,
+
+    "refinement_coherency_normal_pca_ratio_threshold": 0.75, 
+    "refinement_coherency_plane_fit_normal_angle_dev_deg": 40.0, 
+    "refinement_coherency_plane_fit_dist_dev_factor": 0.20, 
+
+    "refinement_split_strict_eps_factor": 0.9, 
+    "refinement_split_min_samples_factor": 0.95, 
+    
+    "refinement_max_recursion_depth": 3, 
+
+    "refinement_min_final_segment_size": 250,
+
+    "refinement_dominant_keep_min_faces": 2000, 
+
+    "refinement_dominant_keep_pca_badness_thresh": 0.45, 
+    "refinement_dominant_keep_planar_badness_thresh": 3.5, 
+
+    "refinement_pca_split_badness_thresh": 0.40, 
+    "refinement_planar_split_badness_thresh": 3.0 
 }
