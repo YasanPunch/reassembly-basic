@@ -4,6 +4,68 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA # For PCA on normals
 import copy
+import matplotlib.pyplot as plt
+
+def get_color(index, total_items=20, cmap_name='tab10', num_variations=3):
+    """
+    Gets a distinct color. Uses a base colormap and applies variations
+    if the number of items exceeds the colormap's distinct colors.
+    Args:
+        index (int): The 0-based index of the item to color.
+        total_items (int): Total number of items needing colors (helps estimate variations).
+        cmap_name (str): Name of the base Matplotlib colormap.
+        num_variations (int): How many brightness/saturation variations to apply for each base color.
+    Returns:
+        tuple: (R, G, B) color.
+    """
+    try:
+        base_cmap = plt.cm.get_cmap(cmap_name)
+        if not base_cmap:
+            base_cmap = plt.cm.get_cmap('Set1') # Another good qualitative map
+        if not base_cmap: # Absolute fallback
+            base_cmap = plt.cm.get_cmap('viridis')
+
+        num_base_colors = base_cmap.N
+
+        base_color_index = index % num_base_colors
+        variation_cycle = (index // num_base_colors) % num_variations
+
+        r, g, b, _ = base_cmap(base_color_index)
+
+        if variation_cycle == 0: # Use original color
+            pass
+        elif variation_cycle == 1: # Make it slightly lighter and less saturated
+            # Convert to HSL/HSV might be better, but for simplicity:
+            factor = 1.3 # Lighter
+            r = min(1.0, r * factor + 0.1) # Add a bit to avoid pure black becoming grey only
+            g = min(1.0, g * factor + 0.1)
+            b = min(1.0, b * factor + 0.1)
+            # Desaturate slightly by moving towards grey (average intensity)
+            # This is a crude desaturation. Proper HSV/HSL conversion is better.
+            # For now, we'll primarily rely on brightness.
+            # intensity = (r + g + b) / 3
+            # r = r * 0.8 + intensity * 0.2
+            # g = g * 0.8 + intensity * 0.2
+            # b = b * 0.8 + intensity * 0.2
+        elif variation_cycle == 2: # Make it slightly darker
+            factor = 0.7 # Darker
+            r *= factor
+            g *= factor
+            b *= factor
+        # Add more variation cycles if num_variations > 3
+
+        return np.clip(r, 0, 1), np.clip(g, 0, 1), np.clip(b, 0, 1)
+
+    except ImportError: 
+        # Fallback simple colors if matplotlib is not available
+        colors = [[1,0,0],[0,0,1],[0,1,0],[1,1,0],[1,0,1],[0,1,1], # Red, Blue, Green, Yellow, Magenta, Cyan
+                  [0.8,0.5,0.2],[0.5,0.2,0.8],[0.2,0.8,0.5], [0.6,0.6,0.6]]
+        # Ensure highlight color (black) is distinct from these
+        return colors[index % len(colors)]
+    except Exception as e:
+        print(f"Error in get_color: {e}. Using fallback.")
+        colors = [[1,0,0],[0,0,1],[0,1,0]] 
+        return colors[index % len(colors)]
 
 def calculate_face_roughness(mesh, face_cluster, neighborhood_size=5):
     """
@@ -695,8 +757,19 @@ def visualize_segmentation_clusters(o3d_mesh, clusters, tri_mesh, fragment_name=
     
     return vis_geometries
 
+# In src/segmentation.py
+
+# ... (all other functions: get_color, calculate_face_roughness, cluster_faces_by_normal, 
+#      get_segment_connected_components, calculate_pca_badness_score, calculate_planar_badness_score,
+#      refine_segment, etc. are above this) ...
+
 def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", params=None):
     params = params or {}
+    # --- DEBUG PRINT 1: Confirm Parameters (as you had) ---
+    print(f"DEBUG PARAMS [{fragment_name}]: normal_cluster_min_samples = {params.get('normal_cluster_min_samples')}")
+    print(f"DEBUG PARAMS [{fragment_name}]: refinement_min_final_segment_size = {params.get('refinement_min_final_segment_size')}")
+    print(f"DEBUG PARAMS [{fragment_name}]: refinement_min_segment_size_for_checks = {params.get('refinement_min_segment_size_for_checks')}")
+
     if not o3d_mesh_fragment.has_triangles() or not o3d_mesh_fragment.has_vertices():
         print(f"    Segmenter: Input mesh {fragment_name} has no triangles/vertices.")
         return None
@@ -704,24 +777,21 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         tri_mesh = trimesh.Trimesh(vertices=np.asarray(o3d_mesh_fragment.vertices),
                                    faces=np.asarray(o3d_mesh_fragment.triangles),
                                    vertex_normals=np.asarray(o3d_mesh_fragment.vertex_normals) if o3d_mesh_fragment.has_vertex_normals() else None,
-                                   process=False) # process=False to avoid auto-fixing, do it manually if needed
+                                   process=False) 
         tri_mesh.metadata['name'] = fragment_name
-        # Ensure face normals are present and correct count
         if tri_mesh.faces is None or len(tri_mesh.faces) == 0:
              print(f"    Segmenter: Mesh {fragment_name} has no faces after trimesh conversion.")
              return None
         if tri_mesh.face_normals is None or len(tri_mesh.face_normals) != len(tri_mesh.faces):
-            tri_mesh.refresh() # This calls process() internally, recalculates normals etc.
+            tri_mesh.refresh() 
             if tri_mesh.face_normals is None or len(tri_mesh.face_normals) != len(tri_mesh.faces):
                  print(f"    Segmenter: Critical error, face normal count mismatch for {fragment_name} after refresh.")
                  return None
-
     except Exception as e:
         print(f"    Segmenter: Error converting/processing O3D mesh {fragment_name} to Trimesh: {e}")
         return None
     
     total_faces = len(tri_mesh.faces)
-
     initial_eps = params.get('normal_cluster_eps', 0.1)
     initial_min_samples = params.get('normal_cluster_min_samples', 10)
 
@@ -730,46 +800,44 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         tri_mesh, initial_eps, initial_min_samples, face_subset_indices=None
     )
     print(f"    Segmenter [{fragment_name}]: Found {len(initial_clusters_list)} initial clusters.")
+    if initial_labels_for_all_faces is not None and -1 in initial_labels_for_all_faces:
+        noise_face_count = np.sum(initial_labels_for_all_faces == -1)
+        if noise_face_count > 0:
+            print(f"    Segmenter [{fragment_name}]: Initial noise cluster has {noise_face_count} faces.")
 
     final_segments_for_selection = []
     enable_refinement = params.get("segment_refinement_enabled", True)
     refinement_abs_thresh = params.get("refinement_min_face_count_absolute", 200)
     refinement_perc_thresh = params.get("refinement_min_face_percentage", 0.10)
     
-    # Handle noise cluster (label -1 from DBSCAN) explicitly if refinement is enabled
-    noise_cluster_orig_indices = None
-    temp_initial_clusters_list = [] # To hold non-noise clusters for the main loop
-
-    if -1 in initial_labels_for_all_faces:
+    noise_cluster_orig_indices = None # Renamed for clarity
+    if initial_labels_for_all_faces is not None and -1 in initial_labels_for_all_faces:
         noise_mask = (initial_labels_for_all_faces == -1)
-        # initial_labels_for_all_faces corresponds to faces 0..N-1
         noise_cluster_orig_indices = np.where(noise_mask)[0]
         if len(noise_cluster_orig_indices) > 0:
-            print(f"    Segmenter [{fragment_name}]: Initial noise cluster has {len(noise_cluster_orig_indices)} faces.")
+            # print(f"    Segmenter [{fragment_name}]: Initial noise cluster has {len(noise_cluster_orig_indices)} faces.") # Already printed above
             if enable_refinement:
                 print(f"      Refining noise cluster for {fragment_name}...")
                 refined_noise_subs = refine_segment(tri_mesh, noise_cluster_orig_indices, params, initial_eps, initial_min_samples)
                 final_segments_for_selection.extend(sub for sub in refined_noise_subs if len(sub) > 0)
-            else: # Not refining noise, add it as one segment if large enough
+            else: 
                 if len(noise_cluster_orig_indices) >= initial_min_samples:
                      final_segments_for_selection.append(noise_cluster_orig_indices)
     
-    # Process non-noise initial clusters
     for i, cluster_orig_indices in enumerate(initial_clusters_list):
         if len(cluster_orig_indices) == 0: continue
-        # Check if this cluster corresponds to the noise label
-        # We need the label of the first face to determine if it was the noise cluster
-        # initial_labels_for_all_faces are labels for faces 0..N-1
-        # cluster_orig_indices contains original face indices.
-        first_face_label = initial_labels_for_all_faces[cluster_orig_indices[0]]
+        is_this_the_noise_cluster = False
+        if initial_labels_for_all_faces is not None:
+            # Check if the first face's label for this cluster was -1
+            # This assumes cluster_orig_indices is not empty here
+            first_face_label = initial_labels_for_all_faces[cluster_orig_indices[0]]
+            if first_face_label == -1:
+                is_this_the_noise_cluster = True
         
-        if first_face_label == -1: # This was the noise cluster, already handled if refinement enabled
-            if not enable_refinement and noise_cluster_orig_indices is not None: # It was handled above even if not refined
-                pass # Already added if not refined and large enough
-            continue # Skip further processing of the raw noise cluster
+        if is_this_the_noise_cluster: 
+            continue # Noise cluster was (or would have been) processed above
 
         segment_size = len(cluster_orig_indices)
-        
         refine_this_segment = False
         if enable_refinement:
             if segment_size > refinement_abs_thresh or \
@@ -777,70 +845,224 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
                 refine_this_segment = True
         
         if refine_this_segment:
-            # print(f"      Refining cluster {i+1} ({segment_size} faces) for {fragment_name}...")
             refined_subs = refine_segment(tri_mesh, cluster_orig_indices, params, initial_eps, initial_min_samples)
             final_segments_for_selection.extend(sub for sub in refined_subs if len(sub) > 0)
         else:
-            final_segments_for_selection.append(cluster_orig_indices) # Keep as is
+            final_segments_for_selection.append(cluster_orig_indices)
 
-    # Filter out very small final segments
-    min_final_segment_size = max(3, params.get("refinement_min_final_segment_size", initial_min_samples // 2))
+    # --- DEBUG PRINT 2 (as you had) ---
+    print(f"DEBUG [{fragment_name}]: intermediate final_segments_for_selection (count: {len(final_segments_for_selection)}, BEFORE final size filter):")
+    for i_debug, seg_debug in enumerate(final_segments_for_selection):
+        print(f"  Segment {i_debug}: {len(seg_debug)} faces, indices: {seg_debug[:5]}...") 
+
+    min_final_segment_size = params.get("refinement_min_final_segment_size", 10) 
     final_segments_for_selection = [seg for seg in final_segments_for_selection if len(seg) >= min_final_segment_size]
-    # Sort by size for consistent display
-    final_segments_for_selection.sort(key=len, reverse=True)
+    
+    print(f"DEBUG [{fragment_name}]: final_segments_for_selection (count: {len(final_segments_for_selection)}, AFTER final size filter of {min_final_segment_size}):")
+    for i_debug, seg_debug in enumerate(final_segments_for_selection):
+        print(f"  Segment {i_debug}: {len(seg_debug)} faces")
+    # --- END DEBUG PRINT 2 ---
 
     print(f"    Segmenter [{fragment_name}]: Final processing resulted in {len(final_segments_for_selection)} segments for user selection.")
-    # for i_s, seg_s in enumerate(final_segments_for_selection): print(f"      Final Segment {i_s+1}: {len(seg_s)} faces")
+    
+    face_is_fracture_candidate = np.zeros(len(tri_mesh.faces), dtype=bool)
+    selected_segment_indices_from_user = [] 
+    shared_state = {'confirmed_selection': False, 'quit_without_selection': False, 'current_page': 0} 
+    PAGE_SIZE = 10
 
-
-    # --- User Interaction Part --- (largely same, operates on final_segments_for_selection)
-    face_is_fracture_candidate = np.zeros(total_faces, dtype=bool)
     if params.get('visualize_segmentation', False) and final_segments_for_selection:
-        print(f"    Segmenter [{fragment_name}]: Visualizing {len(final_segments_for_selection)} refined segments for selection...")
-        vis_geometries = visualize_segmentation_clusters(o3d_mesh_fragment, final_segments_for_selection, tri_mesh, fragment_name)
-        if vis_geometries:
-             o3d.visualization.draw_geometries(vis_geometries, window_name=f"Refined Segments: {fragment_name} - Select Fracture Surfaces")
-        else:
-            print(f"    Segmenter [{fragment_name}]: No geometries to visualize for cluster selection.")
-
-        print("\n=== Fracture Surface Selection (on Refined Segments) ===")
-        for i_prompt, seg_prompt in enumerate(final_segments_for_selection):
-            print(f"  Segment {i_prompt + 1}: {len(seg_prompt)} faces")
-        cluster_selection_str = input(f"Enter segment numbers (1 to {len(final_segments_for_selection)}) for '{fragment_name}' (comma separated, or 'all', or 'none'): ")
+        print(f"    Segmenter [{fragment_name}]: Visualizing {len(final_segments_for_selection)} refined segments for paged interactive selection...")
         
-        selected_indices_from_user = []
-        if cluster_selection_str.lower() == 'all':
-            selected_indices_from_user = list(range(len(final_segments_for_selection)))
-        elif cluster_selection_str.lower() == 'none' or not cluster_selection_str.strip():
-            selected_indices_from_user = []
+        drawable_segment_infos = [] 
+        #highlight_color = np.array([1.0, 1.0, 0.0]) # YELLOW highlight color
+        highlight_color = np.array([0.0, 0.0, 0.0]) # BLACK highlight color
+
+        for i, seg_faces_indices in enumerate(final_segments_for_selection):
+            if len(seg_faces_indices) == 0: continue
+            seg_mesh = o3d.geometry.TriangleMesh()
+            seg_mesh.vertices = o3d_mesh_fragment.vertices 
+            seg_mesh.triangles = o3d.utility.Vector3iVector(tri_mesh.faces[seg_faces_indices])
+            seg_mesh.remove_unreferenced_vertices()
+            if not seg_mesh.has_vertices() or not seg_mesh.has_triangles():
+                print(f"Warning: Segment {i+1} (from final_segments_for_selection index {i}) became empty. Skipping.")
+                continue 
+            seg_mesh.compute_vertex_normals()
+            base_color = get_color(i, len(final_segments_for_selection))
+            seg_mesh.paint_uniform_color(base_color)
+            drawable_segment_infos.append({'mesh': seg_mesh, 'id': i, # 'id' is the 0-based index in final_segments_for_selection
+                                           'base_color': base_color, 'selected': False})
+
+        if not drawable_segment_infos:
+            print(f"    Segmenter [{fragment_name}]: No displayable segments after processing for visualization.")
         else:
-            try:
-                selected_indices_from_user = [int(x.strip()) - 1 for x in cluster_selection_str.split(',') if x.strip()]
-            except ValueError:
-                print("    Invalid input. Defaulting to 'none'.")
-        
-        for user_idx in selected_indices_from_user:
-            if 0 <= user_idx < len(final_segments_for_selection):
-                face_is_fracture_candidate[final_segments_for_selection[user_idx]] = True
-        print(f"    User selected {np.sum(face_is_fracture_candidate)} faces as fracture surface for {fragment_name}.")
+            num_total_segments_to_display = len(drawable_segment_infos)
+            num_pages = (num_total_segments_to_display + PAGE_SIZE - 1) // PAGE_SIZE
 
-    else: # No visualization or no segments to select from -> automatic fallback
-        print(f"    Segmenter [{fragment_name}]: No interactive selection. Using automatic boundary method for fracture faces.")
-        face_is_fracture_candidate = identify_fracture_candidate_faces_by_boundary(
-            tri_mesh, params.get("min_boundary_edges_for_fracture_face",1)
-        )
-        if not np.any(face_is_fracture_candidate) and final_segments_for_selection: # If boundary fails, maybe take largest non-planar segment?
-            print(f"    Segmenter [{fragment_name}]: Boundary method found no faces. (Placeholder for smarter auto fallback).")
+            vis = o3d.visualization.VisualizerWithKeyCallback()
+            vis.create_window(window_name=f"Select: {fragment_name} (Page {shared_state['current_page']+1}/{num_pages}. N/P=Page. S=Confirm. Q=Skip.)", 
+                              width=1280, height=960)
 
+            for info in drawable_segment_infos:
+                vis.add_geometry(info['mesh'])
+
+            def print_current_page_and_selection(visualizer_ref=None): # Added visualizer_ref for title update
+                page_idx = shared_state['current_page']
+                start_seg_num_on_page = 1 # For display to user (1-10 for keys)
+                
+                # Global segment numbers for this page
+                global_start_seg_num = page_idx * PAGE_SIZE + 1
+                global_end_seg_num = min((page_idx + 1) * PAGE_SIZE, num_total_segments_to_display)
+                
+                print(f"\n  --- Page {page_idx + 1}/{num_pages} (Segments {global_start_seg_num}-{global_end_seg_num} overall) ---")
+                print(f"  Keys 1-9, 0 (for 10th on page) control these segments.")
+                selected_ids = sorted([info['id'] + 1 for info in drawable_segment_infos if info['selected']])
+                print(f"  Overall Selected: {selected_ids if selected_ids else 'None'}")
+                #if visualizer_ref:
+                    #visualizer_ref.update_window_title(
+                        #f"Select: {fragment_name} (Page {page_idx+1}/{num_pages}. N/P=Page. S=Confirm. Q=Skip.)"
+                    #)
+
+            print_current_page_and_selection(vis) 
+
+            def toggle_segment_on_current_page(visualizer, key_on_page_0_to_9): # 0 for '1', ..., 9 for '0'
+                page_idx = shared_state['current_page']
+                # Map key_on_page_0_to_9 (0-9) to the actual segment index in drawable_segment_infos
+                segment_idx_in_drawable_list = page_idx * PAGE_SIZE + key_on_page_0_to_9
+                
+                if 0 <= segment_idx_in_drawable_list < num_total_segments_to_display:
+                    seg_info_item = drawable_segment_infos[segment_idx_in_drawable_list]
+                    seg_info_item['selected'] = not seg_info_item['selected']
+                    mesh_to_update = seg_info_item['mesh']
+                    if seg_info_item['selected']:
+                        mesh_to_update.paint_uniform_color(highlight_color)
+                    else:
+                        mesh_to_update.paint_uniform_color(seg_info_item['base_color'])
+                    visualizer.update_geometry(mesh_to_update)
+                    print_current_page_and_selection(visualizer) 
+                else:
+                    print(f"  No segment corresponding to key pressed on this page (idx {segment_idx_in_drawable_list} out of bounds).")
+                return False 
+
+            for i in range(PAGE_SIZE): 
+                key_char = str((i + 1) % 10) 
+                key_on_page_idx = i 
+                vis.register_key_callback(ord(key_char), 
+                    lambda vis_cb, k_idx=key_on_page_idx: toggle_segment_on_current_page(vis_cb, k_idx)
+                )
+            
+            def change_page(visualizer, direction): 
+                old_page = shared_state['current_page']
+                shared_state['current_page'] = (shared_state['current_page'] + direction + num_pages) % num_pages
+                if old_page != shared_state['current_page'] or direction == 0: # direction 0 to force print
+                    print_current_page_and_selection()
+                return False
+
+            vis.register_key_callback(ord('N'), lambda v: change_page(v, 1))  
+            vis.register_key_callback(ord('P'), lambda v: change_page(v, -1)) 
+            
+            def confirm_and_close(visualizer):
+                shared_state['confirmed_selection'] = True
+                print("  Selection Confirmed ('S'). Closing window...")
+                visualizer.close() 
+                return False
+            
+            def quit_and_close(visualizer):
+                shared_state['quit_without_selection'] = True
+                print("  Selection Aborted ('Q'). Closing window...")
+                visualizer.close()
+                return False
+
+            vis.register_key_callback(ord('S'), confirm_and_close) 
+            vis.register_key_callback(ord('Q'), quit_and_close)   
+
+            print("\n=== Interactive Segment Selection Window Active ===")
+            print(f"  Fragment: {fragment_name}")
+            print("  Use keys 'N' (Next) / 'P' (Previous) to change page.")
+            print("  Use keys 1-9 (and 0 for 10th on current page) to toggle selection.")
+            print("  Selected segments turn BLACK.")
+            print("  Press 'S' to SAVE current overall selection and continue.")
+            print("  Press 'Q' to QUIT selection for this fragment (no segments selected).")
+            
+            vis.run() 
+            vis.destroy_window()
+
+            if shared_state['confirmed_selection']:
+                selected_segment_indices_from_user = [
+                    info['id'] for info in drawable_segment_infos if info['selected']
+                ] # These 'id's are 0-based indices into final_segments_for_selection
+                print(f"    User confirmed selection of {len(selected_segment_indices_from_user)} segments for {fragment_name}: {sorted([s+1 for s in selected_segment_indices_from_user])}")
+            elif shared_state['quit_without_selection']:
+                selected_segment_indices_from_user = [] 
+                print(f"    User quit selection for {fragment_name}. No segments selected.")
+            else: 
+                selected_segment_indices_from_user = [] 
+                print(f"    Selection window closed without explicit Save/Quit. Assuming no segments selected for {fragment_name}.")
+    
+    if not (params.get('visualize_segmentation', False) and final_segments_for_selection and shared_state.get('confirmed_selection', False) or shared_state.get('quit_without_selection', False) ) :
+        # This block is for when visualization was skipped, OR no segments were found initially,
+        # OR if visualization happened but wasn't explicitly confirmed or quit (e.g. user hit Escape)
+        # and we want to force console input as a fallback in that case.
+        # However, if user hit Q, selected_segment_indices_from_user is already empty, so no need for console.
+        # If user hit S, selected_segment_indices_from_user is populated.
+        # So, this console fallback is mainly for when visualize_segmentation=False, or if the interactive part somehow bypassed shared_state updates.
+
+        if not shared_state.get('confirmed_selection', False) and not shared_state.get('quit_without_selection', False):
+            # Only fall back to console if interactive selection wasn't explicitly completed or quit.
+            if not final_segments_for_selection:
+                 print(f"    Segmenter [{fragment_name}]: No segments available for selection (initial processing).")
+                 return None
+            
+            print("\n=== Fracture Surface Selection (Console Input) ===")
+            for i_prompt, seg_prompt_faces in enumerate(final_segments_for_selection):
+                # 'id' for color lookup in drawable_segment_infos corresponds to i_prompt here
+                base_color_for_prompt = get_color(i_prompt, len(final_segments_for_selection))
+                # Try to find if this segment was pre-selected in a previous vis session (if drawable_segment_infos exists)
+                pre_selected_marker = " "
+                if 'drawable_segment_infos' in locals() and i_prompt < len(drawable_segment_infos) and drawable_segment_infos[i_prompt]['selected']:
+                    pre_selected_marker = "*"
+
+                print(f"  {pre_selected_marker}Segment {i_prompt + 1} ({len(seg_prompt_faces)} faces, color: {base_color_for_prompt})")
+            
+            cluster_selection_str = input(f"Enter ALL desired segment numbers (1-{len(final_segments_for_selection)}) for '{fragment_name}' (comma separated, 'all', or 'none'): ")
+            temp_selected_indices = []
+            if cluster_selection_str.lower() == 'all':
+                temp_selected_indices = list(range(len(final_segments_for_selection)))
+            elif cluster_selection_str.lower() == 'none' or not cluster_selection_str.strip():
+                temp_selected_indices = []
+            else:
+                try:
+                    temp_selected_indices = [int(x.strip()) - 1 for x in cluster_selection_str.split(',') if x.strip()]
+                except ValueError:
+                    print("    Invalid input for console selection. Defaulting to 'none'.")
+            selected_segment_indices_from_user = [idx for idx in temp_selected_indices if 0 <= idx < len(final_segments_for_selection)]
+            print(f"    Console selected {len(selected_segment_indices_from_user)} segments for {fragment_name}.")
+
+
+    if selected_segment_indices_from_user:
+        for user_selected_idx in selected_segment_indices_from_user:
+            if 0 <= user_selected_idx < len(final_segments_for_selection):
+                face_indices_for_this_segment = final_segments_for_selection[user_selected_idx]
+                face_is_fracture_candidate[face_indices_for_this_segment] = True
+        print(f"    Total {np.sum(face_is_fracture_candidate)} faces marked as fracture surface for {fragment_name}.")
+    else:
+        print(f"    No segments selected by user as fracture surface for {fragment_name}.")
 
     if not np.any(face_is_fracture_candidate):
-        print(f"    Segmenter [{fragment_name}]: No fracture faces identified. Returning None.")
-        return None
+        print(f"    Segmenter [{fragment_name}]: No fracture faces identified/selected. (Consider boundary fallback if appropriate).")
+        if fragment_name == "Cube.obj" and not shared_state.get('quit_without_selection', False) : 
+            print(f"    Using boundary method as fallback for {fragment_name} (Cube test or no user selection).")
+            face_is_fracture_candidate = identify_fracture_candidate_faces_by_boundary(
+                tri_mesh, params.get("min_boundary_edges_for_fracture_face",1)
+            )
+            if not np.any(face_is_fracture_candidate):
+                print(f"    Boundary method also found no faces for {fragment_name}. Returning None.")
+                return None
+        else: # Not Cube.obj OR user explicitly quit selection, so truly no fracture surface
+             return None
 
     fracture_faces = tri_mesh.faces[face_is_fracture_candidate]
-    # ... (rest of creating o3d_mesh from fracture_faces is same) ...
     fracture_surface_o3d = o3d.geometry.TriangleMesh()
-    fracture_surface_o3d.vertices = o3d_mesh_fragment.vertices
+    fracture_surface_o3d.vertices = o3d_mesh_fragment.vertices 
     fracture_surface_o3d.triangles = o3d.utility.Vector3iVector(fracture_faces)
     fracture_surface_o3d.remove_unreferenced_vertices()
     fracture_surface_o3d.remove_degenerate_triangles()
