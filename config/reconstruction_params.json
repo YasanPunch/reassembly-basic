@@ -1,64 +1,44 @@
+
 {
+    "// --- I. Preprocessing, Point Cloud Generation ---": null,
     "voxel_downsample_size": 3.0,
-    "normal_estimation_radius": 14.0,
-    "normal_estimation_max_nn": 30,
-    "fpfh_feature_radius": 10.0,
-    "fpfh_feature_max_nn": 100,
-    "ransac_distance_threshold_factor": 1.5,
-    "ransac_edge_length_factor": 0.9,
-    "ransac_iterations": 4000000, 
-    "ransac_n_points": 4,
-    "ransac_confidence": 0.999,
-    "icp_max_correspondence_distance_factor": 2.0, 
-    "icp_relative_fitness": 1e-6,
-    "icp_relative_rmse": 1e-6,
-    "icp_max_iteration": 50,
-    "min_match_score": 0.3,
-    
-    "min_boundary_edges_for_fracture_face": 2,
     "fracture_surface_dense_sample_points": 10000,
     "add_preprocessing_noise": true,
     "preprocessing_noise_factor": 0.01,
+
+    "// --- Normal Estimation (for features PCD & fallbacks in alignment) ---": null,
+    "normal_estimation_radius": 14.0,
+    "normal_estimation_max_nn": 30,
     "orient_normals_k": 15,
+
+    "// --- II. Segmentation (New Parameters based on Region Growing) ---": null,
+    "visualize_segmentation": true, "// Enables interactive selection of segments from extract_fracture_surface_mesh": null,
+    "max_angle_deviation_deg": 30.0, "// Max angle (degrees) for region growing normal similarity (e.g., 20-45)": null,
+    "min_region_area_percentage": 2.0, "// Min area percentage for a region to survive cleanup (e.g., 1-5%)": null,
+    "fracture_roughness_threshold": 0.1, "// Threshold for `calculate_region_roughness` if automatic selection is used (e.g., 0.05-0.25 radians). Higher = only very rough regions selected.": null,
+    "min_final_segment_size_after_cleanup": 50, "// Optional: Min number of faces for a segment after cleanup to be considered for selection (e.g., 20-100)": null,
     
-    "max_assembly_overlap_factor_aabb": 0.95, 
+    "// --- III. Feature Extraction (FPFH) ---": null,
+    "fpfh_feature_radius": 10.0,
+    "fpfh_feature_max_nn": 100,
+
+    "// --- IV. Alignment: RANSAC (Global Registration) ---": null,
+    "ransac_distance_threshold_factor": 1.5,
+    "ransac_edge_length_factor": 0.9,
+    "ransac_iterations": 4000000,
+    "ransac_n_points": 4,
+    "ransac_confidence": 0.999,
+
+    "// --- V. Alignment: ICP (Local Refinement) ---": null,
+    "icp_max_correspondence_distance_factor": 2.0,
+    "icp_relative_fitness": 1e-6,
+    "icp_relative_rmse": 1e-6,
+    "icp_max_iteration": 50,
+
+    "// --- VI. Matching and Assembly ---": null,
+    "min_match_score": 0.3, "// Minimum ICP fitness for a pairwise alignment to be considered valid": null,
+    "max_assembly_overlap_factor_aabb": 0.95,
     "overlap_check_sample_points": 300,
     "overlap_penetration_allowance_ratio": 0.25,
-    "overlap_penetration_depth_factor": 0.25,
-    
-    "use_normal_based_segmentation": true,
-    "use_boundary_edge_detection": false,
-    "normal_cluster_eps": 0.05, 
-    "normal_cluster_min_samples": 75,
-    "roughness_threshold": 0.4, 
-    "visualize_segmentation": true,
-
-    "segment_refinement_enabled": true,
-    "refinement_min_face_count_absolute": 100, 
-    "refinement_min_face_percentage": 0.05,   
-    "refinement_min_segment_size_for_checks": 75,
-    "refinement_min_faces_for_coherency_check": 30, 
-    "refinement_min_faces_for_roughness_check": 20,
-    "refinement_check_roughness_homogeneity": false,
-    "refinement_roughness_std_dev_threshold": 0.25, 
-    "roughness_neighbor_k": 5,
-
-    "refinement_coherency_normal_pca_ratio_threshold": 0.75, 
-    "refinement_coherency_plane_fit_normal_angle_dev_deg": 40.0, 
-    "refinement_coherency_plane_fit_dist_dev_factor": 0.20, 
-
-    "refinement_split_strict_eps_factor": 0.9, 
-    "refinement_split_min_samples_factor": 0.95, 
-    
-    "refinement_max_recursion_depth": 3, 
-
-    "refinement_min_final_segment_size": 250,
-
-    "refinement_dominant_keep_min_faces": 2000, 
-
-    "refinement_dominant_keep_pca_badness_thresh": 0.45, 
-    "refinement_dominant_keep_planar_badness_thresh": 3.5, 
-
-    "refinement_pca_split_badness_thresh": 0.40, 
-    "refinement_planar_split_badness_thresh": 3.0 
+    "overlap_penetration_depth_factor": 0.25
 }
