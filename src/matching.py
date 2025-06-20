@@ -1,8 +1,56 @@
 import numpy as np
 from itertools import combinations
 from src.alignment import align_fragments_pcd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 print("DEBUG: matching.py top level executed") # <--- ADD THIS
+
+def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params):
+    matches = []
+    # Align j to i (j is source, i is target)
+    source_pcd = frag_j_data['pcd_for_features']
+    target_pcd = frag_i_data['pcd_for_features']
+    source_fpfh = frag_j_data['features']
+    target_fpfh = frag_i_data['features']
+
+    if source_pcd is None or target_pcd is None or source_fpfh is None or target_fpfh is None:
+        return []
+    if not source_pcd.has_points() or not target_pcd.has_points() or \
+       source_fpfh.num() == 0 or target_fpfh.num() == 0:
+        return []
+
+    transform_j_to_i, fitness_ji, rmse_ji = align_fragments_pcd(
+        source_pcd, target_pcd, source_fpfh, target_fpfh, params
+    )
+    if transform_j_to_i is not None and fitness_ji >= params.get("min_match_score", 0.6):
+        confidence_ji = float(fitness_ji) / (rmse_ji + 1e-6)
+        matches.append({
+            'source_idx': j, 'target_idx': i,
+            'transformation': transform_j_to_i,
+            'score': fitness_ji, 'rmse': rmse_ji,
+            'confidence': confidence_ji,
+            'source_name': frag_j_data['name'], 'target_name': frag_i_data['name']
+        })
+
+    # Align i to j (i is source, j is target)
+    source_pcd = frag_i_data['pcd_for_features']
+    target_pcd = frag_j_data['pcd_for_features']
+    source_fpfh = frag_i_data['features']
+    target_fpfh = frag_j_data['features']
+
+    transform_i_to_j, fitness_ij, rmse_ij = align_fragments_pcd(
+        source_pcd, target_pcd, source_fpfh, target_fpfh, params
+    )
+    if transform_i_to_j is not None and fitness_ij >= params.get("min_match_score", 0.6):
+        confidence_ij = float(fitness_ij) / (rmse_ij + 1e-6)
+        matches.append({
+            'source_idx': i, 'target_idx': j,
+            'transformation': transform_i_to_j,
+            'score': fitness_ij, 'rmse': rmse_ij,
+            'confidence': confidence_ij,
+            'source_name': frag_i_data['name'], 'target_name': frag_j_data['name']
+        })
+    return matches
 
 def find_pairwise_matches(fragments_data, params):
     """
@@ -19,7 +67,7 @@ def find_pairwise_matches(fragments_data, params):
     Returns:
         list of dict: Each dict represents a potential match:
                       {'source_idx': int, 'target_idx': int,
-                       'transformation': np.ndarray, 'score': float (fitness), 'rmse': float}
+                       'transformation': np.ndarray, 'score': float (fitness), 'rmse': float, 'confidence': float}
     """
     potential_matches = []
     num_fragments = len(fragments_data)
@@ -29,73 +77,21 @@ def find_pairwise_matches(fragments_data, params):
         return []
 
     print(f"\nFinding pairwise matches among {num_fragments} fragments...")
-    
-    # Iterate over all unique pairs of fragments
-    for i, j in combinations(range(num_fragments), 2):
-        frag_i_data = fragments_data[i]
-        frag_j_data = fragments_data[j]
-
-        print(f"  Attempting to match: {frag_i_data['name']} (idx {i}) <-> {frag_j_data['name']} (idx {j})")
-
-        # Align j to i (j is source, i is target)
-        # Use the 'pcd_for_features' as these are what FPFH were computed on
-        source_pcd = frag_j_data['pcd_for_features']
-        target_pcd = frag_i_data['pcd_for_features']
-        source_fpfh = frag_j_data['features']
-        target_fpfh = frag_i_data['features']
-        
-        if source_pcd is None or target_pcd is None or source_fpfh is None or target_fpfh is None:
-            print(f"    Skipping pair ({i}, {j}) due to missing PCD/features.")
-            continue
-        if not source_pcd.has_points() or not target_pcd.has_points() or \
-           source_fpfh.num() == 0 or target_fpfh.num() == 0:
-            print(f"    Skipping pair ({i}, {j}) due to empty PCD/features.")
-            continue
-
-
-        transform_j_to_i, fitness_ji, rmse_ji = align_fragments_pcd(
-            source_pcd, target_pcd, source_fpfh, target_fpfh, params
-        )
-        if transform_j_to_i is not None and fitness_ji >= params.get("min_match_score", 0.6):
-            potential_matches.append({
-                'source_idx': j, 'target_idx': i, # j is transformed to align with i
-                'transformation': transform_j_to_i,
-                'score': fitness_ji, 'rmse': rmse_ji,
-                'source_name': frag_j_data['name'], 'target_name': frag_i_data['name']
-            })
-            print(f"    Match found ({j} to {i}): Score={fitness_ji:.3f}, RMSE={rmse_ji:.3f}")
-        else:
-            # print(f"    No good match from j to i (Score: {fitness_ji:.3f})")
-            pass
-
-
-        # Align i to j (i is source, j is target)
-        source_pcd = frag_i_data['pcd_for_features']
-        target_pcd = frag_j_data['pcd_for_features']
-        source_fpfh = frag_i_data['features']
-        target_fpfh = frag_j_data['features']
-
-        transform_i_to_j, fitness_ij, rmse_ij = align_fragments_pcd(
-            source_pcd, target_pcd, source_fpfh, target_fpfh, params
-        )
-        if transform_i_to_j is not None and fitness_ij >= params.get("min_match_score", 0.6):
-            potential_matches.append({
-                'source_idx': i, 'target_idx': j, # i is transformed to align with j
-                'transformation': transform_i_to_j,
-                'score': fitness_ij, 'rmse': rmse_ij,
-                'source_name': frag_i_data['name'], 'target_name': frag_j_data['name']
-            })
-            print(f"    Match found ({i} to {j}): Score={fitness_ij:.3f}, RMSE={rmse_ij:.3f}")
-        else:
-            # print(f"    No good match from i to j (Score: {fitness_ij:.3f})")
-            pass
-
-
+    pairs = list(combinations(range(num_fragments), 2))
+    results = []
+    with ThreadPoolExecutor() as executor:
+        future_to_pair = {
+            executor.submit(_match_fragment_pair, i, j, fragments_data[i], fragments_data[j], params): (i, j)
+            for i, j in pairs
+        }
+        for future in as_completed(future_to_pair):
+            matches = future.result()
+            if matches:
+                results.extend(matches)
     # Sort matches by score (descending)
-    potential_matches.sort(key=lambda x: x['score'], reverse=True)
-    
-    print(f"Found {len(potential_matches)} potential pairwise matches above threshold.")
-    return potential_matches
+    results.sort(key=lambda x: x['score'], reverse=True)
+    print(f"Found {len(results)} potential pairwise matches above threshold.")
+    return results
 
 if __name__ == '__main__':
     from io_utils import load_fragments_from_directory

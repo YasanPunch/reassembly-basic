@@ -2,105 +2,116 @@ import trimesh
 import numpy as np
 import open3d as o3d
 import copy
-from src.io_utils import combine_meshes # Assuming this is for if __name__ == '__main__'
+from src.io_utils import combine_meshes, save_mesh # Assuming this is for if __name__ == '__main__'
 
-# This function should be correct as per our last iteration.
-# I'm including it here just to have the full file context.
 def check_overlap(mesh1_o3d, mesh1_name, mesh2_o3d, mesh2_name, params, viz_collector=None):
     if not mesh1_o3d.has_vertices() or not mesh2_o3d.has_vertices():
-        return True 
+        return True, 0.0  # No overlap, confidence 0
 
     aabb1 = mesh1_o3d.get_axis_aligned_bounding_box()
     aabb2 = mesh2_o3d.get_axis_aligned_bounding_box()
-    max_overlap_factor_aabb = params.get("max_assembly_overlap_factor_aabb", 0.8) 
+    vol1_aabb = aabb1.volume()
+    vol2_aabb = aabb2.volume()
+    epsilon = 1e-9
+    min_vol = min(vol1_aabb, vol2_aabb) + epsilon
+    # Adaptive threshold: scale with min volume, or use a function of both
+    base_overlap_factor = params.get("max_assembly_overlap_factor_aabb", 0.8)
+    adaptive_overlap_factor = base_overlap_factor * (min_vol / (vol1_aabb + vol2_aabb + epsilon)) * 2.0  # Example scaling
 
     vol_intersection_aabb = 0.0
     if hasattr(aabb1, 'get_intersection'):
         intersection_aabb = aabb1.get_intersection(aabb2)
         current_vol_intersection = intersection_aabb.volume()
-        if current_vol_intersection < 1e-9: return True 
+        if current_vol_intersection < 1e-9:
+            return True, 0.0
         vol_intersection_aabb = current_vol_intersection
     else:
         if viz_collector is not None:
             if not hasattr(check_overlap, "_warned_manual_aabb_intersect"):
                 print("    DEBUG assembly.py: aabb1.get_intersection not found by hasattr, calculating manually.")
-                check_overlap._warned_manual_aabb_intersect = True 
+                check_overlap._warned_manual_aabb_intersect = True
         min_b1, max_b1 = aabb1.get_min_bound(), aabb1.get_max_bound()
         min_b2, max_b2 = aabb2.get_min_bound(), aabb2.get_max_bound()
         intersect_min = np.maximum(min_b1, min_b2)
         intersect_max = np.minimum(max_b1, max_b2)
-        if np.any(intersect_min >= intersect_max): return True
+        if np.any(intersect_min >= intersect_max):
+            return True, 0.0
         vol_intersection_aabb = np.prod(intersect_max - intersect_min)
 
-    vol1_aabb = aabb1.volume()
-    vol2_aabb = aabb2.volume()
-    epsilon = 1e-9
-    
-    if (vol1_aabb > epsilon and (vol_intersection_aabb / vol1_aabb) > max_overlap_factor_aabb) or \
-       (vol2_aabb > epsilon and (vol_intersection_aabb / vol2_aabb) > max_overlap_factor_aabb):
+    overlap_ratio1 = vol_intersection_aabb / (vol1_aabb + epsilon)
+    overlap_ratio2 = vol_intersection_aabb / (vol2_aabb + epsilon)
+    overlap_ratio_min = min(overlap_ratio1, overlap_ratio2)
+
+    if (vol1_aabb > epsilon and overlap_ratio1 > adaptive_overlap_factor) or \
+       (vol2_aabb > epsilon and overlap_ratio2 > adaptive_overlap_factor):
         if viz_collector is not None:
             viz_collector.append({
                 'step': 'overlap_check_failed_aabb', 'type': 'event',
-                'mesh1_name': mesh1_name, 
-                'mesh2_name': mesh2_name, 
-                'reason': f'AABB overlap too high ({vol_intersection_aabb/vol1_aabb if vol1_aabb > epsilon else 0:.2f} of m1 or {vol_intersection_aabb/vol2_aabb if vol2_aabb > epsilon else 0:.2f} of m2)'
+                'mesh1_name': mesh1_name,
+                'mesh2_name': mesh2_name,
+                'reason': f'Adaptive AABB overlap too high ({overlap_ratio1:.2f} of m1 or {overlap_ratio2:.2f} of m2)',
+                'overlap_ratio1': overlap_ratio1,
+                'overlap_ratio2': overlap_ratio2,
+                'adaptive_overlap_factor': adaptive_overlap_factor
             })
-        return False
+        return False, overlap_ratio_min
 
     num_sample_points_overlap = params.get("overlap_check_sample_points", 300)
     penetration_allowance_ratio = params.get("overlap_penetration_allowance_ratio", 0.15)
-    penetration_depth_factor = params.get("overlap_penetration_depth_factor", 0.25) 
+    penetration_depth_factor = params.get("overlap_penetration_depth_factor", 0.25)
     voxel_size_ref = params.get("voxel_downsample_size", 0.01)
 
     try:
         mesh1_tri = trimesh.Trimesh(vertices=np.asarray(mesh1_o3d.vertices),
                                     faces=np.asarray(mesh1_o3d.triangles))
-        if not mesh1_tri.is_watertight and len(mesh1_tri.faces) > 0 : mesh1_tri.fill_holes()
-        
+        if not mesh1_tri.is_watertight and len(mesh1_tri.faces) > 0:
+            mesh1_tri.fill_holes()
+
         if len(mesh1_tri.faces) == 0:
-             print("    Overlap Check (Trimesh): mesh1 has no faces for sampling. Relying on AABB.")
-             return True
+            print("    Overlap Check (Trimesh): mesh1 has no faces for sampling. Relying on AABB.")
+            return True, overlap_ratio_min
 
         sampled_points, _ = trimesh.sample.sample_surface(mesh1_tri, num_sample_points_overlap)
-        
+
         if len(sampled_points) == 0:
             print("    Overlap Check (Trimesh): Failed to sample points from mesh1. Relying on AABB.")
-            return True
+            return True, overlap_ratio_min
 
         mesh2_tri = trimesh.Trimesh(vertices=np.asarray(mesh2_o3d.vertices),
                                     faces=np.asarray(mesh2_o3d.triangles))
-        if not mesh2_tri.is_watertight and len(mesh2_tri.faces) > 0: mesh2_tri.fill_holes()
+        if not mesh2_tri.is_watertight and len(mesh2_tri.faces) > 0:
+            mesh2_tri.fill_holes()
 
         if len(mesh2_tri.faces) == 0:
-             print("    Overlap Check (Trimesh): mesh2 has no faces for proximity. Relying on AABB.")
-             return True
+            print("    Overlap Check (Trimesh): mesh2 has no faces for proximity. Relying on AABB.")
+            return True, overlap_ratio_min
 
         proximity_query_mesh2 = trimesh.proximity.ProximityQuery(mesh2_tri)
         signed_distances = proximity_query_mesh2.signed_distance(sampled_points)
 
         penetration_threshold = - (voxel_size_ref * penetration_depth_factor)
         num_penetrating_points = np.sum(signed_distances < penetration_threshold)
-        
+
         ratio_penetrating = num_penetrating_points / len(sampled_points) if len(sampled_points) > 0 else 0
 
         if ratio_penetrating > penetration_allowance_ratio:
             if viz_collector is not None:
                 viz_collector.append({
                     'step': 'overlap_check_failed_points', 'type': 'event',
-                    'mesh1_name': mesh1_name, 
-                    'mesh2_name': mesh2_name, 
+                    'mesh1_name': mesh1_name,
+                    'mesh2_name': mesh2_name,
                     'penetration_ratio': ratio_penetrating,
                 })
-            return False
-            
+            return False, max(overlap_ratio_min, ratio_penetrating)
+
     except Exception as e:
         print(f"    Error during Trimesh-based overlap check: {e}. Relying on AABB check result.")
         if viz_collector is not None:
-            viz_collector.append({'step': 'overlap_check_trimesh_error', 'type': 'event', 
+            viz_collector.append({'step': 'overlap_check_trimesh_error', 'type': 'event',
                                    'mesh1_name': mesh1_name, 'mesh2_name': mesh2_name,
                                    'error_message': str(e)})
-        return True 
-    return True
+        return True, overlap_ratio_min
+    return True, overlap_ratio_min
 
 
 class Assembler:
@@ -121,6 +132,51 @@ class Assembler:
         mesh = copy.deepcopy(self.original_meshes[fragment_idx_in_assembler_list])
         mesh.transform(self.fragment_transforms[fragment_idx_in_assembler_list])
         return mesh
+
+    def optimize_with_pose_graph(self, min_confidence=0.0):
+        """
+        Build and optimize a pose graph using Open3D's global_optimization.
+        Updates self.fragment_transforms with optimized poses.
+        """
+        if self.num_fragments < 2:
+            return
+        import open3d as o3d
+        pose_graph = o3d.pipelines.registration.PoseGraph()
+        # Add nodes (one per fragment)
+        for i in range(self.num_fragments):
+            if i == 0:
+                pose_graph.nodes.append(o3d.pipelines.registration.PoseGraphNode(np.eye(4)))
+            else:
+                pose_graph.nodes.append(o3d.pipelines.registration.PoseGraphNode(self.fragment_transforms[i]))
+        # Add edges (from pairwise matches)
+        for match in self.pairwise_matches:
+            if 'confidence' in match and match['confidence'] < min_confidence:
+                continue
+            source = match['source_idx']
+            target = match['target_idx']
+            transformation = match['transformation']
+            uncertain = False # Set to True for non-sequential edges if desired
+            information = np.eye(6) # Could be weighted by confidence/score
+            pose_graph.edges.append(
+                o3d.pipelines.registration.PoseGraphEdge(
+                    source, target, transformation, uncertain, information
+                )
+            )
+        # Run global optimization
+        option = o3d.pipelines.registration.GlobalOptimizationOption(
+            max_correspondence_distance=self.params.get('voxel_downsample_size', 0.01) * 2.0,
+            edge_prune_threshold=0.25,
+            reference_node=0
+        )
+        o3d.pipelines.registration.global_optimization(
+            pose_graph,
+            o3d.pipelines.registration.GlobalOptimizationLevenbergMarquardt(),
+            o3d.pipelines.registration.GlobalOptimizationConvergenceCriteria(),
+            option
+        )
+        # Update transforms
+        for i in range(self.num_fragments):
+            self.fragment_transforms[i] = pose_graph.nodes[i].pose
 
     def greedy_assembly(self):
         if self.num_fragments == 0: return None
@@ -210,23 +266,27 @@ class Assembler:
                         candidate_mesh_transformed_o3d = copy.deepcopy(candidate_original_mesh_o3d)
                         candidate_mesh_transformed_o3d.transform(current_iteration_potential_world_transform)
                         candidate_name = self.fragments_data[current_iteration_idx_to_place]['name']
-                        
+
                         overlap_ok = True
+                        max_overlap_ratio = 0.0
                         for placed_mesh_o3d, placed_name in current_assembly_components:
-                            if not check_overlap(candidate_mesh_transformed_o3d, candidate_name, 
-                                                 placed_mesh_o3d, placed_name, 
-                                                 self.params, viz_collector=self.visualization_log):
+                            ok, overlap_ratio = check_overlap(candidate_mesh_transformed_o3d, candidate_name,
+                                                              placed_mesh_o3d, placed_name,
+                                                              self.params, viz_collector=self.visualization_log)
+                            if not ok:
                                 overlap_ok = False
                                 break
-                        
+                            max_overlap_ratio = max(max_overlap_ratio, overlap_ratio)
+
                         if overlap_ok: # This candidate is good and has the best score so far
                             best_candidate_match_info = match_info
                             best_candidate_score = match_info['score']
                             best_candidate_world_transform = current_iteration_potential_world_transform
                             best_candidate_idx_to_place = current_iteration_idx_to_place
+                            best_candidate_overlap_ratio = max_overlap_ratio
             
             # After checking all pairwise_matches for the current assembly state
-            if best_candidate_idx_to_place != -1:
+            if best_candidate_idx_to_place != -1 and best_candidate_match_info is not None:
                 newly_placed_idx_in_list = best_candidate_idx_to_place
                 newly_placed_name = self.fragments_data[newly_placed_idx_in_list]['name']
 
@@ -240,7 +300,7 @@ class Assembler:
                       f"(idx in list: {newly_placed_idx_in_list}) via match score {best_candidate_score:.3f}.")
                 
                 if self.visualization_log is not None:
-                    self.visualization_log.append({
+                    log_entry = {
                         'step': 'assembly_fragment_placed', 'type': 'mesh',
                         'fragment_name': newly_placed_name,
                         'original_index': self.fragments_data[newly_placed_idx_in_list]['original_index'],
@@ -249,7 +309,10 @@ class Assembler:
                         'vertices': np.asarray(placed_mesh_o3d_for_list.vertices),
                         'triangles': np.asarray(placed_mesh_o3d_for_list.triangles),
                         'matched_via_score': best_candidate_score,
-                        'match_details': { 
+                        'overlap_ratio': best_candidate_overlap_ratio
+                    }
+                    if best_candidate_match_info is not None:
+                        log_entry['match_details'] = {
                             'source_idx': best_candidate_match_info['source_idx'],
                             'target_idx': best_candidate_match_info['target_idx'],
                             'source_name': best_candidate_match_info['source_name'],
@@ -257,7 +320,7 @@ class Assembler:
                             'score': best_candidate_match_info['score'],
                             'rmse': best_candidate_match_info['rmse'],
                         }
-                    })
+                    self.visualization_log.append(log_entry)
             else:
                 print("No more non-overlapping, valid matches found to extend the assembly.")
                 break
@@ -290,6 +353,11 @@ class Assembler:
         if not final_meshes_to_combine_o3d:
             print("Error: No meshes were placed in the assembly.")
             return None
+
+        # --- GLOBAL POSE GRAPH OPTIMIZATION ---
+        if self.num_fragments > 2:
+            print("\n[Pose Graph Optimization] Refining fragment poses globally...")
+            self.optimize_with_pose_graph(min_confidence=0.0)
 
         return combine_meshes(final_meshes_to_combine_o3d, final_transforms_for_combine)
 
