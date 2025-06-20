@@ -184,3 +184,9 @@ If you generated a visualization log (e.g., `my_run_log.pkl`) using `main.py`:
 *   **User Interaction Refinements:** Allow manual correction of pairwise alignments or interactive adjustment during assembly.
 *   **Parallelization:** Speed up pairwise matching, feature extraction, and other computationally intensive steps.
 *   **Support for Color/Texture:** Use visual information to aid matching and alignment if available on fragments.
+
+
+
+
+
+# python -m src.main --input_dir data/input_fragments --output_dir data/output_assembly_test_auto --config_file config/reconstruction_params.json --visualize_steps_file data/log_auto_test.pkl --num_viz_pairwise 1

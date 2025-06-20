@@ -200,18 +200,25 @@ def main(args):
         return
     print(f"  Found {len(pairwise_matches)} potential pairwise matches above threshold.")
     
-    # Direct visualization of top N pairwise matches (runtime)
+    # Direct visualization of all pairwise matches (runtime)
     if args.num_viz_pairwise > 0 and pairwise_matches:
-        print(f"  Visualizing top {min(args.num_viz_pairwise, len(pairwise_matches))} pairwise matches (using PCDs for features)...")
+        print(f"  Visualizing all {len(pairwise_matches)} pairwise matches (using original meshes)...")
         sorted_matches_for_viz = sorted(pairwise_matches, key=lambda x: x['score'], reverse=True)
         for i_viz, match_viz in enumerate(sorted_matches_for_viz):
-            if i_viz >= args.num_viz_pairwise:
-                break
             s_data = valid_fragments_data[match_viz['source_idx']]
             t_data = valid_fragments_data[match_viz['target_idx']]
+
+            # Use original meshes instead of pcd_for_features
+            source_geom_to_viz = copy.deepcopy(s_data['original_mesh'])
+            target_geom_to_viz = copy.deepcopy(t_data['original_mesh'])
+
+            # Ensure they have normals for consistent display if not already computed
+            if not source_geom_to_viz.has_vertex_normals(): source_geom_to_viz.compute_vertex_normals()
+            if not target_geom_to_viz.has_vertex_normals(): target_geom_to_viz.compute_vertex_normals()
+
             viz_utils.draw_registration_result(
-                s_data['pcd_for_features'], t_data['pcd_for_features'], match_viz['transformation'],
-                window_name=f"Runtime Pairwise Match {i_viz+1}: {s_data['name']} to {t_data['name']}"
+                source_geom_to_viz, target_geom_to_viz, match_viz['transformation'],
+                window_name=f"Pairwise Match {i_viz+1}/{len(sorted_matches_for_viz)}: {s_data['name']} to {t_data['name']} (Score: {match_viz['score']:.3f})"
             )
 
     # 5. Global Assembly
@@ -219,7 +226,7 @@ def main(args):
     # The Assembler needs the 'original_mesh' from valid_fragments_data for the final assembly
     # It will also use the visualization_log to record its steps.
     assembler = src.assembly.Assembler(valid_fragments_data, pairwise_matches, params, visualization_log)
-    reconstructed_model = assembler.greedy_assembly() # This method should now log its choices to visualization_log
+    reconstructed_model = assembler.greedy_assembly()
 
     # Log final assembly result (if any)
     if reconstructed_model and reconstructed_model.has_vertices():
@@ -237,18 +244,9 @@ def main(args):
                 for i, placed in enumerate(assembler.is_fragment_placed) if placed
             ]
         })
-
-    # 6. Output
-    print("\n[6. Saving Reconstructed Model]")
-    if reconstructed_model and reconstructed_model.has_vertices():
-        os.makedirs(args.output_dir, exist_ok=True)
-        output_path = os.path.join(args.output_dir, "reconstructed_model.obj")
-        src.io_utils.save_mesh(reconstructed_model, output_path)
-        print(f"  Reconstructed model saved to: {output_path}")
-
-        if args.visualize_final: # Separate flag for just the final model
-            print("  Visualizing final assembly...")
-            o3d.visualization.draw_geometries([reconstructed_model], window_name="Final Reconstructed Model")
+        if args.visualize_final:
+            print("  Visualizing final composite assembly...")
+            o3d.visualization.draw_geometries([reconstructed_model], window_name="Final Composite Assembly")
     else:
         print("  Assembly failed or resulted in an empty model. No output saved.")
         
