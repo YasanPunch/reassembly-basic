@@ -86,50 +86,39 @@ def main(args):
     for i, frag_info_raw in enumerate(fragments_data_raw):
         print(f"  Processing fragment: {frag_info_raw['name']} ({i+1}/{len(fragments_data_raw)})")
         
-        # Preprocessing now includes segmentation and returns (pcd_for_features, fracture_surface_mesh)
-        # It also appends to visualization_log internally
-        pcd_for_features, fracture_surface_mesh = src.preprocessing.preprocess_fragment(
+        # Preprocessing now returns lists: (pcds_for_features_list, features_list, fracture_surfaces)
+        pcds_for_features_list, features_list, fracture_surfaces = src.preprocessing.preprocess_fragment(
             frag_info_raw, params, viz_collector=visualization_log
         )
-        
-        if pcd_for_features is None or not pcd_for_features.has_points():
-            print(f"    Warning: Preprocessing resulted in empty point cloud for features for {frag_info_raw['name']}. Skipping.")
-            # We could still add original_mesh to pipeline_data if we want to try assembling it later without features
+
+        # If no valid surfaces, store empty lists and continue
+        if not pcds_for_features_list or all(pcd is None or not pcd.has_points() for pcd in pcds_for_features_list):
+            print(f"    Warning: Preprocessing resulted in no valid point clouds for features for {frag_info_raw['name']}. Skipping.")
             processed_fragments_pipeline_data.append({
                 'name': frag_info_raw['name'],
                 'original_index': frag_info_raw['original_index'],
                 'original_mesh': frag_info_raw['mesh'],
-                'fracture_surface_mesh': fracture_surface_mesh, # Could be None
-                'pcd_for_features': None,
-                'features': None
+                'fracture_surfaces': fracture_surfaces,
+                'pcds_for_features': [],
+                'features_list': []
             })
             continue
 
-        features, _ = src.feature_extraction.extract_features_from_pcd(pcd_for_features, params)
-        
-        if features is None or features.num() == 0 :
-             print(f"    Warning: Feature extraction failed or yielded empty features for {frag_info_raw['name']}. Skipping.")
-             processed_fragments_pipeline_data.append({
-                'name': frag_info_raw['name'],
-                'original_index': frag_info_raw['original_index'],
-                'original_mesh': frag_info_raw['mesh'],
-                'fracture_surface_mesh': fracture_surface_mesh,
-                'pcd_for_features': pcd_for_features, # Store the pcd even if features are None
-                'features': None
-            })
-             continue
-
+        # Store lists for each fragment
         processed_fragments_pipeline_data.append({
             'name': frag_info_raw['name'],
             'original_index': frag_info_raw['original_index'],
-            'original_mesh': frag_info_raw['mesh'], # Keep original for final assembly
-            'fracture_surface_mesh': fracture_surface_mesh, # For visualization/debug
-            'pcd_for_features': pcd_for_features,  # PCD used for FPFH (from fracture surface)
-            'features': features # FPFH features
+            'original_mesh': frag_info_raw['mesh'],
+            'fracture_surfaces': fracture_surfaces,
+            'pcds_for_features': pcds_for_features_list,
+            'features_list': features_list
         })
     
     # Filter out fragments that failed feature extraction (essential for matching)
-    valid_fragments_data = [fd for fd in processed_fragments_pipeline_data if fd.get('features') is not None and fd['features'].num() > 0]
+    valid_fragments_data = [
+        fd for fd in processed_fragments_pipeline_data
+        if fd.get('features_list') and any(f is not None and f.num() > 0 for f in fd['features_list'])
+    ]
     if len(valid_fragments_data) < len(processed_fragments_pipeline_data):
         print(f"  Warning: {len(processed_fragments_pipeline_data) - len(valid_fragments_data)} fragments had no valid features and were excluded from matching.")
     
@@ -150,21 +139,23 @@ def main(args):
     # 4. Pairwise Matching
     print("\n[4. Finding Pairwise Matches]")
     # pairwise_matches will be list of dicts. Indices refer to `valid_fragments_data`
-    pairwise_matches = src.matching.find_pairwise_matches(valid_fragments_data, params, debug=args.debug_pairwise_matching) 
+    pairwise_matches = src.matching.find_pairwise_matches(valid_fragments_data, params, debug=args.debug_pairwise_matching, top_n_per_pair=args.top_n_matches_per_pair) 
     
     # Log pairwise matching attempts and results for visualization
     for idx_match, match in enumerate(pairwise_matches): # Added idx_match for unique naming if needed
         source_data = valid_fragments_data[match['source_idx']]
         target_data = valid_fragments_data[match['target_idx']]
-        
-        source_pcd_ff = source_data['pcd_for_features']
-        target_pcd_ff = target_data['pcd_for_features']
-
+        source_surface_idx = match.get('source_surface_idx', 0)
+        target_surface_idx = match.get('target_surface_idx', 0)
+        source_pcd_ff = source_data['pcds_for_features'][source_surface_idx]
+        target_pcd_ff = target_data['pcds_for_features'][target_surface_idx]
         visualization_log.append({
             'step': 'pairwise_match_success',
             'match_index': idx_match, # For replayer to potentially focus on specific matches
             'source_name': source_data['name'],
             'target_name': target_data['name'],
+            'source_surface_idx': source_surface_idx,
+            'target_surface_idx': target_surface_idx,
             # Store PCD for features data
             'source_pcd_type': 'pointcloud',
             'source_pcd_points': np.asarray(source_pcd_ff.points),
@@ -292,6 +283,8 @@ if __name__ == "__main__":
                     help="Enable visualization of segmentation results for each fragment.")
     parser.add_argument("--debug_pairwise_matching", action="store_true",
                     help="Enable debug visualization for pairwise matching.")
+    parser.add_argument("--top_n_matches_per_pair", type=int, default=3,
+                        help="Number of top matches to keep per fragment pair (default: 3)")
 
 
     # Ensure default config exists if not specified

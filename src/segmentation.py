@@ -5,6 +5,7 @@ import copy
 import matplotlib.pyplot as plt
 from collections import deque
 from scipy import ndimage
+from scipy.spatial import cKDTree
 
 def get_color(index, total_items=20, cmap_name='tab10', num_variations=3):
     """
@@ -403,6 +404,8 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         drawable_segment_infos = []
         highlight_color = np.array([0.0, 0.0, 0.0])  # Black highlight
         
+        mesh_vis = copy.deepcopy(o3d_mesh_fragment)
+        
         for i, props in enumerate(region_properties):
             seg_mesh = o3d.geometry.TriangleMesh()
             seg_mesh.vertices = o3d_mesh_fragment.vertices
@@ -554,6 +557,14 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         for region_idx in selected_regions:
             face_is_fracture_candidate[region_properties[region_idx]['faces']] = True
     
+    # Collect selected regions' face indices and normals for merging
+    selected_region_faces = []
+    selected_region_normals = []
+    for region_idx in range(len(region_properties)):
+        if face_is_fracture_candidate[region_properties[region_idx]['faces']].any():
+            selected_region_faces.append(set(region_properties[region_idx]['faces']))
+            selected_region_normals.append(region_properties[region_idx]['avg_normal'])
+    
     # Create output mesh
     if not np.any(face_is_fracture_candidate):
         print(f"\n    No regions selected for {fragment_name}")
@@ -574,7 +585,84 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
     print(f"\n    Extracted surface: {len(fracture_surface_o3d.vertices)} vertices, "
           f"{len(fracture_surface_o3d.triangles)} triangles")
     
-    return fracture_surface_o3d
+    # --- IMPROVED MERGING: NORMAL + BOUNDARY DISTANCE ---
+    all_triangles = np.asarray(o3d_mesh_fragment.triangles)
+    all_vertices = np.asarray(o3d_mesh_fragment.vertices)
+    def get_boundary_vertices(face_indices):
+        # Find boundary edges for a set of faces
+        faces = all_triangles[list(face_indices)]
+        edges = np.vstack([faces[:,[0,1]], faces[:,[1,2]], faces[:,[2,0]]])
+        edges = np.sort(edges, axis=1)
+        # Count occurrences
+        edges_tuple = [tuple(e) for e in edges]
+        from collections import Counter
+        edge_counts = Counter(edges_tuple)
+        boundary_edges = [e for e, c in edge_counts.items() if c == 1]
+        boundary_verts = np.unique(np.array(boundary_edges).flatten())
+        return all_vertices[boundary_verts]
+    
+    merged_clusters = []
+    used = set()
+    angle_thresh_deg = 10.0
+    boundary_dist_thresh = 0.01 * np.linalg.norm(all_vertices.max(axis=0) - all_vertices.min(axis=0))  # 1% of mesh size
+    for i, (faces_i, normal_i) in enumerate(zip(selected_region_faces, selected_region_normals)):
+        if i in used:
+            continue
+        cluster = set(faces_i)
+        cluster_normals = [normal_i]
+        merged_idxs = [i]
+        used.add(i)
+        boundary_i = get_boundary_vertices(faces_i)
+        for j, (faces_j, normal_j) in enumerate(zip(selected_region_faces, selected_region_normals)):
+            if j == i or j in used:
+                continue
+            angle = np.degrees(np.arccos(np.clip(np.dot(normal_i, normal_j), -1, 1)))
+            if angle < angle_thresh_deg and np.dot(normal_i, normal_j) > 0:
+                # Check boundary proximity
+                boundary_j = get_boundary_vertices(faces_j)
+                if len(boundary_i) > 0 and len(boundary_j) > 0:
+                    tree = cKDTree(boundary_j)
+                    min_dist = tree.query(boundary_i, k=1)[0].min()
+                    if min_dist < boundary_dist_thresh:
+                        cluster |= faces_j
+                        cluster_normals.append(normal_j)
+                        merged_idxs.append(j)
+                        used.add(j)
+        merged_clusters.append((cluster, merged_idxs))
+    # DEBUG: Visualize each merged face in its own window, with base mesh as wireframe
+    for idx, (cluster_faces, merged_idxs) in enumerate(merged_clusters):
+        if not cluster_faces:
+            continue
+        cluster_faces_arr = np.array(sorted(cluster_faces), dtype=np.int32)
+        cluster_triangles = all_triangles[cluster_faces_arr]
+        cluster_mesh = o3d.geometry.TriangleMesh()
+        cluster_mesh.vertices = mesh_vis.vertices  # Use full vertex set
+        cluster_mesh.triangles = o3d.utility.Vector3iVector(cluster_triangles)
+        cluster_mesh.compute_vertex_normals()
+        color = get_color(idx, len(merged_clusters))
+        cluster_mesh.paint_uniform_color(color)
+        print(f"[DEBUG] Merged regions {merged_idxs} into face {idx} (color {idx}), triangles: {len(cluster_triangles)}, vertices: {len(cluster_mesh.vertices)}, color: {color}")
+        # Create wireframe for base mesh
+        wireframe = o3d.geometry.LineSet.create_from_triangle_mesh(mesh_vis)
+        wireframe.paint_uniform_color([0.5, 0.5, 0.5])
+        o3d.visualization.draw_geometries([wireframe, cluster_mesh], window_name=f"[DEBUG] Merged Face {idx} (Color {idx})")
+    # Store merged faces as separate fracture surfaces for downstream processing
+    merged_fracture_surfaces = []
+    for cluster_faces, merged_idxs in merged_clusters:
+        if not cluster_faces:
+            continue
+        cluster_faces_arr = np.array(sorted(cluster_faces), dtype=np.int32)
+        cluster_triangles = all_triangles[cluster_faces_arr]
+        cluster_mesh = o3d.geometry.TriangleMesh()
+        cluster_mesh.vertices = mesh_vis.vertices
+        cluster_mesh.triangles = o3d.utility.Vector3iVector(cluster_triangles)
+        cluster_mesh.remove_unreferenced_vertices()
+        cluster_mesh.remove_degenerate_triangles()
+        if cluster_mesh.has_triangles():
+            cluster_mesh.compute_vertex_normals()
+            merged_fracture_surfaces.append(cluster_mesh)
+    # Return merged fracture surfaces for this fragment
+    return merged_fracture_surfaces
 
 
 def visualize_segmentation(o3d_mesh, fracture_surface, fragment_name="Unnamed"):

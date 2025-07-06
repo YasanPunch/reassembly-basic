@@ -240,6 +240,12 @@ class Assembler:
 
             for match_info in self.pairwise_matches:
                 s_idx, t_idx = match_info['source_idx'], match_info['target_idx']
+                s_surf_idx = match_info.get('source_surface_idx', 0)
+                t_surf_idx = match_info.get('target_surface_idx', 0)
+                # If you need to use a specific surface for overlap or context, use:
+                #   self.fragments_data[s_idx]['fracture_surfaces'][s_surf_idx]
+                #   self.fragments_data[t_idx]['fracture_surfaces'][t_surf_idx]
+                # For now, original_mesh is used for placement, but this is where you'd use the surface if needed.
                 
                 # These are potential values for the current match_info being considered
                 current_iteration_potential_world_transform = None

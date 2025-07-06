@@ -175,6 +175,9 @@ def replay_visualization_log(log_filepath, fragments_data_map=None):
                 geometries_to_draw.append(pcd)
 
         elif step_type == 'pairwise_match_success':
+            # Use surface indices if available for more accurate replay (for future extension)
+            source_surface_idx = entry.get('source_surface_idx', 0)
+            target_surface_idx = entry.get('target_surface_idx', 0)
             source_pcd_data = {'type': 'pointcloud', 'points': entry['source_pcd_points'], 'normals': entry.get('source_pcd_normals')}
             target_pcd_data = {'type': 'pointcloud', 'points': entry['target_pcd_points'], 'normals': entry.get('target_pcd_normals')}
             source_pcd = _reconstruct_geometry_from_log_entry(source_pcd_data)

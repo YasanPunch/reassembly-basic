@@ -36,11 +36,48 @@ def preprocess_fragment(fragment_info, params, viz_collector=None):
                 'step': 'preprocessing_failed_no_vertices', 
                 'name': fragment_name
             })
-        return None, None
+        return [], [], []
 
-    # --- Step 1: Identify and Extract Fracture Surface Mesh ---
-    print(f"    Preprocessing: Segmenting fracture surface for {fragment_name}...")
-    fracture_surface_mesh_o3d = extract_fracture_surface_mesh(original_mesh, fragment_name, params)
+    # --- Step 1: Identify and Extract Fracture Surface Meshes (now a list) ---
+    print(f"    Preprocessing: Segmenting fracture surfaces for {fragment_name}...")
+    fracture_surfaces = extract_fracture_surface_mesh(original_mesh, fragment_name, params)
+    if not isinstance(fracture_surfaces, list):
+        fracture_surfaces = [fracture_surfaces] if fracture_surfaces is not None else []
+
+    # --- Step 2: For each surface, sample points, extract features, and store as lists ---
+    features_list = []
+    pcds_for_features_list = []
+    for surf in fracture_surfaces:
+        if surf is None or not surf.has_triangles():
+            continue
+        num_dense_sample_points = params.get("fracture_surface_dense_sample_points", 5000)
+        if len(surf.vertices) < 3:
+            continue
+        pcd = surf.sample_points_poisson_disk(number_of_points=num_dense_sample_points)
+        if not pcd.has_points():
+            continue
+        voxel_size = params.get("voxel_downsample_size", 0.01)
+        if voxel_size > 0 and len(pcd.points) > 0:
+            pcd_downsampled = pcd.voxel_down_sample(voxel_size)
+            pcd = pcd_downsampled
+        if not pcd.has_points():
+            continue
+        # Estimate normals
+        radius_normal = params.get("normal_estimation_radius", voxel_size * params.get("normal_radius_factor", 2.0))
+        max_nn_normal = params.get("normal_estimation_max_nn", 30)
+        pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=max_nn_normal))
+        try:
+            pcd.orient_normals_consistent_tangent_plane(k=params.get("orient_normals_k", 15))
+        except RuntimeError as e:
+            print(f"    Warning: orient_normals_consistent_tangent_plane failed for {fragment_name}: {e}")
+        # Feature extraction
+        from src.feature_extraction import extract_features_from_pcd
+        features, _ = extract_features_from_pcd(pcd, params)
+        if features is not None and features.num() > 0:
+            features_list.append(features)
+            pcds_for_features_list.append(pcd)
+    # Return lists for downstream processing
+    return pcds_for_features_list, features_list, fracture_surfaces
 
     # Visualization parameters for interactive verification
     if params.get('visualize_segmentation', False):
@@ -170,7 +207,17 @@ def preprocess_fragment(fragment_info, params, viz_collector=None):
         mesh_vis = copy.deepcopy(original_mesh)
         mesh_vis.paint_uniform_color([0.7,0.7,0.7])
         vis_geoms = [mesh_vis]
-        if fracture_surface_mesh_o3d and fracture_surface_mesh_o3d.has_triangles():
+        if isinstance(fracture_surface_mesh_o3d, list):
+            any_found = False
+            for surf in fracture_surface_mesh_o3d:
+                if surf and surf.has_triangles():
+                    surf_vis = copy.deepcopy(surf)
+                    surf_vis.paint_uniform_color([1,0,0])
+                    vis_geoms.append(surf_vis)
+                    any_found = True
+            if not any_found:
+                print(f"WARNING: No fracture surface found for {fragment_name} during segmentation debug visualization.")
+        elif fracture_surface_mesh_o3d and fracture_surface_mesh_o3d.has_triangles():
             fracture_vis = copy.deepcopy(fracture_surface_mesh_o3d)
             fracture_vis.paint_uniform_color([1,0,0])
             vis_geoms.append(fracture_vis)
