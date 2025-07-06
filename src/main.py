@@ -150,7 +150,7 @@ def main(args):
     # 4. Pairwise Matching
     print("\n[4. Finding Pairwise Matches]")
     # pairwise_matches will be list of dicts. Indices refer to `valid_fragments_data`
-    pairwise_matches = src.matching.find_pairwise_matches(valid_fragments_data, params) 
+    pairwise_matches = src.matching.find_pairwise_matches(valid_fragments_data, params, debug=args.debug_pairwise_matching) 
     
     # Log pairwise matching attempts and results for visualization
     for idx_match, match in enumerate(pairwise_matches): # Added idx_match for unique naming if needed
@@ -221,6 +221,11 @@ def main(args):
                 window_name=f"Pairwise Match {i_viz+1}/{len(sorted_matches_for_viz)}: {s_data['name']} to {t_data['name']} (Score: {match_viz['score']:.3f})"
             )
 
+    # LIMIT DEBUG VISUALIZATION TO TOP N PAIRWISE MATCHES (CHANGE N HERE IF NEEDED)
+    DEBUG_TOP_N_MATCHES = 5
+    if args.debug_pairwise_matching and pairwise_matches:
+        pairwise_matches = pairwise_matches[:DEBUG_TOP_N_MATCHES]
+
     # 5. Global Assembly
     print("\n[5. Performing Global Assembly]")
     # The Assembler needs the 'original_mesh' from valid_fragments_data for the final assembly
@@ -285,6 +290,8 @@ if __name__ == "__main__":
                         help="Number of top pairwise matches to visualize directly during runtime (0 for none).")
     parser.add_argument("--visualize_segmentation", action="store_true",
                     help="Enable visualization of segmentation results for each fragment.")
+    parser.add_argument("--debug_pairwise_matching", action="store_true",
+                    help="Enable debug visualization for pairwise matching.")
 
 
     # Ensure default config exists if not specified
