@@ -164,4 +164,18 @@ def preprocess_fragment(fragment_info, params, viz_collector=None):
     # For simplicity, we assume the PCD logged at 'downsampled_pcd_for_features_result' is what goes to feature extraction.
     
     print(f"    Preprocessing: Finished for {fragment_name}. Final PCD for features has {len(pcd.points)} points.")
+
+    # DEBUG: VISUALIZE SEGMENTATION RESULT FOR EACH FRAGMENT (PAUSE FOR USER)
+    if params.get('debug_pairwise_matching', False):
+        mesh_vis = copy.deepcopy(original_mesh)
+        mesh_vis.paint_uniform_color([0.7,0.7,0.7])
+        vis_geoms = [mesh_vis]
+        if fracture_surface_mesh_o3d and fracture_surface_mesh_o3d.has_triangles():
+            fracture_vis = copy.deepcopy(fracture_surface_mesh_o3d)
+            fracture_vis.paint_uniform_color([1,0,0])
+            vis_geoms.append(fracture_vis)
+        else:
+            print(f"WARNING: No fracture surface found for {fragment_name} during segmentation debug visualization.")
+        o3d.visualization.draw_geometries(vis_geoms, window_name=f"[DEBUG] Segmentation: {fragment_name} (Gray=Full Mesh, Red=Fracture Surface)")
+
     return pcd, fracture_surface_mesh_o3d

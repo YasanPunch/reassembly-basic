@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 print("DEBUG: matching.py top level executed") # <--- ADD THIS
 
-def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params):
+def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
     matches = []
     # Align j to i (j is source, i is target)
     source_pcd = frag_j_data['pcd_for_features']
@@ -19,9 +19,15 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params):
        source_fpfh.num() == 0 or target_fpfh.num() == 0:
         return []
 
-    transform_j_to_i, fitness_ji, rmse_ji = align_fragments_pcd(
-        source_pcd, target_pcd, source_fpfh, target_fpfh, params
-    )
+    if debug:
+        transform_j_to_i, fitness_ji, rmse_ji = align_fragments_pcd(
+            source_pcd, target_pcd, source_fpfh, target_fpfh, params, debug=debug,
+            source_fragment=frag_j_data, target_fragment=frag_i_data
+        )
+    else:
+        transform_j_to_i, fitness_ji, rmse_ji = align_fragments_pcd(
+            source_pcd, target_pcd, source_fpfh, target_fpfh, params
+        )
     if transform_j_to_i is not None and fitness_ji >= params.get("min_match_score", 0.6):
         confidence_ji = float(fitness_ji) / (rmse_ji + 1e-6)
         matches.append({
@@ -38,9 +44,15 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params):
     source_fpfh = frag_i_data['features']
     target_fpfh = frag_j_data['features']
 
-    transform_i_to_j, fitness_ij, rmse_ij = align_fragments_pcd(
-        source_pcd, target_pcd, source_fpfh, target_fpfh, params
-    )
+    if debug:
+        transform_i_to_j, fitness_ij, rmse_ij = align_fragments_pcd(
+            source_pcd, target_pcd, source_fpfh, target_fpfh, params, debug=debug,
+            source_fragment=frag_i_data, target_fragment=frag_j_data
+        )
+    else:
+        transform_i_to_j, fitness_ij, rmse_ij = align_fragments_pcd(
+            source_pcd, target_pcd, source_fpfh, target_fpfh, params
+        )
     if transform_i_to_j is not None and fitness_ij >= params.get("min_match_score", 0.6):
         confidence_ij = float(fitness_ij) / (rmse_ij + 1e-6)
         matches.append({
@@ -52,7 +64,7 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params):
         })
     return matches
 
-def find_pairwise_matches(fragments_data, params):
+def find_pairwise_matches(fragments_data, params, debug=False):
     """
     Finds potential pairwise alignments between all unique pairs of fragments.
     Each item in fragments_data is a dict:
@@ -81,7 +93,7 @@ def find_pairwise_matches(fragments_data, params):
     results = []
     with ThreadPoolExecutor() as executor:
         future_to_pair = {
-            executor.submit(_match_fragment_pair, i, j, fragments_data[i], fragments_data[j], params): (i, j)
+            executor.submit(_match_fragment_pair, i, j, fragments_data[i], fragments_data[j], params, debug): (i, j)
             for i, j in pairs
         }
         for future in as_completed(future_to_pair):
