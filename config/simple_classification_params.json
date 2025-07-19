@@ -1,0 +1,31 @@
+{
+  "// --- Simple Face Classification Parameters ---": null,
+  "// Single method to classify faces as fracture vs original": null,
+
+  "// --- Adaptive Threshold Percentiles ---": null,
+  "// These percentiles are calculated from the object's own properties": null,
+  "roughness_threshold_percentile": 75,
+  "curvature_threshold_percentile": 75,
+  "boundary_complexity_threshold_percentile": 75,
+  "symmetry_threshold_percentile": 25,
+  "planarity_threshold_percentile": 25,
+
+  "// --- Property Weights ---": null,
+  "// How much each property contributes to the fracture score": null,
+  "fracture_detection_weights": {
+    "curvature": 0.3,
+    "roughness": 0.3,
+    "boundary_complexity": 0.2,
+    "symmetry": 0.1,
+    "planarity": 0.1
+  },
+
+  "// --- Final Classification ---": null,
+  "final_classification_threshold": 0.5,
+  "visualize_classification": true,
+
+  "// --- Preprocessing Parameters (if needed) ---": null,
+  "voxel_downsample_size": 3.0,
+  "normal_estimation_radius": 14.0,
+  "normal_estimation_max_nn": 30
+}

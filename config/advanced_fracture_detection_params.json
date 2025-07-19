@@ -1,0 +1,60 @@
+{
+  "// --- Advanced Fracture Surface Detection Parameters ---": null,
+
+  "// --- I. Basic Segmentation Parameters ---": null,
+  "max_curvature_deg": 30.0,
+  "area_limit_fraction": 0.02,
+  "visualize_segmentation": false,
+  "elevation_map_resolution": 64,
+
+  "// --- II. Detection Method Selection ---": null,
+  "use_bumpiness_detection": true,
+  "use_advanced_detection": true,
+  "use_statistical_analysis": true,
+  "use_combined_detection": true,
+
+  "// --- III. Bumpiness Detection ---": null,
+  "bumpiness_threshold": 0.2,
+
+  "// --- IV. Advanced Geometric Analysis ---": null,
+  "advanced_detection_ratio_threshold": 0.3,
+  "fracture_detection_threshold": 0.5,
+  "fracture_detection_weights": {
+    "curvature": 0.3,
+    "roughness": 0.3,
+    "boundary_complexity": 0.2,
+    "symmetry": -0.1,
+    "planarity": -0.1
+  },
+
+  "// --- V. Statistical Analysis ---": null,
+  "statistical_confidence_threshold": 0.6,
+
+  "// --- VI. Curvature-based Detection ---": null,
+  "curvature_threshold_percentile": 75,
+
+  "// --- VII. Combined Detection ---": null,
+  "combined_min_agreement": 2,
+
+  "// --- VIII. Confidence Scoring ---": null,
+  "confidence_weights": {
+    "normal_variation": 0.25,
+    "roughness": 0.25,
+    "area_irregularity": 0.2,
+    "size_factor": 0.15,
+    "boundary_complexity": 0.15
+  },
+
+  "// --- IX. Visualization and Comparison ---": null,
+  "compare_detection_methods": true,
+  "visualize_comparison": true,
+
+  "// --- X. Preprocessing Parameters (for compatibility) ---": null,
+  "voxel_downsample_size": 3.0,
+  "fracture_surface_dense_sample_points": 10000,
+  "normal_estimation_radius": 14.0,
+  "normal_estimation_max_nn": 30,
+  "orient_normals_k": 15,
+  "fpfh_feature_radius": 10.0,
+  "fpfh_feature_max_nn": 100
+}
