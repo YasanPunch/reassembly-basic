@@ -1,0 +1,45 @@
+{
+  "// --- Simplified Adaptive Fracture Detection Parameters ---": null,
+  "// All thresholds are now relative to the object's properties, not fixed values": null,
+
+  "// --- I. Basic Segmentation ---": null,
+  "max_curvature_deg": 30.0,
+  "area_limit_fraction": 0.02,
+  "visualize_segmentation": false,
+  "elevation_map_resolution": 64,
+
+  "// --- II. Detection Method Selection ---": null,
+  "use_adaptive_detection": true,
+  "use_combined_approach": true,
+
+  "// --- III. Adaptive Threshold Percentiles ---": null,
+  "// These are percentiles of the object's actual properties": null,
+  "roughness_threshold_percentile": 75,
+  "curvature_threshold_percentile": 75,
+  "boundary_complexity_threshold_percentile": 75,
+  "symmetry_threshold_percentile": 25,
+  "planarity_threshold_percentile": 25,
+  "score_threshold_percentile": 70,
+
+  "// --- IV. Property Weights ---": null,
+  "fracture_detection_weights": {
+    "curvature": 0.3,
+    "roughness": 0.3,
+    "boundary_complexity": 0.2,
+    "symmetry": 0.1,
+    "planarity": 0.1
+  },
+
+  "// --- V. Combined Approach ---": null,
+  "combined_min_agreement": 2,
+  "statistical_confidence_threshold": 0.6,
+
+  "// --- VI. Preprocessing Parameters ---": null,
+  "voxel_downsample_size": 3.0,
+  "fracture_surface_dense_sample_points": 10000,
+  "normal_estimation_radius": 14.0,
+  "normal_estimation_max_nn": 30,
+  "orient_normals_k": 15,
+  "fpfh_feature_radius": 10.0,
+  "fpfh_feature_max_nn": 100
+}
