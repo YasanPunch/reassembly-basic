@@ -11,3 +11,8 @@ USE THIS COMMAND TO EXECUTE -> python -m src.main --visualize_steps_file data/lo
 
 SAME COMMAND WITHOUT DEBUG -> python -m src.main --visualize_steps_file data/log_auto_test.pkl --num_viz_pairwise 3 --top_n_matches_per_pair 3
 
+NOTE
+
+Overlap check in global reassembly is too strict currently. It is turned off in configuration parameters. 
+Debug visualization can also be toggled on/off from config params. 
+

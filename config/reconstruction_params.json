@@ -40,5 +40,7 @@
     "max_assembly_overlap_factor_aabb": 0.95,
     "overlap_check_sample_points": 300,
     "overlap_penetration_allowance_ratio": 0.25,
-    "overlap_penetration_depth_factor": 0.25
+    "overlap_penetration_depth_factor": 0.25,
+    "debug_assembly": true,
+    "disable_overlap_check": true
 }
