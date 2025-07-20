@@ -4,6 +4,13 @@ import open3d as o3d
 import copy
 from src.io_utils import combine_meshes, save_mesh # Assuming this is for if __name__ == '__main__'
 
+# Add global colormap import for fragment coloring
+try:
+    import matplotlib.pyplot as plt
+    cmap = plt.get_cmap('tab20')
+except ImportError:
+    cmap = None
+
 def check_overlap(mesh1_o3d, mesh1_name, mesh2_o3d, mesh2_name, params, viz_collector=None):
     if not mesh1_o3d.has_vertices() or not mesh2_o3d.has_vertices():
         return True, 0.0  # No overlap, confidence 0
@@ -157,9 +164,10 @@ class Assembler:
             transformation = match['transformation']
             uncertain = False # Set to True for non-sequential edges if desired
             information = np.eye(6) # Could be weighted by confidence/score
+            # FIX: Swap 'information' and 'uncertain' to match Open3D's PoseGraphEdge signature
             pose_graph.edges.append(
                 o3d.pipelines.registration.PoseGraphEdge(
-                    source, target, transformation, uncertain, information
+                    source, target, transformation, information, uncertain
                 )
             )
         # Run global optimization
@@ -273,16 +281,29 @@ class Assembler:
                         candidate_mesh_transformed_o3d.transform(current_iteration_potential_world_transform)
                         candidate_name = self.fragments_data[current_iteration_idx_to_place]['name']
 
-                        overlap_ok = True
-                        max_overlap_ratio = 0.0
-                        for placed_mesh_o3d, placed_name in current_assembly_components:
-                            ok, overlap_ratio = check_overlap(candidate_mesh_transformed_o3d, candidate_name,
-                                                              placed_mesh_o3d, placed_name,
-                                                              self.params, viz_collector=self.visualization_log)
-                            if not ok:
-                                overlap_ok = False
-                                break
-                            max_overlap_ratio = max(max_overlap_ratio, overlap_ratio)
+                        # DEBUG VISUALIZATION: Show candidate placement if enabled
+                        if self.params.get('debug_assembly', False):
+                            print(f"[DEBUG] Visualizing candidate placement for {candidate_name}")
+                            o3d.visualization.draw_geometries(
+                                [candidate_mesh_transformed_o3d] + [m for m, _ in current_assembly_components],
+                                window_name=f"Candidate: {candidate_name} (Red), Placed: Gray"
+                            )
+
+                        # TOGGLE OVERLAP CHECK
+                        if self.params.get('disable_overlap_check', False):
+                            overlap_ok = True
+                            max_overlap_ratio = 0.0
+                        else:
+                            overlap_ok = True
+                            max_overlap_ratio = 0.0
+                            for placed_mesh_o3d, placed_name in current_assembly_components:
+                                ok, overlap_ratio = check_overlap(candidate_mesh_transformed_o3d, candidate_name,
+                                                                  placed_mesh_o3d, placed_name,
+                                                                  self.params, viz_collector=self.visualization_log)
+                                if not ok:
+                                    overlap_ok = False
+                                    break
+                                max_overlap_ratio = max(max_overlap_ratio, overlap_ratio)
 
                         if overlap_ok: # This candidate is good and has the best score so far
                             best_candidate_match_info = match_info
@@ -351,10 +372,25 @@ class Assembler:
 
         final_meshes_to_combine_o3d = []
         final_transforms_for_combine = []
+        fragment_colors = []
+        # Assign a unique color to each fragment for visualization
         for i in range(self.num_fragments):
             if self.is_fragment_placed[i]:
-                final_meshes_to_combine_o3d.append(self.original_meshes[i]) 
+                mesh = copy.deepcopy(self.original_meshes[i])
+                # Assign color
+                if cmap:
+                    color = cmap(i % cmap.N)[:3]
+                else:
+                    # Fallback simple color cycle
+                    color_cycle = [
+                        [1,0,0],[0,1,0],[0,0,1],[1,1,0],[1,0,1],[0,1,1],
+                        [0.8,0.5,0.2],[0.5,0.2,0.8],[0.2,0.8,0.5],[0.6,0.6,0.6]
+                    ]
+                    color = color_cycle[i % len(color_cycle)]
+                mesh.paint_uniform_color(color)
+                final_meshes_to_combine_o3d.append(mesh)
                 final_transforms_for_combine.append(self.fragment_transforms[i])
+                fragment_colors.append(color)
         
         if not final_meshes_to_combine_o3d:
             print("Error: No meshes were placed in the assembly.")
@@ -365,7 +401,75 @@ class Assembler:
             print("\n[Pose Graph Optimization] Refining fragment poses globally...")
             self.optimize_with_pose_graph(min_confidence=0.0)
 
-        return combine_meshes(final_meshes_to_combine_o3d, final_transforms_for_combine)
+        # --- VISUALIZATION: After Pose Graph Optimization ---
+        print("[Visualization] Showing output after pose graph optimization (before snapping)...")
+        pose_graph_meshes = []
+        for mesh, transform in zip(final_meshes_to_combine_o3d, final_transforms_for_combine):
+            mesh_pg = copy.deepcopy(mesh)
+            mesh_pg.transform(transform)
+            pose_graph_meshes.append(mesh_pg)
+        o3d.visualization.draw_geometries(
+            pose_graph_meshes,
+            window_name="Final Composite Assembly: After Pose Graph Optimization"
+        )
+
+        # --- POST-PROCESSING SNAPPING STEP ---
+        print("[Post-Processing] Snapping adjacent fragments together...")
+        SNAP_SCORE_THRESHOLD = 0.7
+        snapped_transforms = list(final_transforms_for_combine)
+        # For each high-scoring match, snap the source to the target
+        for match in self.pairwise_matches:
+            if match['score'] < SNAP_SCORE_THRESHOLD:
+                continue
+            s_idx = match['source_idx']
+            t_idx = match['target_idx']
+            # Only snap if both fragments are placed
+            if s_idx >= len(final_meshes_to_combine_o3d) or t_idx >= len(final_meshes_to_combine_o3d):
+                continue
+            source_mesh = copy.deepcopy(final_meshes_to_combine_o3d[s_idx])
+            target_mesh = copy.deepcopy(final_meshes_to_combine_o3d[t_idx])
+            source_mesh.transform(snapped_transforms[s_idx])
+            target_mesh.transform(snapped_transforms[t_idx])
+            # Find closest points between source and target
+            src_points = np.asarray(source_mesh.vertices)
+            tgt_points = np.asarray(target_mesh.vertices)
+            from scipy.spatial import cKDTree
+            tree = cKDTree(tgt_points)
+            dists, idxs = tree.query(src_points)
+            min_dist = np.min(dists)
+            min_src_idx = np.argmin(dists)
+            min_tgt_idx = idxs[min_src_idx]
+            # Compute translation vector to bring source closer to target
+            src_pt = src_points[min_src_idx]
+            tgt_pt = tgt_points[min_tgt_idx]
+            vec = tgt_pt - src_pt
+            # Move source fragment by this vector (minus a small epsilon to avoid overlap)
+            epsilon = 1e-4
+            snap_vec = vec - epsilon * (vec / (np.linalg.norm(vec) + 1e-8))
+            snapped_transforms[s_idx][:3, 3] += snap_vec
+        # Apply snapped transforms to meshes
+        snapped_meshes = []
+        for i, mesh in enumerate(final_meshes_to_combine_o3d):
+            mesh_snapped = copy.deepcopy(mesh)
+            mesh_snapped.transform(snapped_transforms[i])
+            snapped_meshes.append(mesh_snapped)
+        print("[Post-Processing] Snapping complete. Visualizing snapped fragments...")
+        o3d.visualization.draw_geometries(
+            snapped_meshes,
+            window_name="Final Composite Assembly: Snapped Fragments"
+        )
+
+        final_mesh = combine_meshes(snapped_meshes, [np.eye(4)] * len(snapped_meshes))
+
+        # Save the final mesh to data/output_assembly
+        import os
+        output_dir = os.path.join("data", "output_assembly")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, "reconstructed_model.obj")
+        save_mesh(final_mesh, output_path)
+        print(f"Final assembled model saved to: {output_path}")
+
+        return final_mesh
 
 # In src/assembly.py, at the end of the file:
 
