@@ -1,0 +1,64 @@
+{
+  "voxel_downsample_size": 3.0,
+  "normal_estimation_radius": 14.0,
+  "normal_estimation_max_nn": 30,
+  "fpfh_feature_radius": 10.0,
+  "fpfh_feature_max_nn": 100,
+  "ransac_distance_threshold_factor": 1.5,
+  "ransac_edge_length_factor": 0.9,
+  "ransac_iterations": 4000000,
+  "ransac_n_points": 4,
+  "ransac_confidence": 0.999,
+  "icp_max_correspondence_distance_factor": 2.0,
+  "icp_relative_fitness": 1e-6,
+  "icp_relative_rmse": 1e-6,
+  "icp_max_iteration": 50,
+  "min_match_score": 0.3,
+
+  "min_boundary_edges_for_fracture_face": 2,
+  "fracture_surface_dense_sample_points": 10000,
+  "add_preprocessing_noise": true,
+  "preprocessing_noise_factor": 0.01,
+  "orient_normals_k": 15,
+
+  "max_assembly_overlap_factor_aabb": 0.95,
+  "overlap_check_sample_points": 300,
+  "overlap_penetration_allowance_ratio": 0.25,
+  "overlap_penetration_depth_factor": 0.25,
+
+  "use_normal_based_segmentation": true,
+  "use_boundary_edge_detection": false,
+  "normal_cluster_eps": 0.05,
+  "normal_cluster_min_samples": 75,
+  "roughness_threshold": 0.4,
+  "visualize_segmentation": true,
+
+  "segment_refinement_enabled": true,
+  "refinement_min_face_count_absolute": 100,
+  "refinement_min_face_percentage": 0.05,
+  "refinement_min_segment_size_for_checks": 75,
+  "refinement_min_faces_for_coherency_check": 30,
+  "refinement_min_faces_for_roughness_check": 20,
+  "refinement_check_roughness_homogeneity": false,
+  "refinement_roughness_std_dev_threshold": 0.25,
+  "roughness_neighbor_k": 5,
+
+  "refinement_coherency_normal_pca_ratio_threshold": 0.75,
+  "refinement_coherency_plane_fit_normal_angle_dev_deg": 40.0,
+  "refinement_coherency_plane_fit_dist_dev_factor": 0.2,
+
+  "refinement_split_strict_eps_factor": 0.9,
+  "refinement_split_min_samples_factor": 0.95,
+
+  "refinement_max_recursion_depth": 3,
+
+  "refinement_min_final_segment_size": 250,
+
+  "refinement_dominant_keep_min_faces": 2000,
+
+  "refinement_dominant_keep_pca_badness_thresh": 0.45,
+  "refinement_dominant_keep_planar_badness_thresh": 3.5,
+
+  "refinement_pca_split_badness_thresh": 0.4,
+  "refinement_planar_split_badness_thresh": 3.0
+}
