@@ -4,121 +4,15 @@ import open3d as o3d
 import copy
 from src.io_utils import combine_meshes, save_mesh # Assuming this is for if __name__ == '__main__'
 
+# --- Assembly Module ---
+# Boolean penetration test is now handled in matching.py during pairwise matching
+
 # Add global colormap import for fragment coloring
 try:
     import matplotlib.pyplot as plt
     cmap = plt.get_cmap('tab20')
 except ImportError:
     cmap = None
-
-def check_overlap(mesh1_o3d, mesh1_name, mesh2_o3d, mesh2_name, params, viz_collector=None):
-    if not mesh1_o3d.has_vertices() or not mesh2_o3d.has_vertices():
-        return True, 0.0  # No overlap, confidence 0
-
-    aabb1 = mesh1_o3d.get_axis_aligned_bounding_box()
-    aabb2 = mesh2_o3d.get_axis_aligned_bounding_box()
-    vol1_aabb = aabb1.volume()
-    vol2_aabb = aabb2.volume()
-    epsilon = 1e-9
-    min_vol = min(vol1_aabb, vol2_aabb) + epsilon
-    # Adaptive threshold: scale with min volume, or use a function of both
-    base_overlap_factor = params.get("max_assembly_overlap_factor_aabb", 0.8)
-    adaptive_overlap_factor = base_overlap_factor * (min_vol / (vol1_aabb + vol2_aabb + epsilon)) * 2.0  # Example scaling
-
-    vol_intersection_aabb = 0.0
-    if hasattr(aabb1, 'get_intersection'):
-        intersection_aabb = aabb1.get_intersection(aabb2)
-        current_vol_intersection = intersection_aabb.volume()
-        if current_vol_intersection < 1e-9:
-            return True, 0.0
-        vol_intersection_aabb = current_vol_intersection
-    else:
-        if viz_collector is not None:
-            if not hasattr(check_overlap, "_warned_manual_aabb_intersect"):
-                print("    DEBUG assembly.py: aabb1.get_intersection not found by hasattr, calculating manually.")
-                check_overlap._warned_manual_aabb_intersect = True
-        min_b1, max_b1 = aabb1.get_min_bound(), aabb1.get_max_bound()
-        min_b2, max_b2 = aabb2.get_min_bound(), aabb2.get_max_bound()
-        intersect_min = np.maximum(min_b1, min_b2)
-        intersect_max = np.minimum(max_b1, max_b2)
-        if np.any(intersect_min >= intersect_max):
-            return True, 0.0
-        vol_intersection_aabb = np.prod(intersect_max - intersect_min)
-
-    overlap_ratio1 = vol_intersection_aabb / (vol1_aabb + epsilon)
-    overlap_ratio2 = vol_intersection_aabb / (vol2_aabb + epsilon)
-    overlap_ratio_min = min(overlap_ratio1, overlap_ratio2)
-
-    if (vol1_aabb > epsilon and overlap_ratio1 > adaptive_overlap_factor) or \
-       (vol2_aabb > epsilon and overlap_ratio2 > adaptive_overlap_factor):
-        if viz_collector is not None:
-            viz_collector.append({
-                'step': 'overlap_check_failed_aabb', 'type': 'event',
-                'mesh1_name': mesh1_name,
-                'mesh2_name': mesh2_name,
-                'reason': f'Adaptive AABB overlap too high ({overlap_ratio1:.2f} of m1 or {overlap_ratio2:.2f} of m2)',
-                'overlap_ratio1': overlap_ratio1,
-                'overlap_ratio2': overlap_ratio2,
-                'adaptive_overlap_factor': adaptive_overlap_factor
-            })
-        return False, overlap_ratio_min
-
-    num_sample_points_overlap = params.get("overlap_check_sample_points", 300)
-    penetration_allowance_ratio = params.get("overlap_penetration_allowance_ratio", 0.15)
-    penetration_depth_factor = params.get("overlap_penetration_depth_factor", 0.25)
-    voxel_size_ref = params.get("voxel_downsample_size", 0.01)
-
-    try:
-        mesh1_tri = trimesh.Trimesh(vertices=np.asarray(mesh1_o3d.vertices),
-                                    faces=np.asarray(mesh1_o3d.triangles))
-        if not mesh1_tri.is_watertight and len(mesh1_tri.faces) > 0:
-            mesh1_tri.fill_holes()
-
-        if len(mesh1_tri.faces) == 0:
-            print("    Overlap Check (Trimesh): mesh1 has no faces for sampling. Relying on AABB.")
-            return True, overlap_ratio_min
-
-        sampled_points, _ = trimesh.sample.sample_surface(mesh1_tri, num_sample_points_overlap)
-
-        if len(sampled_points) == 0:
-            print("    Overlap Check (Trimesh): Failed to sample points from mesh1. Relying on AABB.")
-            return True, overlap_ratio_min
-
-        mesh2_tri = trimesh.Trimesh(vertices=np.asarray(mesh2_o3d.vertices),
-                                    faces=np.asarray(mesh2_o3d.triangles))
-        if not mesh2_tri.is_watertight and len(mesh2_tri.faces) > 0:
-            mesh2_tri.fill_holes()
-
-        if len(mesh2_tri.faces) == 0:
-            print("    Overlap Check (Trimesh): mesh2 has no faces for proximity. Relying on AABB.")
-            return True, overlap_ratio_min
-
-        proximity_query_mesh2 = trimesh.proximity.ProximityQuery(mesh2_tri)
-        signed_distances = proximity_query_mesh2.signed_distance(sampled_points)
-
-        penetration_threshold = - (voxel_size_ref * penetration_depth_factor)
-        num_penetrating_points = np.sum(signed_distances < penetration_threshold)
-
-        ratio_penetrating = num_penetrating_points / len(sampled_points) if len(sampled_points) > 0 else 0
-
-        if ratio_penetrating > penetration_allowance_ratio:
-            if viz_collector is not None:
-                viz_collector.append({
-                    'step': 'overlap_check_failed_points', 'type': 'event',
-                    'mesh1_name': mesh1_name,
-                    'mesh2_name': mesh2_name,
-                    'penetration_ratio': ratio_penetrating,
-                })
-            return False, max(overlap_ratio_min, ratio_penetrating)
-
-    except Exception as e:
-        print(f"    Error during Trimesh-based overlap check: {e}. Relying on AABB check result.")
-        if viz_collector is not None:
-            viz_collector.append({'step': 'overlap_check_trimesh_error', 'type': 'event',
-                                   'mesh1_name': mesh1_name, 'mesh2_name': mesh2_name,
-                                   'error_message': str(e)})
-        return True, overlap_ratio_min
-    return True, overlap_ratio_min
 
 
 class Assembler:
@@ -281,29 +175,11 @@ class Assembler:
                         candidate_mesh_transformed_o3d.transform(current_iteration_potential_world_transform)
                         candidate_name = self.fragments_data[current_iteration_idx_to_place]['name']
 
-                        # DEBUG VISUALIZATION: Show candidate placement if enabled
-                        if self.params.get('debug_assembly', False):
-                            print(f"[DEBUG] Visualizing candidate placement for {candidate_name}")
-                            o3d.visualization.draw_geometries(
-                                [candidate_mesh_transformed_o3d] + [m for m, _ in current_assembly_components],
-                                window_name=f"Candidate: {candidate_name} (Red), Placed: Gray"
-                            )
-
-                        # TOGGLE OVERLAP CHECK
-                        if self.params.get('disable_overlap_check', False):
-                            overlap_ok = True
-                            max_overlap_ratio = 0.0
-                        else:
-                            overlap_ok = True
-                            max_overlap_ratio = 0.0
-                            for placed_mesh_o3d, placed_name in current_assembly_components:
-                                ok, overlap_ratio = check_overlap(candidate_mesh_transformed_o3d, candidate_name,
-                                                                  placed_mesh_o3d, placed_name,
-                                                                  self.params, viz_collector=self.visualization_log)
-                                if not ok:
-                                    overlap_ok = False
-                                    break
-                                max_overlap_ratio = max(max_overlap_ratio, overlap_ratio)
+                        # No penetration check during assembly - accept all candidates
+                        # Penetration filtering will be done in final check
+                        overlap_ok = True
+                        max_overlap_ratio = 0.0
+                        overlap_ratio = 0.0
 
                         if overlap_ok: # This candidate is good and has the best score so far
                             best_candidate_match_info = match_info
@@ -390,7 +266,6 @@ class Assembler:
                 mesh.paint_uniform_color(color)
                 final_meshes_to_combine_o3d.append(mesh)
                 final_transforms_for_combine.append(self.fragment_transforms[i])
-                fragment_colors.append(color)
         
         if not final_meshes_to_combine_o3d:
             print("Error: No meshes were placed in the assembly.")
@@ -401,66 +276,24 @@ class Assembler:
             print("\n[Pose Graph Optimization] Refining fragment poses globally...")
             self.optimize_with_pose_graph(min_confidence=0.0)
 
-        # --- VISUALIZATION: After Pose Graph Optimization ---
-        print("[Visualization] Showing output after pose graph optimization (before snapping)...")
-        pose_graph_meshes = []
-        for mesh, transform in zip(final_meshes_to_combine_o3d, final_transforms_for_combine):
-            mesh_pg = copy.deepcopy(mesh)
-            mesh_pg.transform(transform)
-            pose_graph_meshes.append(mesh_pg)
-        o3d.visualization.draw_geometries(
-            pose_graph_meshes,
-            window_name="Final Composite Assembly: After Pose Graph Optimization"
-        )
+        # --- FINAL ASSEMBLY ---
+        # Since penetration tests are now done during pairwise matching,
+        # we can directly combine all placed fragments
+        print("\n[Final Assembly] Combining all placed fragments...")
+        final_meshes_to_combine_o3d = []
+        final_transforms_for_combine = []
+        placed_indices = [i for i, placed in enumerate(self.is_fragment_placed) if placed]
 
-        # --- POST-PROCESSING SNAPPING STEP ---
-        print("[Post-Processing] Snapping adjacent fragments together...")
-        SNAP_SCORE_THRESHOLD = 0.7
-        snapped_transforms = list(final_transforms_for_combine)
-        # For each high-scoring match, snap the source to the target
-        for match in self.pairwise_matches:
-            if match['score'] < SNAP_SCORE_THRESHOLD:
-                continue
-            s_idx = match['source_idx']
-            t_idx = match['target_idx']
-            # Only snap if both fragments are placed
-            if s_idx >= len(final_meshes_to_combine_o3d) or t_idx >= len(final_meshes_to_combine_o3d):
-                continue
-            source_mesh = copy.deepcopy(final_meshes_to_combine_o3d[s_idx])
-            target_mesh = copy.deepcopy(final_meshes_to_combine_o3d[t_idx])
-            source_mesh.transform(snapped_transforms[s_idx])
-            target_mesh.transform(snapped_transforms[t_idx])
-            # Find closest points between source and target
-            src_points = np.asarray(source_mesh.vertices)
-            tgt_points = np.asarray(target_mesh.vertices)
-            from scipy.spatial import cKDTree
-            tree = cKDTree(tgt_points)
-            dists, idxs = tree.query(src_points)
-            min_dist = np.min(dists)
-            min_src_idx = np.argmin(dists)
-            min_tgt_idx = idxs[min_src_idx]
-            # Compute translation vector to bring source closer to target
-            src_pt = src_points[min_src_idx]
-            tgt_pt = tgt_points[min_tgt_idx]
-            vec = tgt_pt - src_pt
-            # Move source fragment by this vector (minus a small epsilon to avoid overlap)
-            epsilon = 1e-4
-            snap_vec = vec - epsilon * (vec / (np.linalg.norm(vec) + 1e-8))
-            snapped_transforms[s_idx][:3, 3] += snap_vec
-        # Apply snapped transforms to meshes
-        snapped_meshes = []
-        for i, mesh in enumerate(final_meshes_to_combine_o3d):
-            mesh_snapped = copy.deepcopy(mesh)
-            mesh_snapped.transform(snapped_transforms[i])
-            snapped_meshes.append(mesh_snapped)
-        print("[Post-Processing] Snapping complete. Visualizing snapped fragments...")
-        o3d.visualization.draw_geometries(
-            snapped_meshes,
-            window_name="Final Composite Assembly: Snapped Fragments"
-        )
+        for i in placed_indices:
+            final_meshes_to_combine_o3d.append(self.original_meshes[i])
+            final_transforms_for_combine.append(self.fragment_transforms[i])
+            print(f"  ✓ {self.fragments_data[i]['name']} included in final assembly")
 
-        final_mesh = combine_meshes(snapped_meshes, [np.eye(4)] * len(snapped_meshes))
+        if not final_meshes_to_combine_o3d:
+            print("Error: No fragments were placed during assembly. Assembly failed.")
+            return None
 
+        print(f"Final assembly contains {len(final_meshes_to_combine_o3d)} fragments.")
         # Save the final mesh to data/output_assembly
         import os
         output_dir = os.path.join("data", "output_assembly")
@@ -469,7 +302,7 @@ class Assembler:
         save_mesh(final_mesh, output_path)
         print(f"Final assembled model saved to: {output_path}")
 
-        return final_mesh
+        return combine_meshes(final_meshes_to_combine_o3d, final_transforms_for_combine)
 
 # In src/assembly.py, at the end of the file:
 
@@ -485,11 +318,8 @@ if __name__ == '__main__':
     # Ensure these match the scale and expectations of your test fragments.
     test_params = {
         "voxel_downsample_size": 0.1, # Adjusted for potentially simpler test meshes
-        "max_assembly_overlap_factor_aabb": 0.9,
-        "overlap_check_sample_points": 100,
-        "overlap_penetration_allowance_ratio": 0.20, # More lenient for simple test
-        "overlap_penetration_depth_factor": 0.3,
-        # Add any other params directly used by Assembler or check_overlap if not defaulted
+        "use_boolean_intersection_test": True,
+        "boolean_penetration_threshold": 0.1  # Maximum allowed penetration ratio (10%)
     }
     print(f"Using test parameters: {test_params}")
 

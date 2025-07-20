@@ -27,3 +27,5 @@ build/
 # OS specific
 .DS_Store
 Thumbs.db
+data/log_auto_test.pkl
+data/log_auto_test.pkl

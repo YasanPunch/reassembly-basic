@@ -37,10 +37,11 @@
 
     "// --- VI. Matching and Assembly ---": null,
     "min_match_score": 0.3, "// Minimum ICP fitness for a pairwise alignment to be considered valid": null,
-    "max_assembly_overlap_factor_aabb": 0.95,
-    "overlap_check_sample_points": 300,
-    "overlap_penetration_allowance_ratio": 0.25,
-    "overlap_penetration_depth_factor": 0.25,
-    "debug_assembly": true,
-    "disable_overlap_check": true
+    "// --- Boolean Penetration Test Configuration ---": null,
+    "// Penetration test performed during PAIRWISE MATCHING to reject bad matches early": null,
+    "// - use_boolean_intersection_test: Mathematically precise geometric intersection test": null,
+    "// - Set to false to disable penetration tests (not recommended)": null,
+    "use_boolean_intersection_test": true,
+    "// Boolean penetration test parameters:": null,
+    "boolean_penetration_threshold": 0.1, "// Maximum allowed penetration ratio (0.1 = 10% of smaller fragment volume)": null
 }
