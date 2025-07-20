@@ -2,8 +2,115 @@ import numpy as np
 from itertools import combinations
 from src.alignment import align_fragments_pcd
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import trimesh
+import copy
 
 print("DEBUG: matching.py top level executed") # <--- ADD THIS
+
+def boolean_intersection_penetration_test(mesh1_o3d, mesh1_name, mesh2_o3d, mesh2_name, params, viz_collector=None):
+    """Boolean intersection test for penetration detection during pairwise matching."""
+    try:
+        # Convert Open3D meshes to Trimesh
+        mesh1_tri = trimesh.Trimesh(
+            vertices=np.asarray(mesh1_o3d.vertices),
+            faces=np.asarray(mesh1_o3d.triangles)
+        )
+        mesh2_tri = trimesh.Trimesh(
+            vertices=np.asarray(mesh2_o3d.vertices),
+            faces=np.asarray(mesh2_o3d.triangles)
+        )
+        
+        # Ensure meshes are watertight
+        if not mesh1_tri.is_watertight and len(mesh1_tri.faces) > 0:
+            mesh1_tri.fill_holes()
+        if not mesh2_tri.is_watertight and len(mesh2_tri.faces) > 0:
+            mesh2_tri.fill_holes()
+            
+        # Check if meshes are valid
+        if len(mesh1_tri.faces) == 0 or len(mesh2_tri.faces) == 0:
+            return True, 0.0, None
+            
+        # Calculate volumes
+        vol1 = mesh1_tri.volume
+        vol2 = mesh2_tri.volume
+        
+        if vol1 <= 0 or vol2 <= 0:
+            return True, 0.0, None
+            
+        # Perform boolean intersection
+        try:
+            intersection_mesh = trimesh.boolean.intersection([mesh1_tri, mesh2_tri])
+            
+            if intersection_mesh is None or len(intersection_mesh.faces) == 0:
+                return True, 0.0, None
+                
+            # Calculate intersection volume and ratio
+            intersection_volume = intersection_mesh.volume
+            total_volume = min(vol1, vol2)  # Use smaller volume for ratio calculation
+            intersection_ratio = intersection_volume / total_volume if total_volume > 0 else 0.0
+            
+            # Get penetration threshold from params (default to 0.1 = 10%)
+            penetration_threshold = params.get("boolean_penetration_threshold", 0.1)
+            
+            # Check if penetration ratio is acceptable
+            if intersection_ratio <= penetration_threshold:
+                # Acceptable penetration - match is valid
+                return True, intersection_ratio, intersection_mesh
+            else:
+                # Too much penetration - reject match
+                return False, intersection_ratio, intersection_mesh
+            
+        except Exception as bool_error:
+            print(f"Boolean intersection failed: {bool_error}")
+            return None, 0.0, None
+            
+    except Exception as e:
+        print(f"Boolean test error: {e}")
+        return None, 0.0, None
+
+def test_proposed_pairwise_match(source_fragment, target_fragment, transformation, params):
+    """
+    Test if applying a transformation would cause penetration between two fragments.
+    
+    This function:
+    1. Takes the original meshes of two fragments
+    2. Applies the transformation to one fragment
+    3. Tests if the transformed fragment penetrates the other fragment
+    4. Returns True if NO penetration, False if penetration detected
+    
+    Args:
+        source_fragment: Fragment data dict with 'original_mesh' (the fragment to be transformed)
+        target_fragment: Fragment data dict with 'original_mesh' (the reference fragment)
+        transformation: 4x4 transformation matrix to apply to source_fragment
+        params: Configuration parameters
+        
+    Returns:
+        bool: True if transformation is valid (no penetration), False if penetration detected
+    """
+    # Get the original meshes in their initial positions
+    mesh1_original = target_fragment['original_mesh']      # Reference fragment (stays in place)
+    mesh2_original = source_fragment['original_mesh']      # Fragment to be transformed
+    
+    # Apply the transformation to see what the alignment would look like
+    mesh2_transformed = copy.deepcopy(mesh2_original)
+    mesh2_transformed.transform(transformation)
+    
+    # Test for penetration between the reference fragment and the transformed fragment
+    result = boolean_intersection_penetration_test(
+        mesh1_original, target_fragment['name'],
+        mesh2_transformed, source_fragment['name'],
+        params
+    )
+    
+    is_valid, ratio, intersection_mesh = result
+    
+    if is_valid:
+        if ratio > 0:
+            print(f"    ⚠️  Minor penetration detected (ratio: {ratio:.3f}), but within acceptable threshold")
+        return True  # Penetration is acceptable - this transformation is valid
+    else:
+        print(f"    ❌ Excessive penetration detected (ratio: {ratio:.3f}), exceeds threshold")
+        return False  # Too much penetration - this transformation would cause excessive overlap
 
 def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
     matches = []
@@ -25,6 +132,18 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                     source_pcd, target_pcd, source_fpfh, target_fpfh, params
                 )
             if transform_j_to_i is not None and fitness_ji >= params.get("min_match_score", 0.6):
+                # Step 3: Test if the transformation causes penetration
+                # This checks if applying the transformation would make the fragments penetrate each other
+                if params.get("use_boolean_intersection_test", False):
+                    is_valid = test_proposed_pairwise_match(
+                        frag_j_data, frag_i_data, transform_j_to_i, params
+                    )
+                    if not is_valid:
+                        print(f"  ❌ Excessive penetration detected: {frag_j_data['name']} -> {frag_i_data['name']}. Rejecting match.")
+                        continue
+                    else:
+                        print(f"  ✅ Penetration test passed: {frag_j_data['name']} -> {frag_i_data['name']} is a valid match.")
+                
                 confidence_ji = float(fitness_ji) / (rmse_ji + 1e-6)
                 matches.append({
                     'source_idx': j, 'target_idx': i,
@@ -45,6 +164,18 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                     target_pcd, source_pcd, target_fpfh, source_fpfh, params
                 )
             if transform_i_to_j is not None and fitness_ij >= params.get("min_match_score", 0.6):
+                # Step 3: Test if the transformation causes penetration
+                # This checks if applying the transformation would make the fragments penetrate each other
+                if params.get("use_boolean_intersection_test", False):
+                    is_valid = test_proposed_pairwise_match(
+                        frag_i_data, frag_j_data, transform_i_to_j, params
+                    )
+                    if not is_valid:
+                        print(f"  ❌ Excessive penetration detected: {frag_i_data['name']} -> {frag_j_data['name']}. Rejecting match.")
+                        continue
+                    else:
+                        print(f"  ✅ Penetration test passed: {frag_i_data['name']} -> {frag_j_data['name']} is a valid match.")
+                
                 confidence_ij = float(fitness_ij) / (rmse_ij + 1e-6)
                 matches.append({
                     'source_idx': i, 'target_idx': j,
