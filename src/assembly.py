@@ -294,6 +294,84 @@ class Assembler:
             return None
 
         print(f"Final assembly contains {len(final_meshes_to_combine_o3d)} fragments.")
+
+        # --- VISUALIZATION: After Pose Graph Optimization ---
+        if len(final_meshes_to_combine_o3d) > 2:
+            print("[Visualization] Showing output after pose graph optimization (before snapping)...")
+            pose_graph_meshes = []
+            for mesh, transform in zip(final_meshes_to_combine_o3d, final_transforms_for_combine):
+                mesh_pg = copy.deepcopy(mesh)
+                mesh_pg.transform(transform)
+                pose_graph_meshes.append(mesh_pg)
+            try:
+                import open3d as o3d
+                o3d.visualization.draw_geometries(
+                    pose_graph_meshes,
+                    window_name="Final Composite Assembly: After Pose Graph Optimization"
+                )
+            except Exception as e:
+                print(f"Visualization error: {e}")
+
+        # --- POST-PROCESSING SNAPPING STEP ---
+        if len(final_meshes_to_combine_o3d) > 2:
+            print("[Post-Processing] Snapping adjacent fragments together...")
+            try:
+                from scipy.spatial import cKDTree
+            except ImportError:
+                print("scipy is required for snapping step but not installed. Skipping snapping.")
+                cKDTree = None
+            SNAP_SCORE_THRESHOLD = 0.7
+            snapped_transforms = list(final_transforms_for_combine)
+            if cKDTree is not None:
+                # For each high-scoring match, snap the source to the target
+                for match in self.pairwise_matches:
+                    if match['score'] < SNAP_SCORE_THRESHOLD:
+                        continue
+                    s_idx = match['source_idx']
+                    t_idx = match['target_idx']
+                    # Only snap if both fragments are placed
+                    if s_idx >= len(final_meshes_to_combine_o3d) or t_idx >= len(final_meshes_to_combine_o3d):
+                        continue
+                    source_mesh = copy.deepcopy(final_meshes_to_combine_o3d[s_idx])
+                    target_mesh = copy.deepcopy(final_meshes_to_combine_o3d[t_idx])
+                    source_mesh.transform(snapped_transforms[s_idx])
+                    target_mesh.transform(snapped_transforms[t_idx])
+                    # Find closest points between source and target
+                    src_points = np.asarray(source_mesh.vertices)
+                    tgt_points = np.asarray(target_mesh.vertices)
+                    tree = cKDTree(tgt_points)
+                    dists, idxs = tree.query(src_points)
+                    min_dist = np.min(dists)
+                    min_src_idx = np.argmin(dists)
+                    min_tgt_idx = idxs[min_src_idx]
+                    # Compute translation vector to bring source closer to target
+                    src_pt = src_points[min_src_idx]
+                    tgt_pt = tgt_points[min_tgt_idx]
+                    vec = tgt_pt - src_pt
+                    # Move source fragment by this vector (minus a small epsilon to avoid overlap)
+                    epsilon = 1e-4
+                    snap_vec = vec - epsilon * (vec / (np.linalg.norm(vec) + 1e-8))
+                    snapped_transforms[s_idx][:3, 3] += snap_vec
+                # Apply snapped transforms to meshes
+                snapped_meshes = []
+                for i, mesh in enumerate(final_meshes_to_combine_o3d):
+                    mesh_snapped = copy.deepcopy(mesh)
+                    mesh_snapped.transform(snapped_transforms[i])
+                    snapped_meshes.append(mesh_snapped)
+                print("[Post-Processing] Snapping complete. Visualizing snapped fragments...")
+                try:
+                    o3d.visualization.draw_geometries(
+                        snapped_meshes,
+                        window_name="Final Composite Assembly: Snapped Fragments"
+                    )
+                except Exception as e:
+                    print(f"Visualization error: {e}")
+                final_mesh = combine_meshes(snapped_meshes, [np.eye(4)] * len(snapped_meshes))
+            else:
+                final_mesh = combine_meshes(final_meshes_to_combine_o3d, final_transforms_for_combine)
+        else:
+            final_mesh = combine_meshes(final_meshes_to_combine_o3d, final_transforms_for_combine)
+
         # Save the final mesh to data/output_assembly
         import os
         output_dir = os.path.join("data", "output_assembly")
@@ -302,7 +380,7 @@ class Assembler:
         save_mesh(final_mesh, output_path)
         print(f"Final assembled model saved to: {output_path}")
 
-        return combine_meshes(final_meshes_to_combine_o3d, final_transforms_for_combine)
+        return final_mesh
 
 # In src/assembly.py, at the end of the file:
 
