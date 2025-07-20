@@ -1,9 +1,6 @@
 import open3d as o3d
 import open3d.visualization.gui as gui  # type: ignore
 import open3d.visualization.rendering as rendering
-from processing.segmentation import Segmentation
-from processing.boundary_curves import BoundaryCurves
-
 
 class ProcessingPanel:
     def __init__(self, app):
