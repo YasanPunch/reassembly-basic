@@ -1,0 +1,9 @@
+{
+  "segmentation": [
+    {
+      "name": "Voxel_factor",
+      "type": "number",
+      "default": 4
+    }
+  ]
+}

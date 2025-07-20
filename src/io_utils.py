@@ -43,6 +43,13 @@ def load_fragment(file_path, file_type=None):
         o3d_mesh.compute_vertex_normals()
         o3d_mesh.compute_triangle_normals()
 
+        # Debug: Print watertightness and volume
+        try:
+            mesh_debug = trimesh.Trimesh(vertices=mesh_trimesh.vertices, faces=mesh_trimesh.faces)
+            print(f"[DEBUG] {file_path}: watertight={{}} volume={{:.6f}}".format(mesh_debug.is_watertight, mesh_debug.volume))
+        except Exception as e:
+            print(f"[DEBUG] {file_path}: Could not compute watertightness/volume: {e}")
+
         print(f"Successfully loaded: {file_path}")
         return o3d_mesh
     except Exception as e:
