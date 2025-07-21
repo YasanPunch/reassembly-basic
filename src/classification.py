@@ -377,6 +377,39 @@ def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segme
             region_vertices_set,
             f"{window_name} - Region {i+1}"
         )
+        
+        # Detect and analyze curvature patches
+        print(f"\n--- Analyzing Curvature Patches for Region {i+1} ---")
+        patch_info = detect_curvature_patches(
+            viz_mesh, 
+            full_mesh_bending_energies, 
+            region_vertices_set
+        )
+        
+        # Print patch statistics
+        print(f"Patch Analysis Results:")
+        print(f"  High curvature threshold: {patch_info['high_curvature_threshold']:.6f}")
+        print(f"  Number of patches: {patch_info['num_patches']}")
+        print(f"  Total high curvature vertices: {patch_info['total_high_curvature_vertices']}")
+        if patch_info['num_patches'] > 0:
+            # print(f"  Patch sizes: {patch_info['patch_sizes']}")
+            print(f"  Average patch size: {patch_info['avg_patch_size']:.1f} vertices")
+            print(f"  Largest patch: {patch_info['max_patch_size']} vertices")
+            print(f"  Smallest patch: {patch_info['min_patch_size']} vertices")
+        
+        # Store patch information in region results
+        region_result['patch_info'] = patch_info
+        
+        # Visualize patches if any exist
+        if patch_info['num_patches'] > 0:
+            print(f"\nVisualizing patches for Region {i+1}...")
+            visualize_curvature_patches(
+                viz_mesh,
+                full_mesh_bending_energies,
+                region_vertices_set,
+                patch_info,
+                f"{window_name} - Patches - Region {i+1}"
+            )
 
 
 def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_vertices_set, window_name="Bending Energy Visualization"):
@@ -439,6 +472,238 @@ def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_ve
         print("No bending energy data for this region")
     print("Color coding: Red = High curvature, Blue = Low curvature, Grey = Other regions")
     print("Note: Using 95th percentile normalization to handle extreme outliers")
+    
+    o3d.visualization.draw_geometries(
+        [mesh, coordinate_frame],
+        window_name=window_name,
+        width=1200,
+        height=800,
+        point_show_normal=False,
+        mesh_show_back_face=True
+    )
+
+
+def detect_curvature_patches(mesh, bending_energies, region_vertices_set, percentile_threshold=95):
+    """
+    Detect and count patches of high curvature within a region.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        bending_energies (numpy.ndarray): Bending energy values for each vertex
+        region_vertices_set (set): Set of vertex indices that belong to the current region
+        percentile_threshold (float): Percentile threshold for high curvature (default: 95)
+    
+    Returns:
+        dict: Dictionary containing patch information
+    """
+    # Get non-zero energies for the region
+    region_energies = [bending_energies[i] for i in region_vertices_set if bending_energies[i] > 0]
+    
+    if len(region_energies) == 0:
+        return {
+            'num_patches': 0,
+            'patches': [],
+            'high_curvature_threshold': 0,
+            'high_curvature_vertices': set()
+        }
+    
+    # Use the same normalization as the visualization function
+    # This ensures consistency between visualization and patch detection
+    non_zero_energies = [e for e in region_energies if e > 0]
+    
+    if len(non_zero_energies) > 0:
+        # Use 95th percentile as the upper bound (same as visualization)
+        percentile_95 = np.percentile(non_zero_energies, 95)
+        upper_bound = min(percentile_95, np.max(non_zero_energies))
+        
+        # Normalize energies the same way as visualization
+        normalized_energies = np.clip(np.array(region_energies) / upper_bound, 0, 1)
+        
+        # Find vertices that would appear red in visualization
+        # Red vertices have normalized_energy > 0.5 (more red than blue)
+        red_threshold = 0.5
+        high_curvature_vertices = set()
+        
+        for i, vertex_idx in enumerate(region_vertices_set):
+            if bending_energies[vertex_idx] > 0:
+                # Find the corresponding normalized energy
+                energy_idx = region_energies.index(bending_energies[vertex_idx])
+                if energy_idx < len(normalized_energies):
+                    normalized_energy = normalized_energies[energy_idx]
+                    if normalized_energy > red_threshold:
+                        high_curvature_vertices.add(vertex_idx)
+    else:
+        high_curvature_vertices = set()
+        upper_bound = 0
+    
+    if len(high_curvature_vertices) == 0:
+        return {
+            'num_patches': 0,
+            'patches': [],
+            'high_curvature_threshold': upper_bound,
+            'high_curvature_vertices': high_curvature_vertices
+        }
+    
+    # Build adjacency graph for the mesh
+    vertices = np.asarray(mesh.vertices)
+    faces = np.asarray(mesh.triangles)
+    
+    # Create vertex adjacency dictionary
+    vertex_adjacency = {}
+    for face in faces:
+        for i in range(3):
+            v1, v2, v3 = face[i], face[(i+1)%3], face[(i+2)%3]
+            if v1 not in vertex_adjacency:
+                vertex_adjacency[v1] = set()
+            if v2 not in vertex_adjacency:
+                vertex_adjacency[v2] = set()
+            vertex_adjacency[v1].add(v2)
+            vertex_adjacency[v2].add(v1)
+    
+    # Find connected components (patches) among high curvature vertices
+    patches = []
+    visited = set()
+    
+    for start_vertex in high_curvature_vertices:
+        if start_vertex in visited:
+            continue
+        
+        # BFS to find connected component
+        patch = set()
+        queue = [start_vertex]
+        visited.add(start_vertex)
+        
+        while queue:
+            current_vertex = queue.pop(0)
+            patch.add(current_vertex)
+            
+            # Check neighbors
+            if current_vertex in vertex_adjacency:
+                for neighbor in vertex_adjacency[current_vertex]:
+                    if (neighbor in high_curvature_vertices and 
+                        neighbor not in visited):
+                        visited.add(neighbor)
+                        queue.append(neighbor)
+        
+        if len(patch) > 0:
+            patches.append(patch)
+    
+    # Calculate patch statistics
+    patch_sizes = [len(patch) for patch in patches]
+    
+    return {
+        'num_patches': len(patches),
+        'patches': patches,
+        'patch_sizes': patch_sizes,
+        'high_curvature_threshold': upper_bound,
+        'high_curvature_vertices': high_curvature_vertices,
+        'total_high_curvature_vertices': len(high_curvature_vertices),
+        'avg_patch_size': np.mean(patch_sizes) if patch_sizes else 0,
+        'max_patch_size': np.max(patch_sizes) if patch_sizes else 0,
+        'min_patch_size': np.min(patch_sizes) if patch_sizes else 0,
+        'red_threshold_used': 0.5
+    }
+
+
+def visualize_curvature_patches(mesh, bending_energies, region_vertices_set, patch_info, window_name="Curvature Patches"):
+    """
+    Visualize curvature patches with different colors for each patch.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        bending_energies (numpy.ndarray): Bending energy values for each vertex
+        region_vertices_set (set): Set of vertex indices that belong to the current region
+        patch_info (dict): Patch information from detect_curvature_patches
+        window_name (str): Name of the visualization window
+    """
+    # Use percentile-based normalization to handle extreme outliers (only for non-zero values)
+    non_zero_energies = bending_energies[bending_energies > 0]
+    
+    if len(non_zero_energies) > 0:
+        percentile_95 = np.percentile(non_zero_energies, 95)
+        
+        # Create a more robust normalization that handles outliers
+        if np.max(non_zero_energies) > np.min(non_zero_energies):
+            # Use 95th percentile as the upper bound for better visualization
+            upper_bound = min(percentile_95, np.max(non_zero_energies))
+            normalized_energies = np.clip(bending_energies / upper_bound, 0, 1)
+        else:
+            normalized_energies = np.zeros_like(bending_energies)
+    else:
+        normalized_energies = np.zeros_like(bending_energies)
+        percentile_95 = 0
+    
+    # Create color map
+    colors = np.zeros((len(normalized_energies), 3))
+    
+    # Generate distinct colors for patches
+    num_patches = patch_info['num_patches']
+    if num_patches > 0:
+        # Use a color palette for patches
+        patch_colors = []
+        for i in range(num_patches):
+            # Generate distinct colors using HSV
+            hue = i / num_patches
+            saturation = 0.8
+            value = 0.9
+            
+            # Convert HSV to RGB
+            h = hue * 6
+            c = value * saturation
+            x = c * (1 - abs(h % 2 - 1))
+            m = value - c
+            
+            if h < 1:
+                r, g, b = c, x, 0
+            elif h < 2:
+                r, g, b = x, c, 0
+            elif h < 3:
+                r, g, b = 0, c, x
+            elif h < 4:
+                r, g, b = 0, x, c
+            elif h < 5:
+                r, g, b = x, 0, c
+            else:
+                r, g, b = c, 0, x
+            
+            patch_colors.append([r + m, g + m, b + m])
+    
+    # Apply colors
+    for i, (energy, normalized_energy) in enumerate(zip(bending_energies, normalized_energies)):
+        if i in region_vertices_set and energy > 0:
+            # Check if this vertex belongs to a patch
+            vertex_in_patch = False
+            for patch_idx, patch in enumerate(patch_info['patches']):
+                if i in patch:
+                    colors[i] = patch_colors[patch_idx]
+                    vertex_in_patch = True
+                    break
+            
+            if not vertex_in_patch:
+                # Region vertex but not in a patch: use standard blue-red coloring
+                colors[i, 0] = normalized_energy  # Red channel (high energy)
+                colors[i, 2] = 1.0 - normalized_energy  # Blue channel (low energy)
+        else:
+            # Non-region vertex: grey
+            colors[i, :] = 0.5  # Grey color
+    
+    # Apply colors to mesh
+    mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
+    
+    # Create coordinate frame
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+    
+    # Visualize
+    print(f"\nVisualizing curvature patches...")
+    print(f"High curvature threshold: {patch_info['high_curvature_threshold']:.6f}")
+    print(f"Number of patches: {patch_info['num_patches']}")
+    print(f"Total high curvature vertices: {patch_info['total_high_curvature_vertices']}")
+    if patch_info['num_patches'] > 0:
+        # print(f"Patch sizes: {patch_info['patch_sizes']}")
+        print(f"Average patch size: {patch_info['avg_patch_size']:.1f}")
+        print(f"Largest patch: {patch_info['max_patch_size']} vertices")
+        print(f"Smallest patch: {patch_info['min_patch_size']} vertices")
+    print("Color coding: Different colors = Different patches, Blue-Red = Standard curvature, Grey = Other regions")
     
     o3d.visualization.draw_geometries(
         [mesh, coordinate_frame],
