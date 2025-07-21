@@ -321,7 +321,7 @@ class Assembler:
                 print("scipy is required for snapping step but not installed. Skipping snapping.")
                 cKDTree = None
             SNAP_SCORE_THRESHOLD = 0.7
-            snapped_transforms = list(final_transforms_for_combine)
+            snapped_transforms = [arr.copy() for arr in final_transforms_for_combine]
             if cKDTree is not None:
                 # For each high-scoring match, snap the source to the target
                 for match in self.pairwise_matches:
