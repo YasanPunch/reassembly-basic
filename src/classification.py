@@ -4,158 +4,179 @@ import open3d as o3d
 import trimesh
 from pathlib import Path
 import argparse
+from sklearn.neighbors import NearestNeighbors
+from utils.test_utils import load_3d_models_from_folder, visualize_models
 
 
-def load_mesh_with_open3d(file_path):
-    """Load a mesh using Open3D."""
-    try:
-        # Try to load as mesh first
-        mesh = o3d.io.read_triangle_mesh(str(file_path))
-        if not mesh.has_vertices():
-            # If no vertices, try as point cloud
-            mesh = o3d.io.read_point_cloud(str(file_path))
-        return mesh
-    except Exception as e:
-        print(f"Open3D failed to load {file_path}: {e}")
-        return None
-
-
-def load_mesh_with_trimesh(file_path):
-    """Load a mesh using Trimesh and convert to Open3D format."""
-    try:
-        # Load with trimesh
-        mesh = trimesh.load(str(file_path))
-        
-        if isinstance(mesh, trimesh.Trimesh):
-            # Convert trimesh mesh to open3d mesh
-            vertices = np.array(mesh.vertices)
-            faces = np.array(mesh.faces)
-            
-            o3d_mesh = o3d.geometry.TriangleMesh()
-            o3d_mesh.vertices = o3d.utility.Vector3dVector(vertices)
-            o3d_mesh.triangles = o3d.utility.Vector3iVector(faces)
-            
-            # Add normals if available
-            if hasattr(mesh, 'face_normals') and mesh.face_normals is not None:
-                o3d_mesh.triangle_normals = o3d.utility.Vector3dVector(mesh.face_normals)
-            
-            return o3d_mesh
-            
-        elif isinstance(mesh, trimesh.PointCloud):
-            # Convert point cloud
-            points = np.array(mesh.points)
-            o3d_pc = o3d.geometry.PointCloud()
-            o3d_pc.points = o3d.utility.Vector3dVector(points)
-            
-            # Add colors if available
-            if hasattr(mesh, 'colors') and mesh.colors is not None:
-                o3d_pc.colors = o3d.utility.Vector3dVector(mesh.colors)
-                
-            return o3d_pc
-            
-    except Exception as e:
-        print(f"Trimesh failed to load {file_path}: {e}")
-        return None
-
-
-def load_3d_models_from_folder(folder_path, use_trimesh_fallback=True):
+def calculate_local_bending_energy(mesh, k=10):
     """
-    Load all 3D models from a folder.
+    Calculate the Local Bending Energy for each vertex in a mesh.
+    
+    The Local Bending Energy e_k(p) is defined as:
+    e_k(p) = (1/k) * sum_{i=1}^k [||n_p - n_qi||^2 / ||p - qi||^2]
+    
+    where:
+    - p is the vertex point
+    - qi are the k-nearest neighbors of p
+    - n_p is the normal at point p
+    - n_qi is the normal at neighbor qi
+    - ||n_p - n_qi||^2 is the squared distance between normals
+    - ||p - qi||^2 is the squared distance between points
     
     Args:
-        folder_path (str): Path to the folder containing 3D models
-        use_trimesh_fallback (bool): Whether to use trimesh as fallback if Open3D fails
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        k (int): Number of nearest neighbors to consider (default: 10)
     
     Returns:
-        list: List of loaded Open3D geometries
+        numpy.ndarray: Array of bending energy values for each vertex
     """
-    folder_path = Path(folder_path)
-    geometries = []
+    # Ensure mesh has vertices and normals
+    if not mesh.has_vertices():
+        raise ValueError("Mesh must have vertices")
     
-    # Supported file extensions
-    supported_extensions = {'.obj', '.ply', '.stl', '.off', '.gltf', '.glb', '.fbx', '.3ds', '.dae'}
+    # Get vertices and normals
+    vertices = np.asarray(mesh.vertices)
+    normals = np.asarray(mesh.vertex_normals)
     
-    if not folder_path.exists():
-        print(f"Folder {folder_path} does not exist!")
-        return geometries
+    # If normals are not computed, compute them
+    if len(normals) == 0 or np.all(normals == 0):
+        mesh.compute_vertex_normals()
+        normals = np.asarray(mesh.vertex_normals)
     
-    # Find all 3D model files
-    model_files = []
-    for ext in supported_extensions:
-        model_files.extend(folder_path.glob(f"*{ext}"))
-        model_files.extend(folder_path.glob(f"*{ext.upper()}"))
+    n_vertices = len(vertices)
+    bending_energies = np.zeros(n_vertices)
     
-    if not model_files:
-        print(f"No 3D model files found in {folder_path}")
-        return geometries
+    # Find k-nearest neighbors for all vertices
+    # We use k+1 because the first neighbor will be the point itself
+    nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree').fit(vertices)
+    distances, indices = nbrs.kneighbors(vertices)
     
-    print(f"Found {len(model_files)} 3D model files:")
-    for file_path in model_files:
-        print(f"  - {file_path.name}")
-    
-    # Load each model
-    for file_path in model_files:
-        print(f"\nLoading {file_path.name}...")
+    # Calculate bending energy for each vertex
+    for i in range(n_vertices):
+        # Get the current point and its normal
+        p = vertices[i]
+        n_p = normals[i]
         
-        # Try Open3D first
-        geometry = load_mesh_with_open3d(file_path)
+        # Get k-nearest neighbors (excluding the point itself)
+        neighbor_indices = indices[i][1:]  # Skip first neighbor (point itself)
+        neighbor_distances = distances[i][1:]  # Skip first distance (0)
         
-        # If Open3D fails and trimesh fallback is enabled, try trimesh
-        if geometry is None and use_trimesh_fallback:
-            print(f"  Trying trimesh fallback for {file_path.name}...")
-            geometry = load_mesh_with_trimesh(file_path)
+        # Calculate bending energy for this vertex
+        energy_sum = 0.0
         
-        if geometry is not None:
-            # Add some visual properties
-            if isinstance(geometry, o3d.geometry.TriangleMesh):
-                # Compute normals for better visualization
-                geometry.compute_vertex_normals()
-                geometry.compute_triangle_normals()
-                
-                # Add a random color to distinguish different meshes
-                color = np.random.uniform(0.3, 1.0, 3)
-                geometry.paint_uniform_color(color)
+        for j, neighbor_idx in enumerate(neighbor_indices):
+            # Get neighbor point and normal
+            q_i = vertices[neighbor_idx]
+            n_qi = normals[neighbor_idx]
             
-            geometries.append(geometry)
-            print(f"  Successfully loaded {file_path.name}")
-        else:
-            print(f"  Failed to load {file_path.name}")
+            # Calculate squared distance between normals
+            normal_diff = n_p - n_qi
+            normal_distance_squared = np.dot(normal_diff, normal_diff)
+            
+            # Calculate squared distance between points
+            point_diff = p - q_i
+            point_distance_squared = np.dot(point_diff, point_diff)
+            
+            # Avoid division by zero
+            if point_distance_squared > 1e-10:
+                energy_sum += normal_distance_squared / point_distance_squared
+            else:
+                # If points are very close, use a small epsilon
+                energy_sum += normal_distance_squared / 1e-10
+        
+        # Average over k neighbors
+        bending_energies[i] = energy_sum / k
     
-    return geometries
+    return bending_energies
 
 
-def visualize_models(geometries, window_name="3D Models Viewer"):
+def visualize_bending_energy(mesh, bending_energies, window_name="Bending Energy Visualization"):
     """
-    Visualize the loaded 3D models using Open3D's draw_geometries.
+    Visualize the bending energy values on the mesh using color coding.
     
     Args:
-        geometries (list): List of Open3D geometries to visualize
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        bending_energies (numpy.ndarray): Bending energy values for each vertex
         window_name (str): Name of the visualization window
     """
-    if not geometries:
-        print("No geometries to visualize!")
-        return
+    # Use percentile-based normalization to handle extreme outliers
+    percentile_95 = np.percentile(bending_energies, 95)
+    percentile_99 = np.percentile(bending_energies, 99)
     
-    print(f"\nVisualizing {len(geometries)} models...")
-    print("Controls:")
-    print("  - Mouse: Rotate, zoom, pan")
-    print("  - Shift + Mouse: Pan")
-    print("  - Ctrl + Mouse: Zoom")
-    print("  - Press 'Q' to exit")
+    # Create a more robust normalization that handles outliers
+    if np.max(bending_energies) > np.min(bending_energies):
+        # Use 95th percentile as the upper bound for better visualization
+        upper_bound = min(percentile_95, np.max(bending_energies))
+        normalized_energies = np.clip(bending_energies / upper_bound, 0, 1)
+    else:
+        normalized_energies = np.zeros_like(bending_energies)
     
-    # Create a coordinate frame for reference
+    # Create color map (red for high energy, blue for low energy)
+    colors = np.zeros((len(normalized_energies), 3))
+    colors[:, 0] = normalized_energies  # Red channel (high energy)
+    colors[:, 2] = 1.0 - normalized_energies  # Blue channel (low energy)
+    
+    # Apply colors to mesh
+    mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
+    
+    # Create coordinate frame
     coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
-    geometries.append(coordinate_frame)
     
     # Visualize
+    print(f"\nVisualizing bending energy...")
+    print(f"Min bending energy: {np.min(bending_energies):.6f}")
+    print(f"Max bending energy: {np.max(bending_energies):.6f}")
+    print(f"Mean bending energy: {np.mean(bending_energies):.6f}")
+    print(f"95th percentile: {percentile_95:.6f}")
+    print(f"99th percentile: {percentile_99:.6f}")
+    print(f"Upper bound used for normalization: {min(percentile_95, np.max(bending_energies)):.6f}")
+    print("Color coding: Red = High curvature, Blue = Low curvature")
+    print("Note: Using 95th percentile normalization to handle extreme outliers")
+    
     o3d.visualization.draw_geometries(
-        geometries,
+        [mesh, coordinate_frame],
         window_name=window_name,
         width=1200,
         height=800,
         point_show_normal=False,
         mesh_show_back_face=True
     )
+
+
+def analyze_mesh_curvature(mesh, k=10):
+    """
+    Analyze mesh curvature using Local Bending Energy.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        k (int): Number of nearest neighbors for bending energy calculation
+    
+    Returns:
+        dict: Dictionary containing curvature analysis results
+    """
+    print(f"Analyzing mesh curvature with k={k} nearest neighbors...")
+    
+    # Calculate bending energy
+    bending_energies = calculate_local_bending_energy(mesh, k)
+    
+    # Compute statistics
+    stats = {
+        'min_energy': np.min(bending_energies),
+        'max_energy': np.max(bending_energies),
+        'mean_energy': np.mean(bending_energies),
+        'std_energy': np.std(bending_energies),
+        'median_energy': np.median(bending_energies),
+        'bending_energies': bending_energies
+    }
+    
+    print(f"Curvature Analysis Results:")
+    print(f"  Min bending energy: {stats['min_energy']:.6f}")
+    print(f"  Max bending energy: {stats['max_energy']:.6f}")
+    print(f"  Mean bending energy: {stats['mean_energy']:.6f}")
+    print(f"  Std bending energy: {stats['std_energy']:.6f}")
+    print(f"  Median bending energy: {stats['median_energy']:.6f}")
+    
+    return stats
 
 
 def main():
@@ -177,6 +198,22 @@ def main():
         default="3D Models Viewer",
         help="Name of the visualization window"
     )
+    parser.add_argument(
+        "--all-together", 
+        action="store_true",
+        help="Visualize all models together instead of one by one"
+    )
+    parser.add_argument(
+        "--no-curvature-analysis",
+        action="store_true",
+        help="Disable curvature analysis and use regular visualization instead"
+    )
+    parser.add_argument(
+        "--k-neighbors",
+        type=int,
+        default=50,
+        help="Number of nearest neighbors for curvature analysis (default: 10)"
+    )
     
     args = parser.parse_args()
     
@@ -192,7 +229,36 @@ def main():
     
     if geometries:
         print(f"\nSuccessfully loaded {len(geometries)} models")
-        visualize_models(geometries, args.window_name)
+        
+        if not args.no_curvature_analysis:
+            # Analyze curvature for each mesh (default behavior)
+            for i, geometry in enumerate(geometries):
+                if isinstance(geometry, o3d.geometry.TriangleMesh):
+                    print(f"\n{'='*50}")
+                    print(f"Analyzing curvature for model {i+1}/{len(geometries)}")
+                    print(f"{'='*50}")
+                    
+                    # Analyze curvature
+                    stats = analyze_mesh_curvature(geometry, args.k_neighbors)
+                    
+                    # Visualize bending energy
+                    visualize_bending_energy(
+                        geometry, 
+                        stats['bending_energies'],
+                        f"Bending Energy - Model {i+1}"
+                    )
+                    
+                    # Ask user if they want to continue to next model
+                    if i < len(geometries) - 1:
+                        response = input(f"\nPress Enter to analyze next model, or 'q' to quit: ").strip().lower()
+                        if response == 'q':
+                            print("Analysis stopped by user.")
+                            break
+                else:
+                    print(f"Model {i+1} is not a triangle mesh, skipping curvature analysis.")
+        else:
+            # Regular visualization (when --no-curvature-analysis is used)
+            visualize_models(geometries, args.window_name, visualize_one_by_one=not args.all_together)
     else:
         print("No models were loaded successfully.")
 
