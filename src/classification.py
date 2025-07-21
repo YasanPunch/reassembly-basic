@@ -379,6 +379,10 @@ def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segme
             offset_percentage=region_offset
         )
         
+        # Calculate region area and normalize patch statistics
+        region_area = calculate_region_area(viz_mesh, region_vertices_set)
+        patch_info = normalize_patch_count_by_area(patch_info, region_area)
+        
         # Get the offset region for visualization
         offset_region_set = None
         if region_offset > 0:
@@ -386,13 +390,19 @@ def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segme
         
         # Print patch statistics
         print(f"Patch Analysis Results:")
+        print(f"  Region area: {region_area:.6f} square units")
         print(f"  High curvature threshold: {patch_info['high_curvature_threshold']:.6f}")
         print(f"  Number of patches: {patch_info['num_patches']}")
+        print(f"  Normalized patch count: {patch_info['normalized_patch_count']:.6f} patches per unit area")
         print(f"  Total high curvature vertices: {patch_info['total_high_curvature_vertices']}")
+        print(f"  Normalized high curvature vertices: {patch_info['normalized_high_curvature_vertices']:.6f} per unit area")
         if patch_info['num_patches'] > 0:
             print(f"  Average patch size: {patch_info['avg_patch_size']:.1f} vertices")
+            print(f"  Normalized average patch size: {patch_info['normalized_avg_patch_size']:.6f} per unit area")
             print(f"  Largest patch: {patch_info['max_patch_size']} vertices")
+            print(f"  Normalized largest patch: {patch_info['normalized_max_patch_size']:.6f} per unit area")
             print(f"  Smallest patch: {patch_info['min_patch_size']} vertices")
+            print(f"  Normalized smallest patch: {patch_info['normalized_min_patch_size']:.6f} per unit area")
         
         # Store patch information in region results
         region_result['patch_info'] = patch_info
@@ -418,6 +428,9 @@ def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segme
                 f"{window_name} - Patches - Region {i+1}",
                 offset_region_set
             )
+    
+    # Print comparison summary across all regions
+    print_region_comparison_summary(region_results)
 
 
 def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_vertices_set, window_name="Bending Energy Visualization", offset_region_set=None):
@@ -829,6 +842,153 @@ def visualize_curvature_patches(mesh, bending_energies, region_vertices_set, pat
         point_show_normal=False,
         mesh_show_back_face=True
     )
+
+
+def calculate_region_area(mesh, region_vertices_set):
+    """
+    Calculate the surface area of a region.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        region_vertices_set (set): Set of vertex indices that belong to the current region
+    
+    Returns:
+        float: Total surface area of the region
+    """
+    vertices = np.asarray(mesh.vertices)
+    faces = np.asarray(mesh.triangles)
+    
+    # Find faces that belong to this region (faces with all vertices in the region)
+    region_faces = []
+    for face_idx, face in enumerate(faces):
+        if all(vertex_idx in region_vertices_set for vertex_idx in face):
+            region_faces.append(face_idx)
+    
+    # Calculate area of each face in the region
+    total_area = 0.0
+    for face_idx in region_faces:
+        face = faces[face_idx]
+        v1, v2, v3 = vertices[face[0]], vertices[face[1]], vertices[face[2]]
+        
+        # Calculate face area using cross product
+        edge1 = v2 - v1
+        edge2 = v3 - v1
+        cross_product = np.cross(edge1, edge2)
+        face_area = 0.5 * np.linalg.norm(cross_product)
+        total_area += face_area
+    
+    return total_area
+
+
+def normalize_patch_count_by_area(patch_info, region_area):
+    """
+    Normalize patch count and statistics by region area.
+    
+    Args:
+        patch_info (dict): Patch information from detect_curvature_patches
+        region_area (float): Surface area of the region
+    
+    Returns:
+        dict: Patch information with area-normalized metrics
+    """
+    if region_area <= 0:
+        return patch_info
+    
+    # Calculate normalized metrics
+    normalized_patch_count = patch_info['num_patches'] / region_area
+    normalized_high_curvature_vertices = patch_info['total_high_curvature_vertices'] / region_area
+    
+    # Normalize patch sizes by area
+    normalized_patch_sizes = [patch_size / region_area for patch_size in patch_info['patch_sizes']]
+    
+    # Calculate normalized statistics
+    normalized_avg_patch_size = np.mean(normalized_patch_sizes) if normalized_patch_sizes else 0
+    normalized_max_patch_size = np.max(normalized_patch_sizes) if normalized_patch_sizes else 0
+    normalized_min_patch_size = np.min(normalized_patch_sizes) if normalized_patch_sizes else 0
+    
+    # Add normalized metrics to the patch info
+    patch_info.update({
+        'region_area': region_area,
+        'normalized_patch_count': normalized_patch_count,
+        'normalized_high_curvature_vertices': normalized_high_curvature_vertices,
+        'normalized_patch_sizes': normalized_patch_sizes,
+        'normalized_avg_patch_size': normalized_avg_patch_size,
+        'normalized_max_patch_size': normalized_max_patch_size,
+        'normalized_min_patch_size': normalized_min_patch_size
+    })
+    
+    return patch_info
+
+
+def print_region_comparison_summary(region_results):
+    """
+    Print a summary comparison of normalized patch counts across all regions.
+    
+    Args:
+        region_results (list): List of region results from segmentation analysis
+    """
+    print(f"\n{'='*80}")
+    print(f"REGION COMPARISON SUMMARY")
+    print(f"{'='*80}")
+    
+    # Collect normalized metrics from all regions
+    comparison_data = []
+    for i, region_result in enumerate(region_results):
+        if 'patch_info' in region_result:
+            patch_info = region_result['patch_info']
+            comparison_data.append({
+                'region_id': i + 1,
+                'area': patch_info.get('region_area', 0),
+                'num_patches': patch_info.get('num_patches', 0),
+                'normalized_patch_count': patch_info.get('normalized_patch_count', 0),
+                'normalized_high_curvature_vertices': patch_info.get('normalized_high_curvature_vertices', 0),
+                'avg_patch_size': patch_info.get('avg_patch_size', 0),
+                'normalized_avg_patch_size': patch_info.get('normalized_avg_patch_size', 0)
+            })
+    
+    if not comparison_data:
+        print("No patch data available for comparison.")
+        return
+    
+    # Sort by normalized patch count (descending)
+    comparison_data.sort(key=lambda x: x['normalized_patch_count'], reverse=True)
+    
+    print(f"{'Region':<8} {'Area':<12} {'Patches':<10} {'Norm. Patches':<15} {'Norm. Vertices':<15} {'Avg Size':<10}")
+    print(f"{'-'*8} {'-'*12} {'-'*10} {'-'*15} {'-'*15} {'-'*10}")
+    
+    for data in comparison_data:
+        print(f"{data['region_id']:<8} {data['area']:<12.4f} {data['num_patches']:<10} "
+              f"{data['normalized_patch_count']:<15.6f} {data['normalized_high_curvature_vertices']:<15.6f} "
+              f"{data['avg_patch_size']:<10.1f}")
+    
+    # Calculate overall statistics
+    total_patches = sum(data['num_patches'] for data in comparison_data)
+    total_area = sum(data['area'] for data in comparison_data)
+    avg_normalized_patch_count = np.mean([data['normalized_patch_count'] for data in comparison_data])
+    std_normalized_patch_count = np.std([data['normalized_patch_count'] for data in comparison_data])
+    
+    print(f"\nOverall Statistics:")
+    print(f"  Total patches across all regions: {total_patches}")
+    print(f"  Total area across all regions: {total_area:.4f} square units")
+    print(f"  Average normalized patch count: {avg_normalized_patch_count:.6f} patches per unit area")
+    print(f"  Standard deviation of normalized patch count: {std_normalized_patch_count:.6f}")
+    
+    # Identify regions with highest and lowest patch density
+    if comparison_data:
+        highest_density = comparison_data[0]
+        lowest_density = comparison_data[-1]
+        
+        print(f"\nRegion with highest patch density: Region {highest_density['region_id']}")
+        print(f"  Normalized patch count: {highest_density['normalized_patch_count']:.6f} patches per unit area")
+        print(f"  Area: {highest_density['area']:.4f} square units")
+        print(f"  Total patches: {highest_density['num_patches']}")
+        
+        print(f"\nRegion with lowest patch density: Region {lowest_density['region_id']}")
+        print(f"  Normalized patch count: {lowest_density['normalized_patch_count']:.6f} patches per unit area")
+        print(f"  Area: {lowest_density['area']:.4f} square units")
+        print(f"  Total patches: {lowest_density['num_patches']}")
+    
+    print(f"{'='*80}")
 
 
 def main():
