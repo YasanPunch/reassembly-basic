@@ -31,6 +31,10 @@ class LeftPanel:
         self._model_container = gui.Vert(0.15 * em)
         self._db_tree_section.add_child(self._model_container)
 
+        # Placeholder label for when no objects are loaded
+        self._placeholder_label = gui.Label("No objects loaded")
+        self._model_container.add_child(self._placeholder_label)
+
         # Store loaded objects and their visibility states
         self._loaded_objects = []  # List of dictionaries: {path, name, visible, scene_index, collapsible, checkbox, processing_results}
         self._selected_object_index = -1
@@ -63,13 +67,12 @@ class LeftPanel:
         w = self.app.window
         em = w.theme.font_size
         import os
-        
+        # Hide placeholder when adding the first object
+        self._placeholder_label.visible = False
         # Extract filename from path
         file_name = os.path.basename(file_path)
-        
         # Create collapsible section for this object
         object_section = gui.CollapsableVert(file_name, 0.25 * em, gui.Margins(0.25 * em, 0, 0, 0))
-        
         # Create checkbox for visibility
         cb = gui.Checkbox("Show/Hide")
         cb.checked = True
@@ -77,7 +80,6 @@ class LeftPanel:
             self.toggle_object_visibility(idx)
         cb.set_on_checked(handle_click)
         object_section.add_child(cb)
-        
         # Create object entry
         object_entry = {
             'path': file_path,
@@ -93,11 +95,19 @@ class LeftPanel:
                 'multipiece_matching': None
             }
         }
-        
         # Add to container and store
         self._model_container.add_child(object_section)
         self._loaded_objects.append(object_entry)
         self._update_properties_display(object_entry)
+
+    def clear_objects(self):
+        # Show placeholder if all objects are removed
+        self._placeholder_label.visible = True
+        self._loaded_objects.clear()
+        # Optionally, remove all children except the placeholder
+        for child in list(self._model_container.get_children()):
+            if child is not self._placeholder_label:
+                self._model_container.remove_child(child)
 
     def add_processing_result(self, object_index, process_type, result_mesh):
         w = self.app.window
@@ -145,20 +155,17 @@ class LeftPanel:
         if 0 <= object_index < len(self._loaded_objects):
             obj = self._loaded_objects[object_index]
             obj['visible'] = not obj['visible']
+            
             # Update checkbox state
             if obj['checkbox']:
                 obj['checkbox'].checked = obj['visible']
-            # Update scene visibility
-            scene_index = obj['scene_index']
-            if 0 <= scene_index < len(self.app._scenes):
-                self.app._scenes[scene_index].visible = obj['visible']
-            # Update scenes_selected set for layout logic
-            if obj['visible']:
-                self.app._scenes_selected.add(scene_index)
-            else:
-                if scene_index in self.app._scenes_selected:
-                    self.app._scenes_selected.remove(scene_index)
-            self.app.window.set_needs_layout()
+            
+            # Show/hide geometry in the main scene
+            self.app._scene_widget.scene.show_geometry(obj['path'], obj['visible'])
+
+            # Update the camera to re-frame all visible objects
+            self.app._update_camera_bounds()
+            
             # Update properties if this object is selected
             if self._selected_object_index == object_index:
                 self._update_properties_display(obj)
