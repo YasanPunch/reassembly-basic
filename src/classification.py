@@ -7,6 +7,8 @@ import argparse
 from sklearn.neighbors import NearestNeighbors
 from utils.test_utils import load_3d_models_from_folder, visualize_models
 
+from segmentation import region_growing_segmentation, AdaptiveFractureDetector
+
 
 def calculate_local_bending_energy(mesh, k=10):
     """
@@ -179,12 +181,281 @@ def analyze_mesh_curvature(mesh, k=10):
     return stats
 
 
+def segment_mesh_and_analyze_curvature(mesh, k=10, segmentation_params=None):
+    """
+    Segment the mesh and analyze curvature for each region separately.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        k (int): Number of nearest neighbors for bending energy calculation
+        segmentation_params (dict): Parameters for segmentation
+    
+    Returns:
+        dict: Dictionary containing segmentation and curvature analysis results
+    """
+    print(f"Segmenting mesh and analyzing curvature for each region...")
+    
+    # Convert Open3D mesh to trimesh for segmentation
+    vertices = np.asarray(mesh.vertices)
+    faces = np.asarray(mesh.triangles)
+    tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+    
+    # Use default segmentation parameters if none provided
+    if segmentation_params is None:
+        segmentation_params = {
+            'angle_threshold': 30.0,
+            'curvature_threshold': 0.1,
+            'min_region_size': 50,
+            'max_region_size': 5000
+        }
+    
+    print(f"Segmentation parameters: {segmentation_params}")
+    
+    # Perform segmentation
+    try:
+        segments = region_growing_segmentation(tri_mesh, segmentation_params)
+        print(f"Segmentation completed: {len(segments)} regions found")
+    except Exception as e:
+        print(f"Segmentation failed: {e}")
+        print("Falling back to single region analysis...")
+        return analyze_mesh_curvature(mesh, k)
+    
+    # Analyze each region
+    region_results = []
+    all_bending_energies = []
+    
+    for i, segment_faces in enumerate(segments):
+        print(f"\n--- Analyzing Region {i+1}/{len(segments)} ---")
+        print(f"Region size: {len(segment_faces)} faces")
+        
+        # Create a submesh for this region
+        region_faces = tri_mesh.faces[segment_faces]
+        
+        # Get unique vertices used by these faces
+        unique_vertex_indices = np.unique(region_faces.flatten())
+        vertex_map = {old_idx: new_idx for new_idx, old_idx in enumerate(unique_vertex_indices)}
+        
+        # Create new vertices and remapped faces
+        region_vertices = tri_mesh.vertices[unique_vertex_indices]
+        region_faces_remapped = np.array([[vertex_map[vertex_idx] for vertex_idx in face] for face in region_faces])
+        
+        # Create trimesh object for this region
+        region_mesh = trimesh.Trimesh(vertices=region_vertices, faces=region_faces_remapped)
+        
+        # Convert back to Open3D for curvature analysis
+        region_o3d_mesh = o3d.geometry.TriangleMesh()
+        region_o3d_mesh.vertices = o3d.utility.Vector3dVector(region_mesh.vertices)
+        region_o3d_mesh.triangles = o3d.utility.Vector3iVector(region_mesh.faces)
+        region_o3d_mesh.compute_vertex_normals()
+        
+        # Analyze curvature for this region
+        region_stats = analyze_mesh_curvature(region_o3d_mesh, k)
+        
+        # Store results
+        region_result = {
+            'region_id': i,
+            'num_faces': len(segment_faces),
+            'num_vertices': len(region_mesh.vertices),
+            'stats': region_stats,
+            'segment_faces': segment_faces,
+            'region_mesh': region_o3d_mesh
+        }
+        region_results.append(region_result)
+        
+        # Collect all bending energies for overall statistics
+        all_bending_energies.extend(region_stats['bending_energies'])
+    
+    # Compute overall statistics
+    overall_stats = {
+        'num_regions': len(segments),
+        'total_vertices': len(vertices),
+        'total_faces': len(faces),
+        'overall_min_energy': np.min(all_bending_energies),
+        'overall_max_energy': np.max(all_bending_energies),
+        'overall_mean_energy': np.mean(all_bending_energies),
+        'overall_std_energy': np.std(all_bending_energies),
+        'overall_median_energy': np.median(all_bending_energies),
+        'region_results': region_results
+    }
+    
+    print(f"\n=== OVERALL STATISTICS ===")
+    print(f"Total regions: {overall_stats['num_regions']}")
+    print(f"Overall min bending energy: {overall_stats['overall_min_energy']:.6f}")
+    print(f"Overall max bending energy: {overall_stats['overall_max_energy']:.6f}")
+    print(f"Overall mean bending energy: {overall_stats['overall_mean_energy']:.6f}")
+    print(f"Overall std bending energy: {overall_stats['overall_std_energy']:.6f}")
+    print(f"Overall median bending energy: {overall_stats['overall_median_energy']:.6f}")
+    
+    return overall_stats
+
+
+def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segmented Curvature Analysis"):
+    """
+    Visualize curvature analysis for each segmented region.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Original mesh
+        segmentation_results (dict): Results from segment_mesh_and_analyze_curvature
+        window_name (str): Name of the visualization window
+    """
+    region_results = segmentation_results['region_results']
+    
+    print(f"\nVisualizing {len(region_results)} segmented regions...")
+    
+    # Get the original mesh vertices and faces
+    original_vertices = np.asarray(mesh.vertices)
+    original_faces = np.asarray(mesh.triangles)
+    
+    for i, region_result in enumerate(region_results):
+        print(f"\n--- Visualizing Region {i+1}/{len(region_results)} ---")
+        print(f"Region {i+1} statistics:")
+        print(f"  Faces: {region_result['num_faces']}")
+        print(f"  Vertices: {region_result['num_vertices']}")
+        print(f"  Min energy: {region_result['stats']['min_energy']:.6f}")
+        print(f"  Max energy: {region_result['stats']['max_energy']:.6f}")
+        print(f"  Mean energy: {region_result['stats']['mean_energy']:.6f}")
+        
+        # Create a copy of the original mesh for visualization
+        viz_mesh = o3d.geometry.TriangleMesh()
+        viz_mesh.vertices = o3d.utility.Vector3dVector(original_vertices)
+        viz_mesh.triangles = o3d.utility.Vector3iVector(original_faces)
+        viz_mesh.compute_vertex_normals()
+        
+        # Initialize all vertices to grey
+        num_vertices = len(original_vertices)
+        colors = np.full((num_vertices, 3), 0.5)  # Grey color
+        
+        # Get the segment faces for this region
+        segment_faces = region_result['segment_faces']
+        
+        # Get the region mesh vertices and their bending energies
+        region_vertices = np.asarray(region_result['region_mesh'].vertices)
+        region_bending_energies = region_result['stats']['bending_energies']
+        
+        # Create a proper mapping from region vertices to original vertices
+        region_vertex_indices = []
+        for face_idx in segment_faces:
+            face = original_faces[face_idx]
+            region_vertex_indices.extend(face)
+        region_vertex_indices = list(set(region_vertex_indices))  # Remove duplicates
+        region_vertices_set = set(region_vertex_indices)
+        
+        # Create a proper mapping from original vertex indices to region vertex indices
+        original_to_region_mapping = {}
+        
+        # For each face in the region, map its vertices
+        for face_idx in segment_faces:
+            face = original_faces[face_idx]
+            for vertex_idx in face:
+                if vertex_idx in region_vertices_set:
+                    # Get the original vertex position
+                    original_vertex_pos = original_vertices[vertex_idx]
+                    
+                    # Find the closest vertex in the region mesh
+                    distances = np.linalg.norm(region_vertices - original_vertex_pos, axis=1)
+                    closest_region_vertex_idx = np.argmin(distances)
+                    
+                    # Only use this mapping if the vertices are very close (same vertex)
+                    if distances[closest_region_vertex_idx] < 1e-6:  # Small threshold for numerical precision
+                        original_to_region_mapping[vertex_idx] = closest_region_vertex_idx
+        
+        # Create bending energy array for the full mesh (grey for non-region vertices)
+        full_mesh_bending_energies = np.zeros(num_vertices)
+        
+        # Apply region bending energies to the mapped vertices
+        for vertex_idx in region_vertices_set:
+            if vertex_idx < num_vertices and vertex_idx in original_to_region_mapping:
+                region_vertex_idx = original_to_region_mapping[vertex_idx]
+                if region_vertex_idx < len(region_bending_energies):
+                    full_mesh_bending_energies[vertex_idx] = region_bending_energies[region_vertex_idx]
+        
+        # Use the existing visualize_bending_energy function with the full mesh
+        # But we need to modify it slightly to handle the grey regions
+        visualize_bending_energy_with_grey_regions(
+            viz_mesh, 
+            full_mesh_bending_energies, 
+            region_vertices_set,
+            f"{window_name} - Region {i+1}"
+        )
+
+
+def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_vertices_set, window_name="Bending Energy Visualization"):
+    """
+    Visualize the bending energy values on the mesh using color coding, with non-region vertices in grey.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        bending_energies (numpy.ndarray): Bending energy values for each vertex (0 for non-region vertices)
+        region_vertices_set (set): Set of vertex indices that belong to the current region
+        window_name (str): Name of the visualization window
+    """
+    # Use percentile-based normalization to handle extreme outliers (only for non-zero values)
+    non_zero_energies = bending_energies[bending_energies > 0]
+    
+    if len(non_zero_energies) > 0:
+        percentile_95 = np.percentile(non_zero_energies, 95)
+        percentile_99 = np.percentile(non_zero_energies, 99)
+        
+        # Create a more robust normalization that handles outliers
+        if np.max(non_zero_energies) > np.min(non_zero_energies):
+            # Use 95th percentile as the upper bound for better visualization
+            upper_bound = min(percentile_95, np.max(non_zero_energies))
+            normalized_energies = np.clip(bending_energies / upper_bound, 0, 1)
+        else:
+            normalized_energies = np.zeros_like(bending_energies)
+    else:
+        normalized_energies = np.zeros_like(bending_energies)
+        percentile_95 = 0
+        percentile_99 = 0
+    
+    # Create color map (red for high energy, blue for low energy, grey for non-region)
+    colors = np.zeros((len(normalized_energies), 3))
+    
+    for i, (energy, normalized_energy) in enumerate(zip(bending_energies, normalized_energies)):
+        if i in region_vertices_set and energy > 0:
+            # Region vertex: color based on energy
+            colors[i, 0] = normalized_energy  # Red channel (high energy)
+            colors[i, 2] = 1.0 - normalized_energy  # Blue channel (low energy)
+        else:
+            # Non-region vertex: grey
+            colors[i, :] = 0.5  # Grey color
+    
+    # Apply colors to mesh
+    mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
+    
+    # Create coordinate frame
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+    
+    # Visualize
+    print(f"\nVisualizing bending energy...")
+    if len(non_zero_energies) > 0:
+        print(f"Min bending energy: {np.min(non_zero_energies):.6f}")
+        print(f"Max bending energy: {np.max(non_zero_energies):.6f}")
+        print(f"Mean bending energy: {np.mean(non_zero_energies):.6f}")
+        print(f"95th percentile: {percentile_95:.6f}")
+        print(f"99th percentile: {percentile_99:.6f}")
+        print(f"Upper bound used for normalization: {min(percentile_95, np.max(non_zero_energies)):.6f}")
+    else:
+        print("No bending energy data for this region")
+    print("Color coding: Red = High curvature, Blue = Low curvature, Grey = Other regions")
+    print("Note: Using 95th percentile normalization to handle extreme outliers")
+    
+    o3d.visualization.draw_geometries(
+        [mesh, coordinate_frame],
+        window_name=window_name,
+        width=1200,
+        height=800,
+        point_show_normal=False,
+        mesh_show_back_face=True
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Load and visualize 3D models from a folder")
     parser.add_argument(
         "--folder", 
         type=str, 
-        default="../data/input_fragments",
+        default="data/input_fragments",
         help="Path to folder containing 3D models (default: data/input_fragments)"
     )
     parser.add_argument(
@@ -214,6 +485,35 @@ def main():
         default=50,
         help="Number of nearest neighbors for curvature analysis (default: 10)"
     )
+    parser.add_argument(
+        "--segment-first",
+        action="store_true",
+        help="Segment the mesh before analyzing curvature for each region separately"
+    )
+    parser.add_argument(
+        "--angle-threshold",
+        type=float,
+        default=30.0,
+        help="Angle threshold for segmentation (default: 30.0 degrees)"
+    )
+    parser.add_argument(
+        "--curvature-threshold",
+        type=float,
+        default=0.1,
+        help="Curvature threshold for segmentation (default: 0.1)"
+    )
+    parser.add_argument(
+        "--min-region-size",
+        type=int,
+        default=50,
+        help="Minimum region size for segmentation (default: 50 faces)"
+    )
+    parser.add_argument(
+        "--max-region-size",
+        type=int,
+        default=5000,
+        help="Maximum region size for segmentation (default: 5000 faces)"
+    )
     
     args = parser.parse_args()
     
@@ -238,15 +538,44 @@ def main():
                     print(f"Analyzing curvature for model {i+1}/{len(geometries)}")
                     print(f"{'='*50}")
                     
-                    # Analyze curvature
-                    stats = analyze_mesh_curvature(geometry, args.k_neighbors)
-                    
-                    # Visualize bending energy
-                    visualize_bending_energy(
-                        geometry, 
-                        stats['bending_energies'],
-                        f"Bending Energy - Model {i+1}"
-                    )
+                    if args.segment_first:
+                        # Segment first, then analyze each region
+                        print("Using segmented curvature analysis...")
+                        
+                        # Prepare segmentation parameters
+                        segmentation_params = {
+                            'angle_threshold': args.angle_threshold,
+                            'curvature_threshold': args.curvature_threshold,
+                            'min_region_size': args.min_region_size,
+                            'max_region_size': args.max_region_size
+                        }
+                        
+                        # Perform segmented analysis
+                        segmentation_results = segment_mesh_and_analyze_curvature(
+                            geometry, 
+                            args.k_neighbors, 
+                            segmentation_params
+                        )
+                        
+                        # Visualize each region
+                        visualize_segmented_curvature(
+                            geometry,
+                            segmentation_results,
+                            f"Segmented Curvature - Model {i+1}"
+                        )
+                    else:
+                        # Regular single-region analysis
+                        print("Using single-region curvature analysis...")
+                        
+                        # Analyze curvature
+                        stats = analyze_mesh_curvature(geometry, args.k_neighbors)
+                        
+                        # Visualize bending energy
+                        visualize_bending_energy(
+                            geometry, 
+                            stats['bending_energies'],
+                            f"Bending Energy - Model {i+1}"
+                        )
                     
                     # Ask user if they want to continue to next model
                     if i < len(geometries) - 1:
