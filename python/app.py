@@ -116,7 +116,7 @@ class App:
 
         # Create processed scene widget
         self.load(
-            "/home/pundima/dev/reassembly/data/Tombstone/Reassembled_Tombstone.obj"
+            "C:/sem7/FYP/Reassembly/yasan-reassembly-final-approach/reassembly-basic/data/input_fragments"
         )
 
     def _on_layout(self, layout_context):
@@ -224,127 +224,160 @@ class App:
         )
 
     def _on_menu_open(self):
-        dlg = gui.FileDialog(
-            gui.FileDialog.OPEN, "Choose file to load", self.window.theme
-        )
-        dlg.add_filter(
-            ".ply .stl .fbx .obj .off .gltf .glb",
-            "Triangle mesh files (.ply, .stl, .fbx, .obj, .off, .gltf, .glb)",
-        )
-        dlg.add_filter(
-            ".xyz .xyzn .xyzrgb .ply .pcd .pts",
-            "Point cloud files (.xyz, .xyzn, .xyzrgb, .ply, .pcd, .pts)",
-        )
-        dlg.add_filter(".ply", "Polygon files (.ply)")
-        dlg.add_filter(".stl", "Stereolithography files (.stl)")
-        dlg.add_filter(".fbx", "Autodesk Filmbox files (.fbx)")
-        dlg.add_filter(".obj", "Wavefront OBJ files (.obj)")
-        dlg.add_filter(".off", "Object file format (.off)")
-        dlg.add_filter(".gltf", "OpenGL transfer files (.gltf)")
-        dlg.add_filter(".glb", "OpenGL binary transfer files (.glb)")
-        dlg.add_filter(".xyz", "ASCII point cloud files (.xyz)")
-        dlg.add_filter(".xyzn", "ASCII point cloud with normals (.xyzn)")
-        dlg.add_filter(".xyzrgb", "ASCII point cloud files with colors (.xyzrgb)")
-        dlg.add_filter(".pcd", "Point Cloud Data files (.pcd)")
-        dlg.add_filter(".pts", "3D Points files (.pts)")
-        dlg.add_filter("", "All files")
+        try:
+            dlg = gui.FileDialog(
+                gui.FileDialog.OPEN, "Choose file to load", self.window.theme
+            )
+            dlg.add_filter(
+                ".ply .stl .fbx .obj .off .gltf .glb",
+                "Triangle mesh files (.ply, .stl, .fbx, .obj, .off, .gltf, .glb)",
+            )
+            dlg.add_filter(
+                ".xyz .xyzn .xyzrgb .ply .pcd .pts",
+                "Point cloud files (.xyz, .xyzn, .xyzrgb, .ply, .pcd, .pts)",
+            )
+            dlg.add_filter(".ply", "Polygon files (.ply)")
+            dlg.add_filter(".stl", "Stereolithography files (.stl)")
+            dlg.add_filter(".fbx", "Autodesk Filmbox files (.fbx)")
+            dlg.add_filter(".obj", "Wavefront OBJ files (.obj)")
+            dlg.add_filter(".off", "Object file format (.off)")
+            dlg.add_filter(".gltf", "OpenGL transfer files (.gltf)")
+            dlg.add_filter(".glb", "OpenGL binary transfer files (.glb)")
+            dlg.add_filter(".xyz", "ASCII point cloud files (.xyz)")
+            dlg.add_filter(".xyzn", "ASCII point cloud with normals (.xyzn)")
+            dlg.add_filter(".xyzrgb", "ASCII point cloud files with colors (.xyzrgb)")
+            dlg.add_filter(".pcd", "Point Cloud Data files (.pcd)")
+            dlg.add_filter(".pts", "3D Points files (.pts)")
+            dlg.add_filter("", "All files")
 
-        # A file dialog MUST define on_cancel and on_done functions
-        dlg.set_on_cancel(self._on_file_dialog_cancel)
-        dlg.set_on_done(self._on_load_dialog_done)
-        self.window.show_dialog(dlg)
+            # A file dialog MUST define on_cancel and on_done functions
+            dlg.set_on_cancel(self._on_file_dialog_cancel)
+            dlg.set_on_done(self._on_load_dialog_done)
+            self.window.show_dialog(dlg)
+        except Exception as e:
+            print(f"Error opening file dialog: {e}")
 
     def _on_file_dialog_cancel(self):
-        self.window.close_dialog()
+        try:
+            self.window.close_dialog()
+        except Exception as e:
+            print(f"Error closing file dialog: {e}")
 
     def _on_load_dialog_done(self, filename):
         self.window.close_dialog()
-        self.load(filename)
+        try:
+            self.load(filename)
+        except Exception as e:
+            print(f"Error loading file: {e}")
 
     def _on_menu_export(self):
-        dlg = gui.FileDialog(
-            gui.FileDialog.SAVE, "Choose file to save", self.window.theme
-        )
-        dlg.add_filter(".png", "PNG files (.png)")
-        dlg.set_on_cancel(self._on_file_dialog_cancel)
-        dlg.set_on_done(self._on_export_dialog_done)
-        self.window.show_dialog(dlg)
+        try:
+            dlg = gui.FileDialog(
+                gui.FileDialog.SAVE, "Choose file to save", self.window.theme
+            )
+            dlg.add_filter(".png", "PNG files (.png)")
+            dlg.set_on_cancel(self._on_file_dialog_cancel)
+            dlg.set_on_done(self._on_export_dialog_done)
+            self.window.show_dialog(dlg)
+        except Exception as e:
+            print(f"Error opening export dialog: {e}")
 
     def _on_export_dialog_done(self, filename):
-        return
         self.window.close_dialog()
-        frame = self._scene.frame
-        self.export_image(filename, frame.width, frame.height)
+        try:
+            # frame = self._scene.frame
+            # self.export_image(filename, frame.width, frame.height)
+            pass
+        except Exception as e:
+            print(f"Error exporting image: {e}")
 
     def _on_menu_quit(self):
-        gui.Application.instance.quit()
+        try:
+            gui.Application.instance.quit()
+        except Exception as e:
+            print(f"Error quitting application: {e}")
 
     def _on_menu_toggle_models_panel(self):
-        self._models_panel._panel.visible = not self._models_panel._panel.visible
-        gui.Application.instance.menubar.set_checked(
-            App.MENU_SHOW_MODELS, self._models_panel._panel.visible
-        )
-        self.window.set_needs_layout()
+        try:
+            self._models_panel._panel.visible = not self._models_panel._panel.visible
+            gui.Application.instance.menubar.set_checked(
+                App.MENU_SHOW_MODELS, self._models_panel._panel.visible
+            )
+            self.window.set_needs_layout()
+        except Exception as e:
+            print(f"Error toggling models panel: {e}")
 
     def _on_menu_toggle_configs_panel(self):
-        self._configuration_panel._panel.visible = (
-            not self._configuration_panel._panel.visible
-        )
-        gui.Application.instance.menubar.set_checked(
-            App.MENU_SHOW_CONFIGS, self._configuration_panel._panel.visible
-        )
-        self.window.set_needs_layout()
+        try:
+            self._configuration_panel._panel.visible = (
+                not self._configuration_panel._panel.visible
+            )
+            gui.Application.instance.menubar.set_checked(
+                App.MENU_SHOW_CONFIGS, self._configuration_panel._panel.visible
+            )
+            self.window.set_needs_layout()
+        except Exception as e:
+            print(f"Error toggling configs panel: {e}")
 
     def _on_menu_toggle_settings_panel(self):
-        self._settings_panel._settings_panel.visible = (
-            not self._settings_panel._settings_panel.visible
-        )
-        gui.Application.instance.menubar.set_checked(
-            App.MENU_SHOW_SETTINGS, self._settings_panel._settings_panel.visible
-        )
-        self.window.set_needs_layout()
+        try:
+            self._settings_panel._settings_panel.visible = (
+                not self._settings_panel._settings_panel.visible
+            )
+            gui.Application.instance.menubar.set_checked(
+                App.MENU_SHOW_SETTINGS, self._settings_panel._settings_panel.visible
+            )
+            self.window.set_needs_layout()
+        except Exception as e:
+            print(f"Error toggling settings panel: {e}")
 
     def _on_menu_toggle_processing_panel(self):
-        self._processing_panel._panel.visible = (
-            not self._processing_panel._panel.visible
-        )
-        gui.Application.instance.menubar.set_checked(
-            App.MENU_SHOW_PCPROCESSING,
-            self._processing_panel._panel.visible,
-        )
-        self.window.set_needs_layout()
+        try:
+            self._processing_panel._panel.visible = (
+                not self._processing_panel._panel.visible
+            )
+            gui.Application.instance.menubar.set_checked(
+                App.MENU_SHOW_PCPROCESSING,
+                self._processing_panel._panel.visible,
+            )
+            self.window.set_needs_layout()
+        except Exception as e:
+            print(f"Error toggling processing panel: {e}")
 
     def _on_menu_about(self):
-        # Show a simple dialog. Although the Dialog is actually a widget, you can
-        # treat it similar to a Window for layout and put all the widgets in a
-        # layout which you make the only child of the Dialog.
-        em = self.window.theme.font_size
-        dlg = gui.Dialog("About")
+        try:
+            em = self.window.theme.font_size
+            dlg = gui.Dialog("About")
 
-        # Add the text
-        dlg_layout = gui.Vert(em, gui.Margins(em, em, em, em))
-        dlg_layout.add_child(gui.Label("Reassembly Application"))
+            # Add the text
+            dlg_layout = gui.Vert(em, gui.Margins(em, em, em, em))
+            dlg_layout.add_child(gui.Label("Reassembly Application"))
 
-        # Add the Ok button. We need to define a callback function to handle
-        # the click.
-        ok = gui.Button("OK")
-        ok.set_on_clicked(self._on_about_ok)
+            # Add the Ok button. We need to define a callback function to handle
+            # the click.
+            ok = gui.Button("OK")
+            ok.set_on_clicked(self._on_about_ok)
 
-        # We want the Ok button to be an the right side, so we need to add
-        # a stretch item to the layout, otherwise the button will be the size
-        # of the entire row. A stretch item takes up as much space as it can,
-        # which forces the button to be its minimum size.
-        h = gui.Horiz()
-        h.add_stretch()
-        h.add_child(ok)
-        h.add_stretch()
-        dlg_layout.add_child(h)
+            # We want the Ok button to be an the right side, so we need to add
+            # a stretch item to the layout, otherwise the button will be the size
+            # of the entire row. A stretch item takes up as much space as it can,
+            # which forces the button to be its minimum size.
+            h = gui.Horiz()
+            h.add_stretch()
+            h.add_child(ok)
+            h.add_stretch()
+            dlg_layout.add_child(h)
 
-        dlg.add_child(dlg_layout)
-        self.window.show_dialog(dlg)
+            dlg.add_child(dlg_layout)
+            self.window.show_dialog(dlg)
+        except Exception as e:
+            print(f"Error showing about dialog: {e}")
 
     def _on_about_ok(self):
-        self.window.close_dialog()
+        try:
+            self.window.close_dialog()
+        except Exception as e:
+            print(f"Error closing about dialog: {e}")
 
     # You should pass either mesh or geometry
     def create_scene_widget(self, path, mesh=None, geometry=None):
@@ -369,6 +402,12 @@ class App:
         self._scenes.append(s)
         # self._scenes_selected.add(i)
         self._scenes_paths.append(path)
+
+        # Add object to left panel DB Tree
+        self._left_panel.add_object(path, i)
+
+        # Set initial visibility (all objects visible by default)
+        s.visible = True
 
         self._models_panel.new_model()
 
