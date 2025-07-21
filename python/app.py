@@ -28,9 +28,7 @@ class App:
     def __init__(self, width, height):
         self.settings = Settings()
 
-        self._scenes = []
-        self._scenes_paths = []
-        self._scenes_selected = set()
+        self._scene_objects = {}  # To store {'path': {'mesh' | 'geometry', 'transform'}}
 
         resource_path = gui.Application.instance.resource_path
         self.settings.new_ibl_name = resource_path + "/" + App.DEFAULT_IBL
@@ -39,6 +37,12 @@ class App:
             "Reassembly", width, height
         )
         w = self.window
+        
+        # Create the main 3D scene widget
+        self._scene_widget = gui.SceneWidget()
+        self._scene_widget.scene = rendering.Open3DScene(w.renderer)
+        self._scene_widget.set_view_controls(gui.SceneWidget.Controls.ROTATE_CAMERA) # Default camera control
+
         self._panels_layout = gui.ScrollableVert()
 
         self._left_panel = LeftPanel(self)
@@ -47,14 +51,8 @@ class App:
         self._configuration_panel = ConfigurationPanel(self)
         self._processing_panel = ProcessingPanel(self)
 
-        # Normally our user interface can be children of all one layout (usually
-        # a vertical layout), which is then the only child of the window. In our
-        # case we want the scene to take up all the space and the settings panel
-        # to go above it. We can do this custom layout by providing an on_layout
-        # callback. The on_layout callback should set the frame
-        # (position + size) of every child correctly. After the callback is
-        # done the window will layout the grandchildren.
         w.set_on_layout(self._on_layout)
+        w.add_child(self._scene_widget) # Add the single scene widget
         w.add_child(self._left_panel._db_tree_section)
         w.add_child(self._left_panel._properties_section)
         w.add_child(self._panels_layout)
@@ -114,84 +112,23 @@ class App:
         w.set_on_menu_item_activated(App.MENU_ABOUT, self._on_menu_about)
         # Menu ----
 
-        # Create processed scene widget
-        self.load(
-            "C:/sem7/FYP/Reassembly/yasan-reassembly-final-approach/reassembly-basic/data/input_fragments"
-        )
-
     def _on_layout(self, layout_context):
-        # The on_layout callback should set the frame (position + size) of every
-        # child correctly. After the callback is done the window will layout
-        # the grandchildren.
         r = self.window.content_rect
         em = layout_context.theme.font_size
-        width = 17 * em
-
-        # Position the right panels layout (existing panels)
-        self._panels_layout.frame = gui.Rect(
-            r.get_right() - width, r.y, width, r.height
-        )
-
-        # Position the left panel
-        self._left_panel._left_panel.frame = gui.Rect(
-            r.x, r.y, width, r.height
-        )
         
-        # Calculate margins and sizes for the containers
-        margin_x = width * 0.05  # 5% margin on each side (10% total)
-        container_width = width * 0.9  # 90% width
-        container_height = r.height * 0.5  # 50% height
-        margin_y = (r.height - 2 * container_height) / 3  # Equal spacing between containers
-        
-        # Position the DB Tree section (upper half)
-        db_tree_x = r.x + margin_x
-        db_tree_y = r.y + margin_y
-        self._left_panel._db_tree_section.frame = gui.Rect(
-            db_tree_x, db_tree_y, container_width, container_height
-        )
-        
-        # Position the Properties section (lower half)
-        properties_x = r.x + margin_x
-        properties_y = r.y + margin_y + container_height + margin_y
-        self._left_panel._properties_section.frame = gui.Rect(
-            properties_x, properties_y, container_width, container_height
-        )
+        panel_width = 17 * em
 
-        scene_state = "normal"
-        if 0 in self._scenes_selected and len(self._scenes_selected) == 1:
-            scene_width = r.get_right() - 2 * width  # Account for both left and right panels
-            scene_state = "processed_only"
-        elif 0 in self._scenes_selected and len(self._scenes_selected) > 1:
-            scene_width = (r.get_right() - 2 * width) / 2  # Account for both panels
-            scene_state = "normal"
-        else:
-            scene_width = r.get_right() - 2 * width  # Account for both panels
-            scene_state = "models_only"
+        # Position left panel
+        self._left_panel._db_tree_section.frame = gui.Rect(r.x, r.y, panel_width, r.height / 2)
+        self._left_panel._properties_section.frame = gui.Rect(r.x, r.y + r.height / 2, panel_width, r.height / 2)
 
-        visible__models_count = 0
-        for i, s in enumerate(self._scenes):
-            if i not in self._scenes_selected:
-                s.visible = False
-                continue
+        # Position right panel
+        self._panels_layout.frame = gui.Rect(r.get_right() - panel_width, r.y, panel_width, r.height)
 
-            s.visible = True
-
-            if i == 0 and scene_state == "processed_only":
-                height = r.height
-                s.frame = gui.Rect(r.x + width, r.y, scene_width, height)  # Start after left panel
-            elif i == 0 and scene_state == "normal":
-                height = r.height
-                s.frame = gui.Rect(r.x + width + scene_width, r.y, scene_width, height)  # Start after left panel
-            elif i != 0 and scene_state == "normal":
-                height = r.height / (len(self._scenes_selected) - 1)
-                start_y = r.y + (visible__models_count * height)
-                s.frame = gui.Rect(r.x + width, start_y, scene_width, height)  # Start after left panel
-                visible__models_count += 1
-            elif i != 0 and scene_state == "models_only":
-                height = r.height / len(self._scenes_selected)
-                start_y = r.y + (visible__models_count * height)
-                s.frame = gui.Rect(r.x + width, start_y, scene_width, height)  # Start after left panel
-                visible__models_count += 1
+        # Position the main scene widget in the center
+        scene_x = r.x + panel_width
+        scene_width = r.width - 2 * panel_width
+        self._scene_widget.frame = gui.Rect(scene_x, r.y, scene_width, r.height)
 
         height = min(
             r.height,
@@ -200,7 +137,7 @@ class App:
             ).height,
         )
         self._settings_panel._settings_panel.frame = gui.Rect(
-            r.get_right() - width, r.y, width, height
+            r.get_right() - panel_width, r.y, panel_width, height
         )
 
         height = min(
@@ -210,7 +147,7 @@ class App:
             ).height,
         )
         self._configuration_panel._panel.frame = gui.Rect(
-            r.get_right() - width, r.y, width, height
+            r.get_right() - panel_width, r.y, panel_width, height
         )
 
         height = min(
@@ -220,7 +157,7 @@ class App:
             ).height,
         )
         self._processing_panel._panel.frame = gui.Rect(
-            r.get_right() - 2 * width, r.get_bottom() - height, width, height
+            r.get_right() - 2 * panel_width, r.get_bottom() - height, panel_width, height
         )
 
     def _on_menu_open(self):
@@ -379,43 +316,47 @@ class App:
         except Exception as e:
             print(f"Error closing about dialog: {e}")
 
-    # You should pass either mesh or geometry
-    def create_scene_widget(self, path, mesh=None, geometry=None):
-        w = self.window
-        s = gui.SceneWidget()
-        s.scene = rendering.Open3DScene(w.renderer)
-
-        if mesh is not None:
-            # Triangle model
-            s.scene.add_model("__model__", mesh)
+    def _add_object_to_scene(self, path, mesh=None, geometry=None):
+        """Adds a model or point cloud to the single 3D scene."""
+        
+        # Add geometry to the scene. Use path as a unique name.
+        if mesh:
+            self._scene_widget.scene.add_model(path, mesh)
+            self._scene_objects[path] = {'type': 'model', 'mesh': mesh}
+        elif geometry:
+            self._scene_widget.scene.add_geometry(path, geometry, self.settings.material)
+            self._scene_objects[path] = {'type': 'geometry', 'geometry': geometry}
         else:
-            pass
-            # Point cloud
-            s.scene.add_geometry("__model__", geometry, self.settings.material)
+            return
 
-        bounds = s.scene.bounding_box
-        s.setup_camera(60, bounds, bounds.get_center())
-        s.set_on_sun_direction_changed(self._settings_panel._on_sun_dir)
+        # Update camera to frame all visible objects
+        self._update_camera_bounds()
 
-        i = len(self._scenes)
+        # Add object to the left panel UI
+        self._left_panel.add_object(path, len(self._scene_objects) - 1)
+    
+    def _update_camera_bounds(self):
+        """Calculates the bounding box of all visible objects and adjusts the camera."""
+        bounds = None
+        for path, obj_info in self._scene_objects.items():
+            # Check if object is visible (we'll need to get this from left_panel)
+            obj_in_panel = next((o for o in self._left_panel.get_all_objects() if o['path'] == path), None)
+            if obj_in_panel and obj_in_panel['visible']:
+                if obj_info['type'] == 'model':
+                    geom_bounds = obj_info['mesh'].get_axis_aligned_bounding_box()
+                else: # geometry
+                    geom_bounds = obj_info['geometry'].get_axis_aligned_bounding_box()
 
-        self._scenes.append(s)
-        # self._scenes_selected.add(i)
-        self._scenes_paths.append(path)
+                if bounds is None:
+                    bounds = geom_bounds
+                else:
+                    bounds = bounds.get_union(geom_bounds)
+        
+        if bounds and bounds.get_volume() > 0:
+            self._scene_widget.setup_camera(60, bounds, bounds.get_center())
+        else:
+            self._scene_widget.setup_camera(60, o3d.geometry.AxisAlignedBoundingBox([-1,-1,-1], [1,1,1]), [0,0,0])
 
-        # Add object to left panel DB Tree
-        self._left_panel.add_object(path, i)
-
-        # Set initial visibility (all objects visible by default)
-        s.visible = True
-
-        self._models_panel.new_model()
-
-        self._settings_panel._apply_settings([i])
-
-        w.add_child(s)
-
-        w.set_needs_layout()
 
     def load(self, path):
         geometry = None
@@ -442,7 +383,7 @@ class App:
 
         if geometry is not None or mesh is not None:
             try:
-                self.create_scene_widget(path=path, mesh=mesh, geometry=geometry)
+                self._add_object_to_scene(path=path, mesh=mesh, geometry=geometry)
             except Exception as e:
                 print(e)
 
@@ -479,9 +420,7 @@ def main():
                 w.window.show_message_box("Error", "Could not open file '" + path + "'")
     else:
         paths = [
-            "C:/sem7/FYP/Tombstone/Tombstone1_low.obj",
-            "C:/sem7/FYP/Tombstone/Tombstone2_low.obj",
-            "C:/sem7/FYP/Tombstone/Tombstone3_low.obj",
+            "C:/sem7/FYP/Reassembly/yasan-reassembly-final-approach/reassembly-basic/data/input_fragments"
         ]
         for path in paths:
             if os.path.exists(path):
