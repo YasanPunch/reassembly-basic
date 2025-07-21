@@ -22,6 +22,36 @@ class ProcessingPanel:
             "Process controls", 0.25 * em, gui.Margins(em, 0, 0, 0)
         )
 
+        # 1. Pre-processing
+        self._preprocessing_button = gui.Button("Pre-processing")
+        self._preprocessing_button.horizontal_padding_em = 0.5
+        self._preprocessing_button.vertical_padding_em = 0
+        self._preprocessing_button.set_on_clicked(self._on_preprocessing)
+
+        # 2. Segmentation and Classification
+        self._segmentation_button = gui.Button("Segmentation and Classification")
+        self._segmentation_button.horizontal_padding_em = 0.5
+        self._segmentation_button.vertical_padding_em = 0
+        self._segmentation_button.set_on_clicked(self._on_segmentation)
+
+        # 3. Pairwise Matching
+        self._pairwise_matching_button = gui.Button("Pairwise Matching")
+        self._pairwise_matching_button.horizontal_padding_em = 0.5
+        self._pairwise_matching_button.vertical_padding_em = 0
+        self._pairwise_matching_button.set_on_clicked(self._on_pairwise_matching)
+
+        # 4. Multipiece Matching
+        self._multipiece_matching_button = gui.Button("Multipiece Matching")
+        self._multipiece_matching_button.horizontal_padding_em = 0.5
+        self._multipiece_matching_button.vertical_padding_em = 0
+        self._multipiece_matching_button.set_on_clicked(self._on_multipiece_matching)
+
+        # Add buttons in order
+        process_ctrls.add_child(self._preprocessing_button)
+        process_ctrls.add_child(self._segmentation_button)
+        process_ctrls.add_child(self._pairwise_matching_button)
+        process_ctrls.add_child(self._multipiece_matching_button)
+
         self._segment_mesh_button = gui.Button("Segment")
         self._segment_mesh_button.horizontal_padding_em = 0.5
         self._segment_mesh_button.vertical_padding_em = 0
@@ -36,6 +66,55 @@ class ProcessingPanel:
         process_ctrls.add_child(self._boundary_lines_button)
         self._panel.add_child(process_ctrls)
         self._panel.add_fixed(separation_height)
+
+    def _on_preprocessing(self):
+        """Handle pre-processing step"""
+        print("Pre-processing step initiated")
+        # Get selected objects from DB Tree
+        selected_objects = self.app._left_panel.get_selected_objects()
+        for i, obj in enumerate(self.app._loaded_objects):
+            if obj in selected_objects:
+                # TODO: Implement actual preprocessing
+                # For now, just create a copy of the mesh as a demo
+                result_mesh = o3d.io.read_triangle_mesh(obj['path'])
+                # Add result to DB Tree
+                self.app._left_panel.add_processing_result(i, 'preprocessing', result_mesh)
+
+    def _on_segmentation(self):
+        """Handle segmentation and classification step"""
+        print("Segmentation and Classification step initiated")
+        selected_objects = self.app._left_panel.get_selected_objects()
+        for i, obj in enumerate(self.app._loaded_objects):
+            if obj in selected_objects:
+                # TODO: Implement actual segmentation
+                # For now, just create a copy of the mesh as a demo
+                result_mesh = o3d.io.read_triangle_mesh(obj['path'])
+                # Add result to DB Tree
+                self.app._left_panel.add_processing_result(i, 'segmentation', result_mesh)
+
+    def _on_pairwise_matching(self):
+        """Handle pairwise matching step"""
+        print("Pairwise Matching step initiated")
+        selected_objects = self.app._left_panel.get_selected_objects()
+        for i, obj in enumerate(self.app._loaded_objects):
+            if obj in selected_objects:
+                # TODO: Implement actual pairwise matching
+                # For now, just create a copy of the mesh as a demo
+                result_mesh = o3d.io.read_triangle_mesh(obj['path'])
+                # Add result to DB Tree
+                self.app._left_panel.add_processing_result(i, 'pairwise_matching', result_mesh)
+
+    def _on_multipiece_matching(self):
+        """Handle multipiece matching step"""
+        print("Multipiece Matching step initiated")
+        selected_objects = self.app._left_panel.get_selected_objects()
+        for i, obj in enumerate(self.app._loaded_objects):
+            if obj in selected_objects:
+                # TODO: Implement actual multipiece matching
+                # For now, just create a copy of the mesh as a demo
+                result_mesh = o3d.io.read_triangle_mesh(obj['path'])
+                # Add result to DB Tree
+                self.app._left_panel.add_processing_result(i, 'multipiece_matching', result_mesh)
 
     def _on_segment(self):
         fractureSurface = FractureSurfaceMesh()

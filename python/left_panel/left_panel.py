@@ -26,12 +26,14 @@ class LeftPanel:
         self._db_tree_label.text_color = gui.Color(0.2, 0.6, 1.0)  # Blue color for header
         self._db_tree_section.add_child(self._db_tree_label)
         self._db_tree_section.add_fixed(separation_height)
-        
-        # Add a placeholder for the tree/list of objects
-        self._db_tree_list = gui.ListView()
-        self._db_tree_list.set_items(["No objects loaded"])
-        self._db_tree_list.set_max_visible_items(8)
-        self._db_tree_section.add_child(self._db_tree_list)
+
+        # Container for model collapsible sections
+        self._model_container = gui.Vert(0.15 * em)
+        self._db_tree_section.add_child(self._model_container)
+
+        # Store loaded objects and their visibility states
+        self._loaded_objects = []  # List of dictionaries: {path, name, visible, scene_index, collapsible, checkbox, processing_results}
+        self._selected_object_index = -1
         
         # Add the DB Tree section to the main panel
         self._left_panel.add_child(self._db_tree_section)
@@ -55,4 +57,139 @@ class LeftPanel:
         self._properties_section.add_child(self._properties_text)
         
         # Add the Properties section to the main panel
-        self._left_panel.add_child(self._properties_section) 
+        self._left_panel.add_child(self._properties_section)
+
+    def add_object(self, file_path, scene_index):
+        w = self.app.window
+        em = w.theme.font_size
+        import os
+        
+        # Extract filename from path
+        file_name = os.path.basename(file_path)
+        
+        # Create collapsible section for this object
+        object_section = gui.CollapsableVert(file_name, 0.25 * em, gui.Margins(0.25 * em, 0, 0, 0))
+        
+        # Create checkbox for visibility
+        cb = gui.Checkbox("Show/Hide")
+        cb.checked = True
+        def handle_click(checked, idx=len(self._loaded_objects)):
+            self.toggle_object_visibility(idx)
+        cb.set_on_checked(handle_click)
+        object_section.add_child(cb)
+        
+        # Create object entry
+        object_entry = {
+            'path': file_path,
+            'name': file_name,
+            'visible': True,
+            'scene_index': scene_index,
+            'collapsible': object_section,
+            'checkbox': cb,
+            'processing_results': {
+                'preprocessing': None,
+                'segmentation': None,
+                'pairwise_matching': None,
+                'multipiece_matching': None
+            }
+        }
+        
+        # Add to container and store
+        self._model_container.add_child(object_section)
+        self._loaded_objects.append(object_entry)
+        self._update_properties_display(object_entry)
+
+    def add_processing_result(self, object_index, process_type, result_mesh):
+        w = self.app.window
+        em = w.theme.font_size
+        """Add a processing result to an object's collapsible section"""
+        if 0 <= object_index < len(self._loaded_objects):
+            obj = self._loaded_objects[object_index]
+            
+            # Create checkbox for the processing result
+            cb = gui.Checkbox(f"{process_type} result")
+            cb.checked = False
+            
+            # Store the result in memory
+            result_entry = {
+                'mesh': result_mesh,
+                'visible': False,
+                'checkbox': cb
+            }
+            
+            # Add to processing results
+            obj['processing_results'][process_type] = result_entry
+            
+            # Add checkbox to the collapsible section
+            def handle_result_click(checked):
+                self.toggle_result_visibility(object_index, process_type)
+            cb.set_on_checked(handle_result_click)
+            obj['collapsible'].add_child(cb)
+            
+            # Update properties display
+            self._update_properties_display(obj)
+
+    def toggle_result_visibility(self, object_index, process_type):
+        """Toggle visibility of a processing result"""
+        if 0 <= object_index < len(self._loaded_objects):
+            obj = self._loaded_objects[object_index]
+            result = obj['processing_results'].get(process_type)
+            if result:
+                result['visible'] = not result['visible']
+                result['checkbox'].checked = result['visible']
+                # TODO: Update scene visibility when we implement result visualization
+                self.app.window.set_needs_layout()
+
+    def toggle_object_visibility(self, object_index):
+        """Toggle visibility of an object"""
+        if 0 <= object_index < len(self._loaded_objects):
+            obj = self._loaded_objects[object_index]
+            obj['visible'] = not obj['visible']
+            # Update checkbox state
+            if obj['checkbox']:
+                obj['checkbox'].checked = obj['visible']
+            # Update scene visibility
+            scene_index = obj['scene_index']
+            if 0 <= scene_index < len(self.app._scenes):
+                self.app._scenes[scene_index].visible = obj['visible']
+            # Update scenes_selected set for layout logic
+            if obj['visible']:
+                self.app._scenes_selected.add(scene_index)
+            else:
+                if scene_index in self.app._scenes_selected:
+                    self.app._scenes_selected.remove(scene_index)
+            self.app.window.set_needs_layout()
+            # Update properties if this object is selected
+            if self._selected_object_index == object_index:
+                self._update_properties_display(obj)
+
+    def _update_properties_display(self, obj=None):
+        """Update the properties display with object and processing info"""
+        if obj is None:
+            obj = next((o for o in self._loaded_objects if o['visible']), None)
+        if obj is None:
+            self._properties_text.text_value = "No object selected."
+            self._properties_text.enabled = False
+            return
+
+        # Build tree-like structure for properties
+        properties_text = f"{obj['name']}\n"
+        properties_text += f"  └─ File size: {os.path.getsize(obj['path']) / (1024 * 1024):.2f} MB\n"
+        
+        # Add processing results info
+        for process_type, result in obj['processing_results'].items():
+            if result:
+                properties_text += f"  └─ {process_type}: {'Visible' if result['visible'] else 'Hidden'}\n"
+
+        self._properties_text.text_value = properties_text
+        self._properties_text.enabled = True
+
+    def get_visible_objects(self):
+        return [obj for obj in self._loaded_objects if obj['visible']]
+
+    def get_all_objects(self):
+        return self._loaded_objects.copy()
+
+    def get_selected_objects(self):
+        """Get all objects that are currently visible"""
+        return [obj for obj in self._loaded_objects if obj['visible']] 
