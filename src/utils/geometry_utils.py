@@ -1,6 +1,7 @@
 import numpy as np
 import open3d as o3d
 import trimesh
+from scipy.spatial import cKDTree
 
 def estimate_normals(pcd, search_param):
     """Estimates normals for a point cloud."""
@@ -81,6 +82,68 @@ def get_bounding_box_dimensions(mesh):
     """Returns the dimensions (length, width, height) of the mesh's AABB."""
     aabb = mesh.get_axis_aligned_bounding_box()
     return aabb.get_extent()
+
+
+def get_adjacent_faces(mesh, fracture_face_indices):
+    """
+    Given a mesh (Open3D or Trimesh) and a set of face indices (e.g., fracture surface),
+    return the set of face indices that are adjacent (share an edge) but not in the original set.
+    Args:
+        mesh: o3d.geometry.TriangleMesh or trimesh.Trimesh
+        fracture_face_indices: list or set of face indices (integers)
+    Returns:
+        list of adjacent face indices (integers)
+    """
+    # Convert to Trimesh if needed
+    if not isinstance(mesh, trimesh.Trimesh):
+        mesh = trimesh.Trimesh(vertices=np.asarray(mesh.vertices),
+                               faces=np.asarray(mesh.triangles))
+    fracture_face_indices = set(fracture_face_indices)
+    adjacent_faces = set()
+    # Ensure face adjacency is computed
+    if not hasattr(mesh, 'face_adjacency') or mesh.face_adjacency is None:
+        mesh.face_adjacency = trimesh.graph.face_adjacency(mesh.faces)
+    for f1, f2 in mesh.face_adjacency:
+        if f1 in fracture_face_indices and f2 not in fracture_face_indices:
+            adjacent_faces.add(f2)
+        elif f2 in fracture_face_indices and f1 not in fracture_face_indices:
+            adjacent_faces.add(f1)
+    return list(adjacent_faces)
+
+
+def compute_adjacent_face_normal_similarity(mesh_src, adj_faces_src, mesh_tgt, adj_faces_tgt):
+    """
+    Compute the similarity between adjacent faces of two meshes based on their normals.
+    Args:
+        mesh_src: o3d.geometry.TriangleMesh (source, already transformed)
+        adj_faces_src: list of face indices (source adjacent faces)
+        mesh_tgt: o3d.geometry.TriangleMesh (target)
+        adj_faces_tgt: list of face indices (target adjacent faces)
+    Returns:
+        float: similarity score in [0, 1] (1 = perfect match, 0 = worst)
+    """
+    # Get centroids and normals for source and target adjacent faces
+    src_faces = np.asarray(mesh_src.triangles)[adj_faces_src]
+    src_verts = np.asarray(mesh_src.vertices)
+    src_normals = np.asarray(mesh_src.triangle_normals)[adj_faces_src]
+    src_centroids = np.mean(src_verts[src_faces], axis=1)
+
+    tgt_faces = np.asarray(mesh_tgt.triangles)[adj_faces_tgt]
+    tgt_verts = np.asarray(mesh_tgt.vertices)
+    tgt_normals = np.asarray(mesh_tgt.triangle_normals)[adj_faces_tgt]
+    tgt_centroids = np.mean(tgt_verts[tgt_faces], axis=1)
+
+    # For each source adjacent face, find the closest target adjacent face
+    if len(tgt_centroids) == 0 or len(src_centroids) == 0:
+        return 0.0
+    tree = cKDTree(tgt_centroids)
+    dists, idxs = tree.query(src_centroids)
+
+    # Compute dot products of normals
+    dot_products = np.einsum('ij,ij->i', src_normals, tgt_normals[idxs])
+    # Normalize to [0, 1]
+    similarity = np.clip((dot_products + 1) / 2, 0, 1)
+    return float(np.mean(similarity))
 
 
 if __name__ == '__main__':

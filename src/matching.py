@@ -4,6 +4,7 @@ from src.alignment import align_fragments_pcd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import trimesh
 import copy
+from src.utils.geometry_utils import get_adjacent_faces, compute_adjacent_face_normal_similarity
 
 print("DEBUG: matching.py top level executed") # <--- ADD THIS
 
@@ -114,6 +115,8 @@ def test_proposed_pairwise_match(source_fragment, target_fragment, transformatio
 
 def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
     matches = []
+    w1 = params.get('composite_score_icp_weight', 0.7)
+    w2 = params.get('composite_score_adjacent_weight', 0.3)
     # Loop over all surface pairs
     for idx_i, (target_pcd, target_fpfh) in enumerate(zip(frag_i_data['pcds_for_features'], frag_i_data['features_list'])):
         for idx_j, (source_pcd, source_fpfh) in enumerate(zip(frag_j_data['pcds_for_features'], frag_j_data['features_list'])):
@@ -133,7 +136,6 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                 )
             if transform_j_to_i is not None and fitness_ji >= params.get("min_match_score", 0.6):
                 # Step 3: Test if the transformation causes penetration
-                # This checks if applying the transformation would make the fragments penetrate each other
                 if params.get("use_boolean_intersection_test", False):
                     is_valid = test_proposed_pairwise_match(
                         frag_j_data, frag_i_data, transform_j_to_i, params
@@ -143,15 +145,52 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         continue
                     else:
                         print(f"  ✅ Penetration test passed: {frag_j_data['name']} -> {frag_i_data['name']} is a valid match.")
-                
+                # --- Composite scoring: adjacent face similarity ---
+                # Get fracture face indices for both surfaces
+                source_fracture_faces = getattr(frag_j_data.get('fracture_surfaces', [None])[idx_j], 'triangles', None)
+                target_fracture_faces = getattr(frag_i_data.get('fracture_surfaces', [None])[idx_i], 'triangles', None)
+                if source_fracture_faces is not None and target_fracture_faces is not None:
+                    source_fracture_faces = np.asarray(source_fracture_faces)
+                    target_fracture_faces = np.asarray(target_fracture_faces)
+                    # Indices of faces in the original mesh
+                    # Find which faces in the original mesh correspond to these triangles
+                    # (Assume fracture_surfaces are submeshes with triangles referencing the same vertex array)
+                    # We'll use a simple approach: match triangles by vertex indices
+                    def find_face_indices_in_mesh(mesh, submesh_triangles):
+                        mesh_tris = np.asarray(mesh.triangles)
+                        submesh_tris = np.asarray(submesh_triangles)
+                        indices = []
+                        for tri in submesh_tris:
+                            matches = np.where(np.all(mesh_tris == tri, axis=1))[0]
+                            if len(matches) > 0:
+                                indices.append(matches[0])
+                        return indices
+                    source_fracture_indices = find_face_indices_in_mesh(frag_j_data['original_mesh'], source_fracture_faces)
+                    target_fracture_indices = find_face_indices_in_mesh(frag_i_data['original_mesh'], target_fracture_faces)
+                    # Get adjacent faces
+                    adj_source = get_adjacent_faces(frag_j_data['original_mesh'], source_fracture_indices)
+                    adj_target = get_adjacent_faces(frag_i_data['original_mesh'], target_fracture_indices)
+                    # Transform source mesh
+                    source_mesh_transformed = copy.deepcopy(frag_j_data['original_mesh'])
+                    source_mesh_transformed.transform(transform_j_to_i)
+                    # Compute similarity
+                    adjacent_similarity = compute_adjacent_face_normal_similarity(
+                        source_mesh_transformed, adj_source,
+                        frag_i_data['original_mesh'], adj_target
+                    )
+                else:
+                    adjacent_similarity = 0.0
+                composite_score = w1 * fitness_ji + w2 * adjacent_similarity
                 confidence_ji = float(fitness_ji) / (rmse_ji + 1e-6)
                 matches.append({
                     'source_idx': j, 'target_idx': i,
                     'source_surface_idx': idx_j, 'target_surface_idx': idx_i,
                     'transformation': transform_j_to_i,
-                    'score': fitness_ji, 'rmse': rmse_ji,
+                    'score': composite_score, 'rmse': rmse_ji,
                     'confidence': confidence_ji,
-                    'source_name': frag_j_data['name'], 'target_name': frag_i_data['name']
+                    'source_name': frag_j_data['name'], 'target_name': frag_i_data['name'],
+                    'icp_fitness': fitness_ji,
+                    'adjacent_similarity': adjacent_similarity
                 })
             # Also try the reverse direction (i to j)
             if debug:
@@ -164,8 +203,6 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                     target_pcd, source_pcd, target_fpfh, source_fpfh, params
                 )
             if transform_i_to_j is not None and fitness_ij >= params.get("min_match_score", 0.6):
-                # Step 3: Test if the transformation causes penetration
-                # This checks if applying the transformation would make the fragments penetrate each other
                 if params.get("use_boolean_intersection_test", False):
                     is_valid = test_proposed_pairwise_match(
                         frag_i_data, frag_j_data, transform_i_to_j, params
@@ -175,15 +212,44 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         continue
                     else:
                         print(f"  ✅ Penetration test passed: {frag_i_data['name']} -> {frag_j_data['name']} is a valid match.")
-                
+                # --- Composite scoring: adjacent face similarity ---
+                source_fracture_faces = getattr(frag_i_data.get('fracture_surfaces', [None])[idx_i], 'triangles', None)
+                target_fracture_faces = getattr(frag_j_data.get('fracture_surfaces', [None])[idx_j], 'triangles', None)
+                if source_fracture_faces is not None and target_fracture_faces is not None:
+                    source_fracture_faces = np.asarray(source_fracture_faces)
+                    target_fracture_faces = np.asarray(target_fracture_faces)
+                    def find_face_indices_in_mesh(mesh, submesh_triangles):
+                        mesh_tris = np.asarray(mesh.triangles)
+                        submesh_tris = np.asarray(submesh_triangles)
+                        indices = []
+                        for tri in submesh_tris:
+                            matches = np.where(np.all(mesh_tris == tri, axis=1))[0]
+                            if len(matches) > 0:
+                                indices.append(matches[0])
+                        return indices
+                    source_fracture_indices = find_face_indices_in_mesh(frag_i_data['original_mesh'], source_fracture_faces)
+                    target_fracture_indices = find_face_indices_in_mesh(frag_j_data['original_mesh'], target_fracture_faces)
+                    adj_source = get_adjacent_faces(frag_i_data['original_mesh'], source_fracture_indices)
+                    adj_target = get_adjacent_faces(frag_j_data['original_mesh'], target_fracture_indices)
+                    source_mesh_transformed = copy.deepcopy(frag_i_data['original_mesh'])
+                    source_mesh_transformed.transform(transform_i_to_j)
+                    adjacent_similarity = compute_adjacent_face_normal_similarity(
+                        source_mesh_transformed, adj_source,
+                        frag_j_data['original_mesh'], adj_target
+                    )
+                else:
+                    adjacent_similarity = 0.0
+                composite_score = w1 * fitness_ij + w2 * adjacent_similarity
                 confidence_ij = float(fitness_ij) / (rmse_ij + 1e-6)
                 matches.append({
                     'source_idx': i, 'target_idx': j,
                     'source_surface_idx': idx_i, 'target_surface_idx': idx_j,
                     'transformation': transform_i_to_j,
-                    'score': fitness_ij, 'rmse': rmse_ij,
+                    'score': composite_score, 'rmse': rmse_ij,
                     'confidence': confidence_ij,
-                    'source_name': frag_i_data['name'], 'target_name': frag_j_data['name']
+                    'source_name': frag_i_data['name'], 'target_name': frag_j_data['name'],
+                    'icp_fitness': fitness_ij,
+                    'adjacent_similarity': adjacent_similarity
                 })
     return matches
 
@@ -258,7 +324,9 @@ if __name__ == '__main__':
         "icp_relative_fitness": 1e-6,
         "icp_relative_rmse": 1e-6,
         "icp_max_iteration": 30,
-        "min_match_score": 0.3 # Lower for testing
+        "min_match_score": 0.3, # Lower for testing
+        "composite_score_icp_weight": 0.7,
+        "composite_score_adjacent_weight": 0.3
     }
 
     # Setup dummy data: two slightly transformed cubes
