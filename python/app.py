@@ -6,6 +6,7 @@ import open3d.visualization.gui as gui  # type: ignore
 import open3d.visualization.rendering as rendering  # type: ignore
 
 from configuration.configuration_panel import ConfigurationPanel
+from left_panel.left_panel import LeftPanel
 from models.models_panel import ModelsPanel
 from processing.processing_panel import ProcessingPanel
 from settings.settings import Settings
@@ -40,6 +41,7 @@ class App:
         w = self.window
         self._panels_layout = gui.ScrollableVert()
 
+        self._left_panel = LeftPanel(self)
         self._settings_panel = SettingsPanel(self)
         self._models_panel = ModelsPanel(self)
         self._configuration_panel = ConfigurationPanel(self)
@@ -53,6 +55,8 @@ class App:
         # (position + size) of every child correctly. After the callback is
         # done the window will layout the grandchildren.
         w.set_on_layout(self._on_layout)
+        w.add_child(self._left_panel._db_tree_section)
+        w.add_child(self._left_panel._properties_section)
         w.add_child(self._panels_layout)
 
         p = self._panels_layout
@@ -123,21 +127,45 @@ class App:
         em = layout_context.theme.font_size
         width = 17 * em
 
-        # self._scene_widget.frame = gui.Rect(r.x, r.y, r.get_right() - width, r.height)
-        # self._scene.frame = gui.Rect(r.x, r.y, r.get_right() - width, r.height)
+        # Position the right panels layout (existing panels)
         self._panels_layout.frame = gui.Rect(
             r.get_right() - width, r.y, width, r.height
         )
 
+        # Position the left panel
+        self._left_panel._left_panel.frame = gui.Rect(
+            r.x, r.y, width, r.height
+        )
+        
+        # Calculate margins and sizes for the containers
+        margin_x = width * 0.05  # 5% margin on each side (10% total)
+        container_width = width * 0.9  # 90% width
+        container_height = r.height * 0.5  # 50% height
+        margin_y = (r.height - 2 * container_height) / 3  # Equal spacing between containers
+        
+        # Position the DB Tree section (upper half)
+        db_tree_x = r.x + margin_x
+        db_tree_y = r.y + margin_y
+        self._left_panel._db_tree_section.frame = gui.Rect(
+            db_tree_x, db_tree_y, container_width, container_height
+        )
+        
+        # Position the Properties section (lower half)
+        properties_x = r.x + margin_x
+        properties_y = r.y + margin_y + container_height + margin_y
+        self._left_panel._properties_section.frame = gui.Rect(
+            properties_x, properties_y, container_width, container_height
+        )
+
         scene_state = "normal"
         if 0 in self._scenes_selected and len(self._scenes_selected) == 1:
-            scene_width = r.get_right() - width
+            scene_width = r.get_right() - 2 * width  # Account for both left and right panels
             scene_state = "processed_only"
         elif 0 in self._scenes_selected and len(self._scenes_selected) > 1:
-            scene_width = (r.get_right() - width) / 2
+            scene_width = (r.get_right() - 2 * width) / 2  # Account for both panels
             scene_state = "normal"
         else:
-            scene_width = r.get_right() - width
+            scene_width = r.get_right() - 2 * width  # Account for both panels
             scene_state = "models_only"
 
         visible__models_count = 0
@@ -150,19 +178,19 @@ class App:
 
             if i == 0 and scene_state == "processed_only":
                 height = r.height
-                s.frame = gui.Rect(r.x, r.y, scene_width, height)
+                s.frame = gui.Rect(r.x + width, r.y, scene_width, height)  # Start after left panel
             elif i == 0 and scene_state == "normal":
                 height = r.height
-                s.frame = gui.Rect(r.x + scene_width, r.y, scene_width, height)
+                s.frame = gui.Rect(r.x + width + scene_width, r.y, scene_width, height)  # Start after left panel
             elif i != 0 and scene_state == "normal":
                 height = r.height / (len(self._scenes_selected) - 1)
                 start_y = r.y + (visible__models_count * height)
-                s.frame = gui.Rect(r.x, start_y, scene_width, height)
+                s.frame = gui.Rect(r.x + width, start_y, scene_width, height)  # Start after left panel
                 visible__models_count += 1
             elif i != 0 and scene_state == "models_only":
                 height = r.height / len(self._scenes_selected)
                 start_y = r.y + (visible__models_count * height)
-                s.frame = gui.Rect(r.x, start_y, scene_width, height)
+                s.frame = gui.Rect(r.x + width, start_y, scene_width, height)  # Start after left panel
                 visible__models_count += 1
 
         height = min(
