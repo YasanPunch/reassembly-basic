@@ -289,7 +289,7 @@ def segment_mesh_and_analyze_curvature(mesh, k=10, segmentation_params=None):
     return overall_stats
 
 
-def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segmented Curvature Analysis"):
+def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segmented Curvature Analysis", region_offset=0.1):
     """
     Visualize curvature analysis for each segmented region.
     
@@ -297,6 +297,7 @@ def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segme
         mesh (o3d.geometry.TriangleMesh): Original mesh
         segmentation_results (dict): Results from segment_mesh_and_analyze_curvature
         window_name (str): Name of the visualization window
+        region_offset (float): Percentage of region to offset inward to avoid edge artifacts
     """
     region_results = segmentation_results['region_results']
     
@@ -369,22 +370,19 @@ def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segme
                 if region_vertex_idx < len(region_bending_energies):
                     full_mesh_bending_energies[vertex_idx] = region_bending_energies[region_vertex_idx]
         
-        # Use the existing visualize_bending_energy function with the full mesh
-        # But we need to modify it slightly to handle the grey regions
-        visualize_bending_energy_with_grey_regions(
-            viz_mesh, 
-            full_mesh_bending_energies, 
-            region_vertices_set,
-            f"{window_name} - Region {i+1}"
-        )
-        
         # Detect and analyze curvature patches
         print(f"\n--- Analyzing Curvature Patches for Region {i+1} ---")
         patch_info = detect_curvature_patches(
             viz_mesh, 
             full_mesh_bending_energies, 
-            region_vertices_set
+            region_vertices_set,
+            offset_percentage=region_offset
         )
+        
+        # Get the offset region for visualization
+        offset_region_set = None
+        if region_offset > 0:
+            offset_region_set = offset_region_boundaries(viz_mesh, region_vertices_set, region_offset)
         
         # Print patch statistics
         print(f"Patch Analysis Results:")
@@ -392,13 +390,22 @@ def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segme
         print(f"  Number of patches: {patch_info['num_patches']}")
         print(f"  Total high curvature vertices: {patch_info['total_high_curvature_vertices']}")
         if patch_info['num_patches'] > 0:
-            # print(f"  Patch sizes: {patch_info['patch_sizes']}")
             print(f"  Average patch size: {patch_info['avg_patch_size']:.1f} vertices")
             print(f"  Largest patch: {patch_info['max_patch_size']} vertices")
             print(f"  Smallest patch: {patch_info['min_patch_size']} vertices")
         
         # Store patch information in region results
         region_result['patch_info'] = patch_info
+        
+        # Use the existing visualize_bending_energy function with the full mesh
+        # But we need to modify it slightly to handle the grey regions
+        visualize_bending_energy_with_grey_regions(
+            viz_mesh, 
+            full_mesh_bending_energies, 
+            region_vertices_set,
+            f"{window_name} - Region {i+1}",
+            offset_region_set
+        )
         
         # Visualize patches if any exist
         if patch_info['num_patches'] > 0:
@@ -408,11 +415,12 @@ def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segme
                 full_mesh_bending_energies,
                 region_vertices_set,
                 patch_info,
-                f"{window_name} - Patches - Region {i+1}"
+                f"{window_name} - Patches - Region {i+1}",
+                offset_region_set
             )
 
 
-def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_vertices_set, window_name="Bending Energy Visualization"):
+def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_vertices_set, window_name="Bending Energy Visualization", offset_region_set=None):
     """
     Visualize the bending energy values on the mesh using color coding, with non-region vertices in grey.
     
@@ -421,13 +429,13 @@ def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_ve
         bending_energies (numpy.ndarray): Bending energy values for each vertex (0 for non-region vertices)
         region_vertices_set (set): Set of vertex indices that belong to the current region
         window_name (str): Name of the visualization window
+        offset_region_set (set): Set of vertex indices for the offset region (if None, no offset is shown)
     """
     # Use percentile-based normalization to handle extreme outliers (only for non-zero values)
     non_zero_energies = bending_energies[bending_energies > 0]
     
     if len(non_zero_energies) > 0:
         percentile_95 = np.percentile(non_zero_energies, 95)
-        percentile_99 = np.percentile(non_zero_energies, 99)
         
         # Create a more robust normalization that handles outliers
         if np.max(non_zero_energies) > np.min(non_zero_energies):
@@ -439,16 +447,19 @@ def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_ve
     else:
         normalized_energies = np.zeros_like(bending_energies)
         percentile_95 = 0
-        percentile_99 = 0
     
-    # Create color map (red for high energy, blue for low energy, grey for non-region)
+    # Create color map (red for high energy, blue for low energy, grey for non-region, black for offset)
     colors = np.zeros((len(normalized_energies), 3))
     
     for i, (energy, normalized_energy) in enumerate(zip(bending_energies, normalized_energies)):
         if i in region_vertices_set and energy > 0:
-            # Region vertex: color based on energy
-            colors[i, 0] = normalized_energy  # Red channel (high energy)
-            colors[i, 2] = 1.0 - normalized_energy  # Blue channel (low energy)
+            if offset_region_set is not None and i not in offset_region_set:
+                # Vertex in original region but not in offset region (boundary area) - color black
+                colors[i, :] = 0.0  # Black color
+            else:
+                # Region vertex: color based on energy
+                colors[i, 0] = normalized_energy  # Red channel (high energy)
+                colors[i, 2] = 1.0 - normalized_energy  # Blue channel (low energy)
         else:
             # Non-region vertex: grey
             colors[i, :] = 0.5  # Grey color
@@ -466,11 +477,14 @@ def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_ve
         print(f"Max bending energy: {np.max(non_zero_energies):.6f}")
         print(f"Mean bending energy: {np.mean(non_zero_energies):.6f}")
         print(f"95th percentile: {percentile_95:.6f}")
-        print(f"99th percentile: {percentile_99:.6f}")
         print(f"Upper bound used for normalization: {min(percentile_95, np.max(non_zero_energies)):.6f}")
     else:
         print("No bending energy data for this region")
-    print("Color coding: Red = High curvature, Blue = Low curvature, Grey = Other regions")
+    
+    if offset_region_set is not None:
+        print("Color coding: Red = High curvature, Blue = Low curvature, Black = Excluded boundary, Grey = Other regions")
+    else:
+        print("Color coding: Red = High curvature, Blue = Low curvature, Grey = Other regions")
     print("Note: Using 95th percentile normalization to handle extreme outliers")
     
     o3d.visualization.draw_geometries(
@@ -483,7 +497,86 @@ def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_ve
     )
 
 
-def detect_curvature_patches(mesh, bending_energies, region_vertices_set, percentile_threshold=95):
+def offset_region_boundaries(mesh, region_vertices_set, offset_percentage=0.1):
+    """
+    Offset region boundaries inward to avoid edge artifacts.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        region_vertices_set (set): Set of vertex indices that belong to the current region
+        offset_percentage (float): Percentage of region to offset inward (default: 0.1 = 10%)
+    
+    Returns:
+        set: Set of vertex indices for the offset region (smaller than original)
+    """
+    if len(region_vertices_set) == 0:
+        return set()
+    
+    # Build adjacency graph for the mesh
+    vertices = np.asarray(mesh.vertices)
+    faces = np.asarray(mesh.triangles)
+    
+    # Create vertex adjacency dictionary
+    vertex_adjacency = {}
+    for face in faces:
+        for i in range(3):
+            v1, v2 = face[i], face[(i+1)%3]
+            if v1 not in vertex_adjacency:
+                vertex_adjacency[v1] = set()
+            if v2 not in vertex_adjacency:
+                vertex_adjacency[v2] = set()
+            vertex_adjacency[v1].add(v2)
+            vertex_adjacency[v2].add(v1)
+    
+    # Find boundary vertices (vertices that have neighbors outside the region)
+    boundary_vertices = set()
+    for vertex_idx in region_vertices_set:
+        if vertex_idx in vertex_adjacency:
+            for neighbor in vertex_adjacency[vertex_idx]:
+                if neighbor not in region_vertices_set:
+                    boundary_vertices.add(vertex_idx)
+                    break
+    
+    # Calculate how many layers to remove
+    total_vertices = len(region_vertices_set)
+    vertices_to_remove = int(total_vertices * offset_percentage)
+    
+    if vertices_to_remove == 0:
+        return region_vertices_set
+    
+    # Remove boundary vertices in layers
+    offset_region = region_vertices_set.copy()
+    removed_count = 0
+    
+    while removed_count < vertices_to_remove and len(offset_region) > 0:
+        # Find current boundary vertices
+        current_boundary = set()
+        for vertex_idx in offset_region:
+            if vertex_idx in vertex_adjacency:
+                for neighbor in vertex_adjacency[vertex_idx]:
+                    if neighbor not in offset_region:
+                        current_boundary.add(vertex_idx)
+                        break
+        
+        if len(current_boundary) == 0:
+            break  # No more boundary vertices to remove
+        
+        # Remove boundary vertices (up to the target number)
+        vertices_to_remove_this_layer = min(len(current_boundary), vertices_to_remove - removed_count)
+        vertices_to_remove_list = list(current_boundary)[:vertices_to_remove_this_layer]
+        
+        for vertex_idx in vertices_to_remove_list:
+            offset_region.remove(vertex_idx)
+            removed_count += 1
+    
+    print(f"Region offset: Removed {removed_count} boundary vertices ({removed_count/len(region_vertices_set)*100:.1f}% of region)")
+    print(f"Original region size: {len(region_vertices_set)} vertices")
+    print(f"Offset region size: {len(offset_region)} vertices")
+    
+    return offset_region
+
+
+def detect_curvature_patches(mesh, bending_energies, region_vertices_set, percentile_threshold=95, offset_percentage=0.1):
     """
     Detect and count patches of high curvature within a region.
     
@@ -492,19 +585,29 @@ def detect_curvature_patches(mesh, bending_energies, region_vertices_set, percen
         bending_energies (numpy.ndarray): Bending energy values for each vertex
         region_vertices_set (set): Set of vertex indices that belong to the current region
         percentile_threshold (float): Percentile threshold for high curvature (default: 95)
+        offset_percentage (float): Percentage of region to offset inward to avoid edge artifacts (default: 0.1)
     
     Returns:
         dict: Dictionary containing patch information
     """
-    # Get non-zero energies for the region
-    region_energies = [bending_energies[i] for i in region_vertices_set if bending_energies[i] > 0]
+    # Offset region boundaries to avoid edge artifacts
+    if offset_percentage > 0:
+        print(f"Offsetting region boundaries by {offset_percentage*100:.1f}% to avoid edge artifacts...")
+        analysis_region = offset_region_boundaries(mesh, region_vertices_set, offset_percentage)
+    else:
+        analysis_region = region_vertices_set
+    
+    # Get non-zero energies for the offset region
+    region_energies = [bending_energies[i] for i in analysis_region if bending_energies[i] > 0]
     
     if len(region_energies) == 0:
         return {
             'num_patches': 0,
             'patches': [],
             'high_curvature_threshold': 0,
-            'high_curvature_vertices': set()
+            'high_curvature_vertices': set(),
+            'analysis_region_size': len(analysis_region),
+            'original_region_size': len(region_vertices_set)
         }
     
     # Use the same normalization as the visualization function
@@ -524,7 +627,7 @@ def detect_curvature_patches(mesh, bending_energies, region_vertices_set, percen
         red_threshold = 0.5
         high_curvature_vertices = set()
         
-        for i, vertex_idx in enumerate(region_vertices_set):
+        for i, vertex_idx in enumerate(analysis_region):
             if bending_energies[vertex_idx] > 0:
                 # Find the corresponding normalized energy
                 energy_idx = region_energies.index(bending_energies[vertex_idx])
@@ -541,7 +644,9 @@ def detect_curvature_patches(mesh, bending_energies, region_vertices_set, percen
             'num_patches': 0,
             'patches': [],
             'high_curvature_threshold': upper_bound,
-            'high_curvature_vertices': high_curvature_vertices
+            'high_curvature_vertices': high_curvature_vertices,
+            'analysis_region_size': len(analysis_region),
+            'original_region_size': len(region_vertices_set)
         }
     
     # Build adjacency graph for the mesh
@@ -601,11 +706,14 @@ def detect_curvature_patches(mesh, bending_energies, region_vertices_set, percen
         'avg_patch_size': np.mean(patch_sizes) if patch_sizes else 0,
         'max_patch_size': np.max(patch_sizes) if patch_sizes else 0,
         'min_patch_size': np.min(patch_sizes) if patch_sizes else 0,
-        'red_threshold_used': 0.5
+        'red_threshold_used': 0.5,
+        'analysis_region_size': len(analysis_region),
+        'original_region_size': len(region_vertices_set),
+        'offset_percentage': offset_percentage
     }
 
 
-def visualize_curvature_patches(mesh, bending_energies, region_vertices_set, patch_info, window_name="Curvature Patches"):
+def visualize_curvature_patches(mesh, bending_energies, region_vertices_set, patch_info, window_name="Curvature Patches", offset_region_set=None):
     """
     Visualize curvature patches with different colors for each patch.
     
@@ -615,6 +723,7 @@ def visualize_curvature_patches(mesh, bending_energies, region_vertices_set, pat
         region_vertices_set (set): Set of vertex indices that belong to the current region
         patch_info (dict): Patch information from detect_curvature_patches
         window_name (str): Name of the visualization window
+        offset_region_set (set): Set of vertex indices for the offset region (if None, no offset is shown)
     """
     # Use percentile-based normalization to handle extreme outliers (only for non-zero values)
     non_zero_energies = bending_energies[bending_energies > 0]
@@ -671,18 +780,22 @@ def visualize_curvature_patches(mesh, bending_energies, region_vertices_set, pat
     # Apply colors
     for i, (energy, normalized_energy) in enumerate(zip(bending_energies, normalized_energies)):
         if i in region_vertices_set and energy > 0:
-            # Check if this vertex belongs to a patch
-            vertex_in_patch = False
-            for patch_idx, patch in enumerate(patch_info['patches']):
-                if i in patch:
-                    colors[i] = patch_colors[patch_idx]
-                    vertex_in_patch = True
-                    break
-            
-            if not vertex_in_patch:
-                # Region vertex but not in a patch: use standard blue-red coloring
-                colors[i, 0] = normalized_energy  # Red channel (high energy)
-                colors[i, 2] = 1.0 - normalized_energy  # Blue channel (low energy)
+            if offset_region_set is not None and i not in offset_region_set:
+                # Vertex in original region but not in offset region (boundary area) - color black
+                colors[i, :] = 0.0  # Black color
+            else:
+                # Check if this vertex belongs to a patch
+                vertex_in_patch = False
+                for patch_idx, patch in enumerate(patch_info['patches']):
+                    if i in patch:
+                        colors[i] = patch_colors[patch_idx]
+                        vertex_in_patch = True
+                        break
+                
+                if not vertex_in_patch:
+                    # Region vertex but not in a patch: use standard blue-red coloring
+                    colors[i, 0] = normalized_energy  # Red channel (high energy)
+                    colors[i, 2] = 1.0 - normalized_energy  # Blue channel (low energy)
         else:
             # Non-region vertex: grey
             colors[i, :] = 0.5  # Grey color
@@ -699,11 +812,14 @@ def visualize_curvature_patches(mesh, bending_energies, region_vertices_set, pat
     print(f"Number of patches: {patch_info['num_patches']}")
     print(f"Total high curvature vertices: {patch_info['total_high_curvature_vertices']}")
     if patch_info['num_patches'] > 0:
-        # print(f"Patch sizes: {patch_info['patch_sizes']}")
         print(f"Average patch size: {patch_info['avg_patch_size']:.1f}")
         print(f"Largest patch: {patch_info['max_patch_size']} vertices")
         print(f"Smallest patch: {patch_info['min_patch_size']} vertices")
-    print("Color coding: Different colors = Different patches, Blue-Red = Standard curvature, Grey = Other regions")
+    
+    if offset_region_set is not None:
+        print("Color coding: Different colors = Different patches, Blue-Red = Standard curvature, Black = Excluded boundary, Grey = Other regions")
+    else:
+        print("Color coding: Different colors = Different patches, Blue-Red = Standard curvature, Grey = Other regions")
     
     o3d.visualization.draw_geometries(
         [mesh, coordinate_frame],
@@ -779,6 +895,12 @@ def main():
         default=5000,
         help="Maximum region size for segmentation (default: 5000 faces)"
     )
+    parser.add_argument(
+        "--region-offset",
+        type=float,
+        default=0.2,
+        help="Percentage of region to offset inward to avoid edge artifacts (default: 0.1 = 10%)"
+    )
     
     args = parser.parse_args()
     
@@ -826,7 +948,8 @@ def main():
                         visualize_segmented_curvature(
                             geometry,
                             segmentation_results,
-                            f"Segmented Curvature - Model {i+1}"
+                            f"Segmented Curvature - Model {i+1}",
+                            args.region_offset
                         )
                     else:
                         # Regular single-region analysis
