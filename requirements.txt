@@ -5,3 +5,4 @@ trimesh>=3.0 # For mesh processing
 matplotlib # For visualization
 networkx # For graph operations
 rtree # For R-tree spatial indexing
+scikit-learn # For nearest neighbor calculations
