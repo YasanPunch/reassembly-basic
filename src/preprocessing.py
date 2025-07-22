@@ -59,7 +59,41 @@ def preprocess_fragment(fragment_info, params, viz_collector=None):
         voxel_size = params.get("voxel_downsample_size", 0.01)
         if voxel_size > 0 and len(pcd.points) > 0:
             pcd_downsampled = pcd.voxel_down_sample(voxel_size)
+            print(f"      Surface {len(features_list)+1}: Downsampled from {len(pcd.points)} to {len(pcd_downsampled.points)} points.")
             pcd = pcd_downsampled
+            
+            # DEBUG: VISUALIZE VOXEL DOWNSAMPLED POINT CLOUD FOR THIS SURFACE
+            if params.get('debug_voxel_downsampling', False):
+                print(f"    [DEBUG] Visualizing voxel downsampled point cloud for surface {len(features_list)+1} of {fragment_name} ({len(pcd.points)} points)")
+                
+                # Create visualization geometries
+                vis_geoms = []
+                
+                # Original mesh in gray
+                original_mesh_vis = copy.deepcopy(original_mesh)
+                original_mesh_vis.paint_uniform_color([0.8, 0.8, 0.8])
+                vis_geoms.append(original_mesh_vis)
+                
+                # Add wireframe for better structure visibility
+                wireframe = o3d.geometry.LineSet.create_from_triangle_mesh(original_mesh_vis)
+                wireframe.paint_uniform_color([0.5, 0.5, 0.5])
+                vis_geoms.append(wireframe)
+                
+                # Current fracture surface in green
+                surf_vis = copy.deepcopy(surf)
+                surf_vis.paint_uniform_color([0.0, 1.0, 0.0])  # Green for fracture surface
+                vis_geoms.append(surf_vis)
+                
+                # Downsampled point cloud in red
+                if pcd.has_points():
+                    pcd_vis = copy.deepcopy(pcd)
+                    pcd_vis.paint_uniform_color([1.0, 0.0, 0.0])  # Red for downsampled points
+                    vis_geoms.append(pcd_vis)
+                
+                # Display with informative window title
+                window_title = f"[DEBUG] Voxel Downsampling: {fragment_name} Surface {len(features_list)+1} (Gray=Original, Green=Surface, Red=Downsampled Points)"
+                o3d.visualization.draw_geometries(vis_geoms, window_name=window_title)
+        
         if not pcd.has_points():
             continue
         # Estimate normals
@@ -158,6 +192,45 @@ def preprocess_fragment(fragment_info, params, viz_collector=None):
         if viz_collector is not None:
              viz_collector.append({'step': 'downsampling_failed', 'name': fragment_name, 'original_index': original_index})
         return None, fracture_surface_mesh_o3d # Return the original fracture_surface_mesh_o3d
+    
+    # DEBUG: VISUALIZE VOXEL DOWNSAMPLED POINT CLOUD BEFORE FPFH
+    if params.get('debug_voxel_downsampling', False):
+        print(f"    [DEBUG] Visualizing voxel downsampled point cloud for {fragment_name} ({len(pcd.points)} points)")
+        
+        # Create visualization geometries
+        vis_geoms = []
+        
+        # Original mesh in gray wireframe
+        original_mesh_vis = copy.deepcopy(original_mesh)
+        original_mesh_vis.paint_uniform_color([0.8, 0.8, 0.8])
+        vis_geoms.append(original_mesh_vis)
+        
+        # Add wireframe for better structure visibility
+        wireframe = o3d.geometry.LineSet.create_from_triangle_mesh(original_mesh_vis)
+        wireframe.paint_uniform_color([0.5, 0.5, 0.5])
+        vis_geoms.append(wireframe)
+        
+        # Downsampled point cloud in red
+        if pcd.has_points():
+            pcd_vis = copy.deepcopy(pcd)
+            pcd_vis.paint_uniform_color([1.0, 0.0, 0.0])  # Red for downsampled points
+            vis_geoms.append(pcd_vis)
+        
+        # Show fracture surfaces if available
+        if isinstance(fracture_surfaces, list):
+            for i, surf in enumerate(fracture_surfaces):
+                if surf and surf.has_triangles():
+                    surf_vis = copy.deepcopy(surf)
+                    surf_vis.paint_uniform_color([0.0, 1.0, 0.0])  # Green for fracture surfaces
+                    vis_geoms.append(surf_vis)
+        elif fracture_surfaces and fracture_surfaces.has_triangles():
+            surf_vis = copy.deepcopy(fracture_surfaces)
+            surf_vis.paint_uniform_color([0.0, 1.0, 0.0])  # Green for fracture surfaces
+            vis_geoms.append(surf_vis)
+        
+        # Display with informative window title
+        window_title = f"[DEBUG] Voxel Downsampling: {fragment_name} (Gray=Original, Green=Fracture Surfaces, Red=Downsampled Points)"
+        o3d.visualization.draw_geometries(vis_geoms, window_name=window_title)
         
     if viz_collector is not None:
         viz_collector.append({

@@ -14,6 +14,8 @@
   "// --- II. Segmentation (New Parameters based on Region Growing) ---": null,
   "visualize_segmentation": true,
   "// Enables interactive selection of segments from extract_fracture_surface_mesh": null,
+  "debug_voxel_downsampling": true,
+  "// Enables visualization of voxel downsampled point clouds before FPFH feature extraction": null,
   "max_angle_deviation_deg": 30.0,
   "// Max angle (degrees) for region growing normal similarity (e.g., 20-45)": null,
   "min_region_area_percentage": 2.0,
