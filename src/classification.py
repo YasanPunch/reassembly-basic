@@ -105,8 +105,33 @@ def main():
         action="store_true",
         help="Use supervised learning to optimize parameters and classify fracture surfaces"
     )
+    parser.add_argument(
+        "--use-existing-model",
+        action="store_true",
+        help="Use existing trained model instead of training a new one (requires --supervised-learning)"
+    )
+    parser.add_argument(
+        "--no-save-model",
+        action="store_true",
+        help="Don't save the trained model globally for reuse (default: save model)"
+    )
+    parser.add_argument(
+        "--clear-model",
+        action="store_true",
+        help="Clear any existing trained model from memory"
+    )
     
     args = parser.parse_args()
+    
+    # Clear model if requested
+    if args.clear_model:
+        from supervised_learning import clear_global_model, has_global_model
+        clear_global_model()
+        print("✓ Cleared any existing trained model from memory")
+        if has_global_model():
+            print("❌ Failed to clear model")
+        else:
+            print("✓ Model cleared successfully")
     
     print("3D Model Loader and Visualizer")
     print("=" * 40)
@@ -120,6 +145,20 @@ def main():
     
     if geometries:
         print(f"\nSuccessfully loaded {len(geometries)} models")
+        
+        # Check for existing model if requested
+        if args.supervised_learning and args.use_existing_model:
+            from supervised_learning import has_global_model, get_global_model
+            if has_global_model():
+                model, params, metadata = get_global_model()
+                print(f"\n✓ Found existing trained model:")
+                print(f"  k={params[0]}, r={params[1]:.6f} ({params[2]}x avg edge length)")
+                if metadata:
+                    print(f"  Trained on: {metadata.get('training_date', 'Unknown')}")
+                    print(f"  Training samples: {metadata.get('num_training_samples', 'Unknown')}")
+            else:
+                print(f"\n❌ No existing trained model found. Will train a new model.")
+                args.use_existing_model = False
         
         if not args.no_curvature_analysis:
             # Analyze curvature for each mesh (default behavior)
@@ -152,7 +191,25 @@ def main():
                             
                             # Visualize each region
                             if args.supervised_learning:
-                                run_supervised_fracture_detection(geometry, segmentation_results)
+                                # For first model: train and save model
+                                # For subsequent models: use existing model
+                                if i == 0:
+                                    # First model - train new model
+                                    save_model = not args.no_save_model
+                                    use_existing = False
+                                    print(f"\n🔄 Training new classification model on first 3D model...")
+                                else:
+                                    # Subsequent models - use existing model
+                                    save_model = False
+                                    use_existing = True
+                                    print(f"\n🔄 Using existing trained model for 3D model {i+1}...")
+                                
+                                run_supervised_fracture_detection(
+                                    geometry, 
+                                    segmentation_results,
+                                    use_existing_model=use_existing,
+                                    save_model=save_model
+                                )
                             else:
                                 visualize_segmented_roughness(
                                     geometry,
@@ -169,7 +226,25 @@ def main():
                             
                             # Visualize each region
                             if args.supervised_learning:
-                                run_supervised_fracture_detection(geometry, segmentation_results)
+                                # For first model: train and save model
+                                # For subsequent models: use existing model
+                                if i == 0:
+                                    # First model - train new model
+                                    save_model = not args.no_save_model
+                                    use_existing = False
+                                    print(f"\n🔄 Training new classification model on first 3D model...")
+                                else:
+                                    # Subsequent models - use existing model
+                                    save_model = False
+                                    use_existing = True
+                                    print(f"\n🔄 Using existing trained model for 3D model {i+1}...")
+                                
+                                run_supervised_fracture_detection(
+                                    geometry, 
+                                    segmentation_results,
+                                    use_existing_model=use_existing,
+                                    save_model=save_model
+                                )
                             else:
                                 visualize_segmented_curvature(
                                     geometry,

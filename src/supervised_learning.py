@@ -5,6 +5,7 @@ This module provides functionality for:
 1. Interactive selection of fractured and non-fractured surfaces
 2. Parameter optimization using Random Forest classification
 3. Automatic threshold determination for fracture detection
+4. Model persistence and reuse across multiple 3D models
 """
 
 import numpy as np
@@ -12,6 +13,33 @@ import open3d as o3d
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
 from roughness_analysis import calculate_surface_roughness_characteristic
+
+# Global model storage for reuse across multiple 3D models
+_global_trained_model = None
+_global_optimal_params = None
+_global_model_metadata = None
+
+def get_global_model():
+    """Get the globally stored trained model."""
+    return _global_trained_model, _global_optimal_params, _global_model_metadata
+
+def set_global_model(model, params, metadata):
+    """Set the globally stored trained model."""
+    global _global_trained_model, _global_optimal_params, _global_model_metadata
+    _global_trained_model = model
+    _global_optimal_params = params
+    _global_model_metadata = metadata
+
+def clear_global_model():
+    """Clear the globally stored trained model."""
+    global _global_trained_model, _global_optimal_params, _global_model_metadata
+    _global_trained_model = None
+    _global_optimal_params = None
+    _global_model_metadata = None
+
+def has_global_model():
+    """Check if a global model is available."""
+    return _global_trained_model is not None and _global_optimal_params is not None
 
 class FractureSurfaceSelector:
     def __init__(self, mesh, segmentation_results):
@@ -304,8 +332,12 @@ class ParameterOptimizer:
             scores = cross_val_score(rf, X, y, cv=n_folds, scoring='accuracy')
             mean_accuracy = scores.mean()
             
+            # Fit the model with all training data for later use
+            fitted_rf = RandomForestClassifier(n_estimators=100, random_state=42)
+            fitted_rf.fit(X, y)
+            
             print(f"  → CV accuracy: {mean_accuracy:.4f} ({n_folds}-fold)")
-            return mean_accuracy, rf
+            return mean_accuracy, fitted_rf
             
         except Exception as e:
             print(f"  → Error evaluating k={k}, r={r}: {e}")
@@ -496,9 +528,54 @@ class ParameterOptimizer:
         }
 
 class FractureClassifier:
-    def __init__(self, optimal_params, trained_model):
+    def __init__(self, optimal_params=None, trained_model=None):
+        if optimal_params is not None and trained_model is not None:
+            # Use provided trained model
+            self.optimal_k, self.optimal_r, self.optimal_r_factor = optimal_params
+            self.model = trained_model
+            self.is_trained = True
+        else:
+            # Initialize for training
+            self.optimal_k = None
+            self.optimal_r = None
+            self.optimal_r_factor = None
+            self.model = None
+            self.is_trained = False
+    
+    def use_pretrained_model(self, optimal_params, trained_model, metadata=None):
+        """Use a pre-trained model for classification."""
         self.optimal_k, self.optimal_r, self.optimal_r_factor = optimal_params
         self.model = trained_model
+        self.is_trained = True
+        self.metadata = metadata
+        
+        # Validate that the model is properly fitted
+        if not hasattr(self.model, 'classes_') or not hasattr(self.model, 'estimators_'):
+            print(f"❌ WARNING: Model appears to be unfitted!")
+            print(f"  Model has classes_: {hasattr(self.model, 'classes_')}")
+            print(f"  Model has estimators_: {hasattr(self.model, 'estimators_')}")
+            self.is_trained = False
+            return False
+        
+        print(f"✓ Using pre-trained model:")
+        print(f"  k={self.optimal_k}, r={self.optimal_r:.6f} ({self.optimal_r_factor}x avg edge length)")
+        print(f"  Model is fitted: {self.is_trained}")
+        print(f"  Number of estimators: {len(self.model.estimators_)}")
+        print(f"  Classes: {self.model.classes_}")
+        if metadata:
+            print(f"  Trained on: {metadata.get('training_date', 'Unknown')}")
+            training_accuracy = metadata.get('training_accuracy', 'Unknown')
+            if isinstance(training_accuracy, (int, float)):
+                print(f"  Training accuracy: {training_accuracy:.4f}")
+            else:
+                print(f"  Training accuracy: {training_accuracy}")
+            print(f"  Training samples: {metadata.get('num_training_samples', 'Unknown')}")
+        
+        return True
+    
+    def is_model_ready(self):
+        """Check if the model is ready for classification."""
+        return self.is_trained and self.model is not None
     def classify_regions(self, mesh, segmentation_results):
         print(f"\nClassifying regions using optimized parameters:")
         print(f"  k={self.optimal_k}, r={self.optimal_r:.6f} ({self.optimal_r_factor}x avg edge length)")
@@ -868,15 +945,87 @@ class FractureClassifier:
             'agreement_rate': agreement_rate if total_labeled > 0 else 0.0
         }
 
-def run_supervised_fracture_detection(mesh, segmentation_results):
+def run_supervised_fracture_detection(mesh, segmentation_results, use_existing_model=False, save_model=True):
+    """
+    Main function to run supervised fracture detection pipeline.
+    
+    Args:
+        mesh: Open3D mesh to analyze
+        segmentation_results: Results from mesh segmentation
+        use_existing_model: If True, use existing trained model instead of training new one
+        save_model: If True, save the trained model globally for reuse
+    """
     print("\n" + "="*80)
     print("SUPERVISED FRACTURE DETECTION")
     print("="*80)
+    
+    # Check if we should use existing model
+    if use_existing_model and has_global_model():
+        print("Using existing trained model...")
+        global_model, global_params, global_metadata = get_global_model()
+        
+        # Create classifier with pre-trained model
+        classifier = FractureClassifier()
+        if not classifier.use_pretrained_model(global_params, global_model, global_metadata):
+            print("❌ Failed to load pre-trained model. Falling back to training new model...")
+            # Clear the corrupted model and fall back to training
+            clear_global_model()
+            return run_supervised_fracture_detection(mesh, segmentation_results, use_existing_model=False, save_model=save_model)
+        
+        # Classify regions
+        classifications = classifier.classify_regions(mesh, segmentation_results)
+        
+        # Visualize results
+        print(f"\nVisualizing classification results...")
+        viz_results = classifier.visualize_classification_results(mesh, segmentation_results, classifications)
+        
+        # Print results
+        print(f"\n" + "="*80)
+        print("CLASSIFICATION RESULTS (Using Pre-trained Model)")
+        print("="*80)
+        
+        fracture_regions = []
+        non_fracture_regions = []
+        
+        for classification in classifications:
+            region_id = classification['region_id']
+            is_fracture = classification['is_fracture']
+            probability = classification['fracture_probability']
+            
+            if is_fracture:
+                fracture_regions.append(region_id)
+                print(f"Region {region_id+1}: FRACTURED (probability: {probability:.3f})")
+            else:
+                non_fracture_regions.append(region_id)
+                print(f"Region {region_id+1}: Non-fractured (probability: {probability:.3f})")
+        
+        print(f"\nSummary:")
+        print(f"  Fractured regions: {len(fracture_regions)}")
+        print(f"  Non-fractured regions: {len(non_fracture_regions)}")
+        print(f"  Total regions: {len(classifications)}")
+        
+        results = {
+            'optimal_parameters': global_params,
+            'classifications': classifications,
+            'fracture_regions': fracture_regions,
+            'non_fracture_regions': non_fracture_regions,
+            'used_existing_model': True,
+            'model_metadata': global_metadata
+        }
+        
+        return results
+    
+    # Train new model (original workflow)
+    print("Training new classification model...")
+    
+    # Step 1: Interactive surface selection
     selector = FractureSurfaceSelector(mesh, segmentation_results)
     if not selector.start_interactive_selection():
         print("Surface selection failed or was cancelled.")
         return None
+    
     labeled_data = selector.get_labeled_data()
+    
     # Step 2: Parameter optimization
     optimizer = ParameterOptimizer(mesh, segmentation_results, labeled_data)
     optimization_result = optimizer.optimize_parameters()
@@ -903,32 +1052,69 @@ def run_supervised_fracture_detection(mesh, segmentation_results):
     print(f"\nVisualizing label comparison...")
     comparison_results = classifier.visualize_label_comparison(mesh, segmentation_results, classifications, labeled_data)
     
-    # Step 5: Print results
+    # Step 5: Save model globally if requested
+    if save_model:
+        # Create metadata for the model
+        import datetime
+        metadata = {
+            'training_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'training_accuracy': optimization_result[1].score if hasattr(optimization_result[1], 'score') else 0.0,
+            'num_training_samples': len(labeled_data['fracture_regions']) + len(labeled_data['non_fracture_regions']),
+            'num_fracture_samples': len(labeled_data['fracture_regions']),
+            'num_non_fracture_samples': len(labeled_data['non_fracture_regions']),
+            'mesh_vertices': len(np.asarray(mesh.vertices)),
+            'mesh_faces': len(np.asarray(mesh.triangles)),
+            'segmentation_regions': len(segmentation_results['region_results'])
+        }
+        
+        # Verify model is fitted before saving
+        if hasattr(trained_model, 'classes_') and hasattr(trained_model, 'estimators_'):
+            print(f"\n✓ Model is properly fitted before saving:")
+            print(f"  Number of estimators: {len(trained_model.estimators_)}")
+            print(f"  Classes: {trained_model.classes_}")
+            set_global_model(trained_model, optimal_params, metadata)
+            print(f"✓ Model saved globally for reuse on other 3D models")
+        else:
+            print(f"\n❌ ERROR: Model is not properly fitted! Cannot save.")
+            print(f"  Model has classes_: {hasattr(trained_model, 'classes_')}")
+            print(f"  Model has estimators_: {hasattr(trained_model, 'estimators_')}")
+            return None
+    
+    # Step 6: Print results
     print(f"\n" + "="*80)
     print("CLASSIFICATION RESULTS")
     print("="*80)
+    
     fracture_regions = []
     non_fracture_regions = []
+    
     for classification in classifications:
         region_id = classification['region_id']
         is_fracture = classification['is_fracture']
         probability = classification['fracture_probability']
+        
         if is_fracture:
             fracture_regions.append(region_id)
             print(f"Region {region_id+1}: FRACTURED (probability: {probability:.3f})")
         else:
             non_fracture_regions.append(region_id)
             print(f"Region {region_id+1}: Non-fractured (probability: {probability:.3f})")
+    
     print(f"\nSummary:")
     print(f"  Fractured regions: {len(fracture_regions)}")
     print(f"  Non-fractured regions: {len(non_fracture_regions)}")
     print(f"  Total regions: {len(classifications)}")
+    
+    # Return results
     results = {
         'optimal_parameters': optimal_params,
         'optimization_results': optimization_results,
         'classifications': classifications,
         'fracture_regions': fracture_regions,
         'non_fracture_regions': non_fracture_regions,
-        'labeled_data': labeled_data
+        'labeled_data': labeled_data,
+        'used_existing_model': False,
+        'model_saved': save_model
     }
+    
     return results 
