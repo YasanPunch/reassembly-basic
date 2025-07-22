@@ -339,19 +339,22 @@ class App:
         else:
             print(f"[ERROR] No geometry provided for: {path}")
 
-        # Update camera to frame all visible objects
-        self._update_camera_bounds()
-
-        # Add object to the item tree UI
+        # Add object to the item tree UI FIRST
         self._left_panel.item_tree.add_object(path, name=os.path.basename(path))
+
+        # Update camera to frame all visible objects AFTER adding to item tree
+        self._update_camera_bounds()
     
     def _update_camera_bounds(self):
         """Calculates the bounding box of all visible objects and adjusts the camera."""
+        print(f"[DEBUG] _update_camera_bounds called with {len(self._scene_objects)} scene objects")
         bounds = None
         for path, obj_info in self._scene_objects.items():
+            print(f"[DEBUG] Checking object: {path}, type: {obj_info['type']}")
             # Check if object is visible (get from item tree)
             obj_in_panel = next((o for o in self._left_panel.item_tree.get_all_objects() if o['path'] == path), None)
             if obj_in_panel and obj_in_panel['visible']:
+                print(f"[DEBUG] Object {path} is visible, calculating bounds")
                 if obj_info['type'] == 'model':
                     geom_bounds = obj_info['mesh'].get_axis_aligned_bounding_box()
                 else: # geometry
@@ -361,26 +364,36 @@ class App:
                     bounds = geom_bounds
                 else:
                     bounds = bounds.get_union(geom_bounds)
+            else:
+                print(f"[DEBUG] Object {path} not found in panel or not visible")
         
         if bounds and bounds.volume() > 0:
+            print(f"[DEBUG] Setting camera with bounds: {bounds}")
             self._scene_widget.setup_camera(60, bounds, bounds.get_center())
         else:
+            print(f"[DEBUG] No valid bounds, using default camera")
             self._scene_widget.setup_camera(60, o3d.geometry.AxisAlignedBoundingBox([-1,-1,-1], [1,1,1]), [0,0,0])
 
 
     def load(self, path):
+        print(f"[DEBUG] Attempting to load file: {path}")
         geometry = None
         # Try to load as mesh
         mesh = o3d.io.read_triangle_mesh(path)
         if mesh is not None and mesh.has_vertices():
+            print(f"[DEBUG] Successfully loaded mesh with {len(mesh.vertices)} vertices")
             geometry = mesh
         else:
+            print(f"[DEBUG] Failed to load as mesh, trying point cloud...")
             # Try to load as point cloud
             cloud = o3d.io.read_point_cloud(path)
             if cloud is not None and cloud.has_points():
+                print(f"[DEBUG] Successfully loaded point cloud with {len(cloud.points)} points")
                 if not cloud.has_normals():
                     cloud.estimate_normals()
                 geometry = cloud
+            else:
+                print(f"[DEBUG] Failed to load as point cloud")
 
         if geometry is not None:
             self._add_object_to_scene(path=path, geometry=geometry)

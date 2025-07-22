@@ -3,7 +3,7 @@ import os
 import json
 
 config_file_path = (
-    "C:/sem7/FYP/Reassembly/reassembly/python/configuration/configs.json"
+    "python/configuration/configs.json"
 )
 
 
