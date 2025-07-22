@@ -109,6 +109,7 @@ def align_fragments_pcd(source_pcd, target_pcd, source_fpfh, target_fpfh, params
             src_fract_vis.transform(result_ransac.transformation)
             vis_geoms.append(src_fract_vis)
         o3d.visualization.draw_geometries(vis_geoms, window_name=f"[DEBUG] After RANSAC Alignment (Gray=Full Mesh, Red=Source Fracture, Green=Target Fracture)")
+        input("[DEBUG] Press Enter to continue after RANSAC visualization...")
     # RANSAC heuristic
     if result_ransac.fitness < 0.1 and result_ransac.inlier_rmse > params["voxel_downsample_size"] * 5:
         return None, result_ransac.fitness, result_ransac.inlier_rmse
@@ -136,6 +137,7 @@ def align_fragments_pcd(source_pcd, target_pcd, source_fpfh, target_fpfh, params
             src_fract_vis.transform(result_icp.transformation)
             vis_geoms.append(src_fract_vis)
         o3d.visualization.draw_geometries(vis_geoms, window_name=f"[DEBUG] After ICP Alignment (Gray=Full Mesh, Red=Source Fracture, Green=Target Fracture)")
+        input("[DEBUG] Press Enter to continue after ICP visualization...")
     min_fitness = params.get("min_match_score", 0.7)
     if result_icp.fitness > min_fitness and result_icp.inlier_rmse < params["voxel_downsample_size"] * 2.0:
         return result_icp.transformation, result_icp.fitness, result_icp.inlier_rmse

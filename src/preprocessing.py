@@ -40,9 +40,11 @@ def preprocess_fragment(fragment_info, params, viz_collector=None):
 
     # --- Step 1: Identify and Extract Fracture Surface Meshes (now a list) ---
     print(f"    Preprocessing: Segmenting fracture surfaces for {fragment_name}...")
-    fracture_surfaces = extract_fracture_surface_mesh(original_mesh, fragment_name, params)
+    fracture_surfaces, fracture_surface_normals = extract_fracture_surface_mesh(original_mesh, fragment_name, params)
     if not isinstance(fracture_surfaces, list):
         fracture_surfaces = [fracture_surfaces] if fracture_surfaces is not None else []
+    if not isinstance(fracture_surface_normals, list):
+        fracture_surface_normals = [fracture_surface_normals] if fracture_surface_normals is not None else []
 
     # --- Step 2: For each surface, sample points, extract features, and store as lists ---
     features_list = []
@@ -77,7 +79,7 @@ def preprocess_fragment(fragment_info, params, viz_collector=None):
             features_list.append(features)
             pcds_for_features_list.append(pcd)
     # Return lists for downstream processing
-    return pcds_for_features_list, features_list, fracture_surfaces
+    return pcds_for_features_list, features_list, fracture_surfaces, fracture_surface_normals
 
     # Visualization parameters for interactive verification
     if params.get('visualize_segmentation', False):

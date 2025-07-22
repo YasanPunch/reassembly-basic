@@ -143,8 +143,11 @@ def compute_adjacent_face_normal_similarity(mesh_src, adj_faces_src, mesh_tgt, a
     # Compute dot products of normals
     dot_products = np.einsum('ij,ij->i', src_normals, tgt_normals[idxs])
     # Normalize to [0, 1]
+    if dot_products.size == 0:
+        print("[Warning] compute_adjacent_face_normal_similarity: dot_products is empty.")
+        return 0.0
     similarity = np.clip((dot_products + 1) / 2, 0, 1)
-    return float(np.mean(similarity))
+    return float(np.mean(similarity)) if similarity.size > 0 else 0.0
 
 
 def compute_face_curvatures(mesh, face_indices):
@@ -166,8 +169,12 @@ def compute_face_curvatures(mesh, face_indices):
         if not neighbors:
             curvatures[idx] = 0.0
             continue
-        avg_neighbor_normal = np.mean(normals[neighbors], axis=0)
-        avg_neighbor_normal /= np.linalg.norm(avg_neighbor_normal) + 1e-8
+        avg_neighbor_normal = np.mean(normals[neighbors], axis=0) if len(neighbors) > 0 else np.zeros(3)
+        norm_val = np.linalg.norm(avg_neighbor_normal)
+        if norm_val < 1e-8:
+            curvatures[idx] = 0.0
+            continue
+        avg_neighbor_normal /= norm_val
         dot = np.clip(np.dot(normals[face_idx], avg_neighbor_normal), -1, 1)
         curvatures[idx] = np.arccos(dot)
     return curvatures
@@ -179,8 +186,11 @@ def compute_bumpiness_similarity(mesh_src, adj_faces_src, mesh_tgt, adj_faces_tg
     """
     src_normals = np.asarray(mesh_src.triangle_normals)[adj_faces_src]
     tgt_normals = np.asarray(mesh_tgt.triangle_normals)[adj_faces_tgt]
-    src_bump = np.std(src_normals, axis=0).mean()
-    tgt_bump = np.std(tgt_normals, axis=0).mean()
+    if src_normals.size == 0 or tgt_normals.size == 0:
+        print("[Warning] compute_bumpiness_similarity: src_normals or tgt_normals is empty.")
+        return 0.0
+    src_bump = np.std(src_normals, axis=0).mean() if src_normals.size > 0 else 0.0
+    tgt_bump = np.std(tgt_normals, axis=0).mean() if tgt_normals.size > 0 else 0.0
     denom = max(src_bump, tgt_bump, 1e-6)
     sim = 1.0 - abs(src_bump - tgt_bump) / denom
     return np.clip(sim, 0, 1)
@@ -193,9 +203,10 @@ def compute_curvature_similarity(mesh_src, adj_faces_src, mesh_tgt, adj_faces_tg
     src_curv = compute_face_curvatures(mesh_src, adj_faces_src)
     tgt_curv = compute_face_curvatures(mesh_tgt, adj_faces_tgt)
     if len(src_curv) == 0 or len(tgt_curv) == 0:
+        print("[Warning] compute_curvature_similarity: src_curv or tgt_curv is empty.")
         return 0.0
-    src_mean = np.mean(src_curv)
-    tgt_mean = np.mean(tgt_curv)
+    src_mean = np.mean(src_curv) if src_curv.size > 0 else 0.0
+    tgt_mean = np.mean(tgt_curv) if tgt_curv.size > 0 else 0.0
     denom = max(src_mean, tgt_mean, 1e-6)
     sim = 1.0 - abs(src_mean - tgt_mean) / denom
     return np.clip(sim, 0, 1)

@@ -85,12 +85,10 @@ def main(args):
     print("\n[3. Preprocessing, Segmentation, and Feature Extraction]")
     for i, frag_info_raw in enumerate(fragments_data_raw):
         print(f"  Processing fragment: {frag_info_raw['name']} ({i+1}/{len(fragments_data_raw)})")
-        
-        # Preprocessing now returns lists: (pcds_for_features_list, features_list, fracture_surfaces)
-        pcds_for_features_list, features_list, fracture_surfaces = src.preprocessing.preprocess_fragment(
+        # Preprocessing now returns lists: (pcds_for_features_list, features_list, fracture_surfaces, fracture_surface_normals)
+        pcds_for_features_list, features_list, fracture_surfaces, fracture_surface_normals = src.preprocessing.preprocess_fragment(
             frag_info_raw, params, viz_collector=visualization_log
         )
-
         # If no valid surfaces, store empty lists and continue
         if not pcds_for_features_list or all(pcd is None or not pcd.has_points() for pcd in pcds_for_features_list):
             print(f"    Warning: Preprocessing resulted in no valid point clouds for features for {frag_info_raw['name']}. Skipping.")
@@ -99,17 +97,18 @@ def main(args):
                 'original_index': frag_info_raw['original_index'],
                 'original_mesh': frag_info_raw['mesh'],
                 'fracture_surfaces': fracture_surfaces,
+                'fracture_surface_normals': fracture_surface_normals,
                 'pcds_for_features': [],
                 'features_list': []
             })
             continue
-
         # Store lists for each fragment
         processed_fragments_pipeline_data.append({
             'name': frag_info_raw['name'],
             'original_index': frag_info_raw['original_index'],
             'original_mesh': frag_info_raw['mesh'],
             'fracture_surfaces': fracture_surfaces,
+            'fracture_surface_normals': fracture_surface_normals,
             'pcds_for_features': pcds_for_features_list,
             'features_list': features_list
         })

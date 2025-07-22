@@ -648,6 +648,7 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         o3d.visualization.draw_geometries([wireframe, cluster_mesh], window_name=f"[DEBUG] Merged Face {idx} (Color {idx})")
     # Store merged faces as separate fracture surfaces for downstream processing
     merged_fracture_surfaces = []
+    merged_fracture_normals = []
     for cluster_faces, merged_idxs in merged_clusters:
         if not cluster_faces:
             continue
@@ -661,8 +662,17 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         if cluster_mesh.has_triangles():
             cluster_mesh.compute_vertex_normals()
             merged_fracture_surfaces.append(cluster_mesh)
+            # Average the normals of merged regions
+            avg_normals = [selected_region_normals[idx] for idx in merged_idxs]
+            avg_normal = np.mean(avg_normals, axis=0)
+            norm = np.linalg.norm(avg_normal)
+            if norm > 1e-8:
+                avg_normal = avg_normal / norm
+            else:
+                avg_normal = np.array([0, 0, 1])
+            merged_fracture_normals.append(avg_normal)
     # Return merged fracture surfaces for this fragment
-    return merged_fracture_surfaces
+    return merged_fracture_surfaces, merged_fracture_normals
 
 
 def visualize_segmentation(o3d_mesh, fracture_surface, fragment_name="Unnamed"):
@@ -708,7 +718,7 @@ def identify_fracture_candidate_faces(tri_mesh_fragment, params=None):
     o3d_mesh.compute_vertex_normals()
     
     # Run segmentation
-    result_mesh = extract_fracture_surface_mesh(
+    result_mesh, _ = extract_fracture_surface_mesh(
         o3d_mesh, 
         tri_mesh_fragment.metadata.get('name', 'Unnamed'),
         params
@@ -743,7 +753,7 @@ if __name__ == '__main__':
     }
     
     # Run segmentation
-    result = extract_fracture_surface_mesh(test_mesh, "TestCube", test_params)
+    result, _ = extract_fracture_surface_mesh(test_mesh, "TestCube", test_params)
     
     if result:
         # Visualize results
