@@ -4,6 +4,7 @@ from .segmentation_results_item import SegmentationResultItem
 from .classification_results_item import ClassificationResultItem
 from .pairwise_results_item import PairwiseResultItem
 from .global_reassembly_results_item import AssemblyResultItem
+from .preprocessed_item import PreprocessedItem
 
 __all__ = [
     "BaseItem",
@@ -11,5 +12,6 @@ __all__ = [
     "SegmentationResultItem",
     "ClassificationResultItem",
     "PairwiseResultItem",
-    "AssemblyResultItem"
+    "AssemblyResultItem",
+    "PreprocessedItem"
 ] 

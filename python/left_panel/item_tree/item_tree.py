@@ -3,7 +3,7 @@ import os
 from typing import List, Dict, Any, Optional
 from .items import (
     BaseItem, BaseModelItem, SegmentationResultItem, 
-    ClassificationResultItem, PairwiseResultItem, AssemblyResultItem
+    ClassificationResultItem, PairwiseResultItem, AssemblyResultItem, PreprocessedItem
 )
 
 
@@ -23,12 +23,14 @@ class ItemTree:
 
         # Dropdowns for each item type
         self.base_model_dropdown = gui.CollapsableVert("Base Model", 0.25 * em)
+        self.preprocessing_results_dropdown = gui.CollapsableVert("Preprocessing Results", 0.25 * em)
         self.segmentation_results_dropdown = gui.CollapsableVert("Segmentation Results", 0.25 * em)
         self.pairwise_results_dropdown = gui.CollapsableVert("Pairwise Results", 0.25 * em)
         self.global_reassembly_results_dropdown = gui.CollapsableVert("Global Reassembly Results", 0.25 * em)
         self.classification_results_dropdown = gui.CollapsableVert("Classification Results", 0.25 * em)
 
         self.section.add_child(self.base_model_dropdown)
+        self.section.add_child(self.preprocessing_results_dropdown)
         self.section.add_child(self.segmentation_results_dropdown)
         self.section.add_child(self.pairwise_results_dropdown)
         self.section.add_child(self.global_reassembly_results_dropdown)
@@ -37,6 +39,7 @@ class ItemTree:
         # Store all items by type
         self._items: Dict[str, List[BaseItem]] = {
             'base_model': [],
+            'preprocessing': [],
             'segmentation': [],
             'pairwise': [],
             'assembly': [],
@@ -73,6 +76,40 @@ class ItemTree:
         
         # Ensure the object is shown by default
         self.app._scene_widget.scene.show_geometry(mesh_path, is_visible)
+        
+        # Trigger layout update to refresh the UI
+        self.app.window.set_needs_layout()
+        
+        return item
+
+    def add_preprocessing_item(self, label: str, preprocessed_mesh=None, original_mesh_path: str = "",
+                             preprocessing_parameters: Dict[str, Any] = None, preprocessing_steps: List[str] = None,
+                             quality_metrics: Dict[str, float] = None, is_visible: bool = True) -> PreprocessedItem:
+        """Add a preprocessing result item to the tree."""
+        item = PreprocessedItem(
+            label=label, preprocessed_mesh=preprocessed_mesh, 
+            original_mesh_path=original_mesh_path,
+            preprocessing_parameters=preprocessing_parameters,
+            preprocessing_steps=preprocessing_steps,
+            quality_metrics=quality_metrics,
+            is_visible=is_visible
+        )
+        
+        # Create UI widget
+        cb = gui.Checkbox(label)
+        cb.checked = is_visible
+        
+        def on_checked(checked, item_id=item.id):
+            item.is_visible = checked
+            # TODO: Show/hide preprocessed mesh in scene
+        
+        cb.set_on_checked(on_checked)
+        item.set_ui_widget(cb)
+        
+        # Add to UI and storage
+        self.preprocessing_results_dropdown.add_child(cb)
+        self._items['preprocessing'].append(item)
+        self._item_widgets[item.id] = cb
         
         # Trigger layout update to refresh the UI
         self.app.window.set_needs_layout()
@@ -247,6 +284,7 @@ class ItemTree:
         """Remove a widget from its parent dropdown."""
         dropdown_map = {
             'base_model': self.base_model_dropdown,
+            'preprocessing': self.preprocessing_results_dropdown,
             'segmentation': self.segmentation_results_dropdown,
             'pairwise': self.pairwise_results_dropdown,
             'assembly': self.global_reassembly_results_dropdown,

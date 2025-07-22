@@ -16,6 +16,10 @@ The item system provides a hierarchical structure for managing different types o
 - **Purpose**: Represents original 3D models/fragments
 - **Properties**: mesh_path, mesh, plus base properties
 
+### PreprocessedItem
+- **Purpose**: Represents preprocessing results
+- **Properties**: preprocessed_mesh, original_mesh_path, preprocessing_parameters, preprocessing_steps, quality_metrics, processing_time, mesh_quality_score
+
 ### SegmentationResultItem
 - **Purpose**: Represents mesh segmentation results
 - **Properties**: segmented_mesh, original_mesh_path, segmentation_parameters, segment_count, segment_labels

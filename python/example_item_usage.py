@@ -12,8 +12,72 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from left_panel.item_tree.items import (
     BaseItem, BaseModelItem, SegmentationResultItem, 
-    ClassificationResultItem, PairwiseResultItem, AssemblyResultItem
+    ClassificationResultItem, PairwiseResultItem, AssemblyResultItem, PreprocessedItem
 )
+
+
+def example_preprocessed_item():
+    """Example of creating and using a PreprocessedItem."""
+    print("=== PreprocessedItem Example ===")
+    
+    # Create a preprocessed item
+    item = PreprocessedItem(
+        label="Preprocessed Model",
+        preprocessed_mesh=None,  # Would be an Open3D mesh object
+        original_mesh_path="/path/to/original.obj",
+        preprocessing_parameters={
+            "noise_reduction": True,
+            "smoothing_factor": 0.1,
+            "decimation_ratio": 0.5,
+            "normal_estimation": True
+        },
+        preprocessing_steps=["noise_reduction", "smoothing", "decimation", "normal_estimation"],
+        quality_metrics={
+            "surface_smoothness": 0.85,
+            "mesh_consistency": 0.92,
+            "vertex_density": 0.78
+        },
+        is_visible=True
+    )
+    
+    print(f"Item ID: {item.id}")
+    print(f"Label: {item.label}")
+    print(f"Original Mesh Path: {item.original_mesh_path}")
+    print(f"Processing Time: {item.processing_time}s")
+    print(f"Quality Score: {item.mesh_quality_score}")
+    print(f"Preprocessing Steps: {item.preprocessing_steps}")
+    print(f"Step Count: {item.get_step_count()}")
+    print(f"Quality Metrics: {item.quality_metrics}")
+    
+    # Add more preprocessing steps
+    item.add_preprocessing_step("boundary_detection")
+    item.add_preprocessing_step("hole_filling")
+    print(f"Updated Steps: {item.preprocessing_steps}")
+    print(f"Updated Step Count: {item.get_step_count()}")
+    
+    # Add quality metrics
+    item.add_quality_metric("boundary_quality", 0.88)
+    item.add_quality_metric("hole_fill_quality", 0.91)
+    print(f"Updated Quality Metrics: {item.quality_metrics}")
+    
+    # Set processing time and quality score
+    item.processing_time = 2.5
+    item.mesh_quality_score = 0.87
+    print(f"Processing Time: {item.processing_time}s")
+    print(f"Quality Score: {item.mesh_quality_score}")
+    
+    # Check if specific steps were applied
+    print(f"Has noise reduction: {item.has_step('noise_reduction')}")
+    print(f"Has texture_mapping: {item.has_step('texture_mapping')}")
+    
+    # Get processing summary
+    summary = item.get_processing_summary()
+    print(f"Processing Summary: {summary}")
+    
+    # Convert to dictionary
+    item_dict = item.to_dict()
+    print(f"Dictionary representation: {item_dict}")
+    print()
 
 
 def example_base_model_item():
@@ -218,6 +282,7 @@ def main():
     print("=" * 50)
     
     example_base_model_item()
+    example_preprocessed_item()
     example_segmentation_item()
     example_classification_item()
     example_pairwise_item()
