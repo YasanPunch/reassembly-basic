@@ -29,3 +29,14 @@ build/
 Thumbs.db
 data/log_auto_test.pkl
 data/log_auto_test.pkl
+
+# Ignore all pickle/log files and large outputs
+*.pkl
+*.log
+
+# Ignore all output assembly files (large generated models)
+data/output_assembly/*
+
+# Optionally ignore large example and brick files (uncomment if not needed in repo)
+# data/examples/*
+# data/new brick/*
