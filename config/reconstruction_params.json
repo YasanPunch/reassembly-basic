@@ -43,5 +43,5 @@
     "// - Set to false to disable penetration tests (not recommended)": null,
     "use_boolean_intersection_test": true,
     "// Boolean penetration test parameters:": null,
-    "boolean_penetration_threshold": 0.1, "// Maximum allowed penetration ratio (0.1 = 10% of smaller fragment volume)": null
+    "boolean_penetration_threshold": 0.02, "// Maximum allowed penetration ratio (0.1 = 10% of smaller fragment volume)": null
 }

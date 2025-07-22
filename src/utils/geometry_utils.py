@@ -2,6 +2,7 @@ import numpy as np
 import open3d as o3d
 import trimesh
 from scipy.spatial import cKDTree
+from collections import defaultdict
 
 def estimate_normals(pcd, search_param):
     """Estimates normals for a point cloud."""
@@ -144,6 +145,60 @@ def compute_adjacent_face_normal_similarity(mesh_src, adj_faces_src, mesh_tgt, a
     # Normalize to [0, 1]
     similarity = np.clip((dot_products + 1) / 2, 0, 1)
     return float(np.mean(similarity))
+
+
+def compute_face_curvatures(mesh, face_indices):
+    """
+    Estimate curvature for each face as the angle between the face normal and the average normal of its neighbors.
+    Returns a numpy array of curvature values (in radians).
+    """
+    tris = np.asarray(mesh.triangles)
+    normals = np.asarray(mesh.triangle_normals)
+    curvatures = np.zeros(len(face_indices))
+    # Build adjacency
+    face_neighbors = defaultdict(set)
+    for i, tri1 in enumerate(tris):
+        for j, tri2 in enumerate(tris):
+            if i != j and len(set(tri1) & set(tri2)) >= 2:
+                face_neighbors[i].add(j)
+    for idx, face_idx in enumerate(face_indices):
+        neighbors = list(face_neighbors[face_idx])
+        if not neighbors:
+            curvatures[idx] = 0.0
+            continue
+        avg_neighbor_normal = np.mean(normals[neighbors], axis=0)
+        avg_neighbor_normal /= np.linalg.norm(avg_neighbor_normal) + 1e-8
+        dot = np.clip(np.dot(normals[face_idx], avg_neighbor_normal), -1, 1)
+        curvatures[idx] = np.arccos(dot)
+    return curvatures
+
+def compute_bumpiness_similarity(mesh_src, adj_faces_src, mesh_tgt, adj_faces_tgt):
+    """
+    Compare bumpiness (roughness) of two sets of adjacent faces.
+    Returns a similarity score in [0, 1] (1 = perfect match).
+    """
+    src_normals = np.asarray(mesh_src.triangle_normals)[adj_faces_src]
+    tgt_normals = np.asarray(mesh_tgt.triangle_normals)[adj_faces_tgt]
+    src_bump = np.std(src_normals, axis=0).mean()
+    tgt_bump = np.std(tgt_normals, axis=0).mean()
+    denom = max(src_bump, tgt_bump, 1e-6)
+    sim = 1.0 - abs(src_bump - tgt_bump) / denom
+    return np.clip(sim, 0, 1)
+
+def compute_curvature_similarity(mesh_src, adj_faces_src, mesh_tgt, adj_faces_tgt):
+    """
+    Compare curvature distributions of two sets of adjacent faces.
+    Returns a similarity score in [0, 1] (1 = perfect match).
+    """
+    src_curv = compute_face_curvatures(mesh_src, adj_faces_src)
+    tgt_curv = compute_face_curvatures(mesh_tgt, adj_faces_tgt)
+    if len(src_curv) == 0 or len(tgt_curv) == 0:
+        return 0.0
+    src_mean = np.mean(src_curv)
+    tgt_mean = np.mean(tgt_curv)
+    denom = max(src_mean, tgt_mean, 1e-6)
+    sim = 1.0 - abs(src_mean - tgt_mean) / denom
+    return np.clip(sim, 0, 1)
 
 
 if __name__ == '__main__':
