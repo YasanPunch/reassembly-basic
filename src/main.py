@@ -318,6 +318,9 @@ if __name__ == "__main__":
             "add_preprocessing_noise": True,
             "preprocessing_noise_factor": 0.01,
             "orient_normals_k": 15,
+            # Boolean penetration test configuration
+            "use_boolean_intersection_test": True,
+            "boolean_penetration_threshold": 0.1,  # Maximum allowed penetration ratio (10%)
             # Overlap check params
             "max_assembly_overlap_factor_aabb": 0.9, # For the coarse AABB check
             "overlap_check_sample_points": 300,
