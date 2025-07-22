@@ -339,8 +339,17 @@ class App:
         else:
             print(f"[ERROR] No geometry provided for: {path}")
 
-        # Add object to the item tree UI FIRST
-        self._left_panel.item_tree.add_object(path, name=os.path.basename(path))
+        # Add object to the item tree UI using the new item system
+        base_model_item = self._left_panel.item_tree.add_base_model_item(
+            mesh_path=path, 
+            mesh=geometry, 
+            label=os.path.basename(path)
+        )
+        
+        # Store the item reference for later use
+        if not hasattr(self, '_base_model_items'):
+            self._base_model_items = {}
+        self._base_model_items[path] = base_model_item
 
         # Update camera to frame all visible objects AFTER adding to item tree
         self._update_camera_bounds()
@@ -349,23 +358,30 @@ class App:
         """Calculates the bounding box of all visible objects and adjusts the camera."""
         print(f"[DEBUG] _update_camera_bounds called with {len(self._scene_objects)} scene objects")
         bounds = None
-        for path, obj_info in self._scene_objects.items():
-            print(f"[DEBUG] Checking object: {path}, type: {obj_info['type']}")
-            # Check if object is visible (get from item tree)
-            obj_in_panel = next((o for o in self._left_panel.item_tree.get_all_objects() if o['path'] == path), None)
-            if obj_in_panel and obj_in_panel['visible']:
-                print(f"[DEBUG] Object {path} is visible, calculating bounds")
-                if obj_info['type'] == 'model':
-                    geom_bounds = obj_info['mesh'].get_axis_aligned_bounding_box()
-                else: # geometry
-                    geom_bounds = obj_info['geometry'].get_axis_aligned_bounding_box()
+        
+        # Get all base model items from the item tree
+        base_model_items = self._left_panel.item_tree.get_items_by_type('base_model')
+        
+        for item in base_model_items:
+            if isinstance(item, self._left_panel.item_tree.items.BaseModelItem):
+                path = item.mesh_path
+                print(f"[DEBUG] Checking base model item: {path}, visible: {item.is_visible}")
+                
+                if item.is_visible and path in self._scene_objects:
+                    print(f"[DEBUG] Object {path} is visible, calculating bounds")
+                    obj_info = self._scene_objects[path]
+                    
+                    if obj_info['type'] == 'model':
+                        geom_bounds = obj_info['mesh'].get_axis_aligned_bounding_box()
+                    else: # geometry
+                        geom_bounds = obj_info['geometry'].get_axis_aligned_bounding_box()
 
-                if bounds is None:
-                    bounds = geom_bounds
+                    if bounds is None:
+                        bounds = geom_bounds
+                    else:
+                        bounds = bounds.get_union(geom_bounds)
                 else:
-                    bounds = bounds.get_union(geom_bounds)
-            else:
-                print(f"[DEBUG] Object {path} not found in panel or not visible")
+                    print(f"[DEBUG] Object {path} not found in scene or not visible")
         
         if bounds and bounds.volume() > 0:
             print(f"[DEBUG] Setting camera with bounds: {bounds}")
