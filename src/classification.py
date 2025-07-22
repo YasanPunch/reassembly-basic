@@ -92,6 +92,114 @@ def calculate_local_bending_energy(mesh, k=10):
     return bending_energies
 
 
+def calculate_surface_roughness_characteristic(mesh, k=10, r=None):
+    """
+    Calculate the Surface Roughness Characteristic for each vertex in a mesh.
+    
+    The Surface Roughness Characteristic ē_k,r(p) is defined as:
+    ē_k,r(p) = (1/|N_r(p)|) * sum_{q∈N_r(p)} e_k(q)
+    
+    where:
+    - N_r(p) is the local neighborhood of p with radius r
+    - |N_r(p)| is the number of points within the neighborhood N_r(p)
+    - e_k(q) is the local bending energy at point q
+    - The neighborhood N_r(p) = B_r(p) ∩ Φ, where B_r(p) is a ball of radius r centered at p,
+      and Φ is the discrete set of measurement points from the 3D scan
+    
+    This averaging process smooths out noise and provides a more stable, global measure 
+    of roughness around each point.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        k (int): Number of nearest neighbors for local bending energy calculation (default: 10)
+        r (float): Kernel radius for neighborhood definition. If None, will be auto-calculated
+                  based on mesh density (default: None)
+    
+    Returns:
+        numpy.ndarray: Array of surface roughness characteristic values for each vertex
+    """
+    # Ensure mesh has vertices and normals
+    if not mesh.has_vertices():
+        raise ValueError("Mesh must have vertices")
+    
+    # Get vertices and normals
+    vertices = np.asarray(mesh.vertices)
+    normals = np.asarray(mesh.vertex_normals)
+    
+    # If normals are not computed, compute them
+    if len(normals) == 0 or np.all(normals == 0):
+        mesh.compute_vertex_normals()
+        normals = np.asarray(mesh.vertex_normals)
+    
+    n_vertices = len(vertices)
+    
+    # Auto-calculate radius if not provided
+    if r is None:
+        # Calculate average edge length as a reasonable default radius
+        faces = np.asarray(mesh.triangles)
+        edge_lengths = []
+        
+        for face in faces:
+            v1, v2, v3 = vertices[face[0]], vertices[face[1]], vertices[face[2]]
+            edge_lengths.extend([
+                np.linalg.norm(v2 - v1),
+                np.linalg.norm(v3 - v2),
+                np.linalg.norm(v1 - v3)
+            ])
+        
+        avg_edge_length = np.mean(edge_lengths)
+        r = avg_edge_length * 3  # Use 3x average edge length as default radius
+        print(f"Auto-calculated radius: {r:.6f} (3x average edge length)")
+    
+    # First, calculate local bending energies for all vertices
+    print(f"Calculating local bending energies with k={k}...")
+    local_bending_energies = calculate_local_bending_energy(mesh, k)
+    
+    # Build a spatial index for efficient radius-based neighbor search
+    print(f"Building spatial index for radius-based neighbor search (r={r:.6f})...")
+    nbrs = NearestNeighbors(algorithm='ball_tree').fit(vertices)
+    
+    # Find all neighbors within radius r for each vertex
+    print("Finding neighbors within radius...")
+    roughness_characteristics = np.zeros(n_vertices)
+    
+    for i in range(n_vertices):
+        # Get the current point
+        p = vertices[i]
+        
+        # Find all neighbors within radius r
+        # We use radius_neighbors to get all points within distance r
+        distances, indices = nbrs.radius_neighbors([p], radius=r)
+        
+        # Get the neighborhood (excluding the point itself)
+        neighborhood_indices = indices[0]
+        neighborhood_distances = distances[0]
+        
+        # Filter out the point itself (distance = 0)
+        valid_neighbors = []
+        for idx, dist in zip(neighborhood_indices, neighborhood_distances):
+            if dist > 1e-10:  # Exclude the point itself
+                valid_neighbors.append(idx)
+        
+        # Calculate the surface roughness characteristic
+        if len(valid_neighbors) > 0:
+            # Sum the local bending energies of all neighbors
+            neighbor_energies = [local_bending_energies[j] for j in valid_neighbors]
+            roughness_characteristics[i] = np.mean(neighbor_energies)
+        else:
+            # If no neighbors found, use the local bending energy of the point itself
+            roughness_characteristics[i] = local_bending_energies[i]
+    
+    print(f"Surface roughness characteristic calculation completed.")
+    print(f"  Neighborhood radius: {r:.6f}")
+    print(f"  Local bending energy k: {k}")
+    print(f"  Min roughness: {np.min(roughness_characteristics):.6f}")
+    print(f"  Max roughness: {np.max(roughness_characteristics):.6f}")
+    print(f"  Mean roughness: {np.mean(roughness_characteristics):.6f}")
+    
+    return roughness_characteristics
+
+
 def visualize_bending_energy(mesh, bending_energies, window_name="Bending Energy Visualization"):
     """
     Visualize the bending energy values on the mesh using color coding.
@@ -145,6 +253,59 @@ def visualize_bending_energy(mesh, bending_energies, window_name="Bending Energy
     )
 
 
+def visualize_roughness_characteristic(mesh, roughness_characteristics, window_name="Surface Roughness Visualization"):
+    """
+    Visualize the surface roughness characteristic values on the mesh using color coding.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        roughness_characteristics (numpy.ndarray): Surface roughness characteristic values for each vertex
+        window_name (str): Name of the visualization window
+    """
+    # Use percentile-based normalization to handle extreme outliers
+    percentile_95 = np.percentile(roughness_characteristics, 95)
+    percentile_99 = np.percentile(roughness_characteristics, 99)
+    
+    # Create a more robust normalization that handles outliers
+    if np.max(roughness_characteristics) > np.min(roughness_characteristics):
+        # Use 95th percentile as the upper bound for better visualization
+        upper_bound = min(percentile_95, np.max(roughness_characteristics))
+        normalized_roughness = np.clip(roughness_characteristics / upper_bound, 0, 1)
+    else:
+        normalized_roughness = np.zeros_like(roughness_characteristics)
+    
+    # Create color map (red for high roughness, blue for low roughness)
+    colors = np.zeros((len(normalized_roughness), 3))
+    colors[:, 0] = normalized_roughness  # Red channel (high roughness)
+    colors[:, 2] = 1.0 - normalized_roughness  # Blue channel (low roughness)
+    
+    # Apply colors to mesh
+    mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
+    
+    # Create coordinate frame
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+    
+    # Visualize
+    print(f"\nVisualizing surface roughness characteristic...")
+    print(f"Min roughness: {np.min(roughness_characteristics):.6f}")
+    print(f"Max roughness: {np.max(roughness_characteristics):.6f}")
+    print(f"Mean roughness: {np.mean(roughness_characteristics):.6f}")
+    print(f"95th percentile: {percentile_95:.6f}")
+    print(f"99th percentile: {percentile_99:.6f}")
+    print(f"Upper bound used for normalization: {min(percentile_95, np.max(roughness_characteristics)):.6f}")
+    print("Color coding: Red = High roughness, Blue = Low roughness")
+    print("Note: Using 95th percentile normalization to handle extreme outliers")
+    
+    o3d.visualization.draw_geometries(
+        [mesh, coordinate_frame],
+        window_name=window_name,
+        width=1200,
+        height=800,
+        point_show_normal=False,
+        mesh_show_back_face=True
+    )
+
+
 def analyze_mesh_curvature(mesh, k=10):
     """
     Analyze mesh curvature using Local Bending Energy.
@@ -177,6 +338,43 @@ def analyze_mesh_curvature(mesh, k=10):
     print(f"  Mean bending energy: {stats['mean_energy']:.6f}")
     print(f"  Std bending energy: {stats['std_energy']:.6f}")
     print(f"  Median bending energy: {stats['median_energy']:.6f}")
+    
+    return stats
+
+
+def analyze_mesh_roughness(mesh, k=10, r=None):
+    """
+    Analyze mesh roughness using Surface Roughness Characteristic.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        k (int): Number of nearest neighbors for local bending energy calculation
+        r (float): Kernel radius for neighborhood definition. If None, will be auto-calculated
+    
+    Returns:
+        dict: Dictionary containing roughness analysis results
+    """
+    print(f"Analyzing mesh roughness with k={k} nearest neighbors...")
+    
+    # Calculate surface roughness characteristic
+    roughness_characteristics = calculate_surface_roughness_characteristic(mesh, k, r)
+    
+    # Compute statistics
+    stats = {
+        'min_roughness': np.min(roughness_characteristics),
+        'max_roughness': np.max(roughness_characteristics),
+        'mean_roughness': np.mean(roughness_characteristics),
+        'std_roughness': np.std(roughness_characteristics),
+        'median_roughness': np.median(roughness_characteristics),
+        'roughness_characteristics': roughness_characteristics
+    }
+    
+    print(f"Roughness Analysis Results:")
+    print(f"  Min roughness: {stats['min_roughness']:.6f}")
+    print(f"  Max roughness: {stats['max_roughness']:.6f}")
+    print(f"  Mean roughness: {stats['mean_roughness']:.6f}")
+    print(f"  Std roughness: {stats['std_roughness']:.6f}")
+    print(f"  Median roughness: {stats['median_roughness']:.6f}")
     
     return stats
 
@@ -285,6 +483,115 @@ def segment_mesh_and_analyze_curvature(mesh, k=10, segmentation_params=None):
     print(f"Overall mean bending energy: {overall_stats['overall_mean_energy']:.6f}")
     print(f"Overall std bending energy: {overall_stats['overall_std_energy']:.6f}")
     print(f"Overall median bending energy: {overall_stats['overall_median_energy']:.6f}")
+    
+    return overall_stats
+
+
+def segment_mesh_and_analyze_roughness(mesh, k=10, r=None, segmentation_params=None):
+    """
+    Segment the mesh and analyze roughness for each region separately.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        k (int): Number of nearest neighbors for local bending energy calculation
+        r (float): Kernel radius for neighborhood definition. If None, will be auto-calculated
+        segmentation_params (dict): Parameters for segmentation
+    
+    Returns:
+        dict: Dictionary containing segmentation and roughness analysis results
+    """
+    print(f"Segmenting mesh and analyzing roughness for each region...")
+    
+    # Convert Open3D mesh to trimesh for segmentation
+    vertices = np.asarray(mesh.vertices)
+    faces = np.asarray(mesh.triangles)
+    tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+    
+    # Use default segmentation parameters if none provided
+    if segmentation_params is None:
+        segmentation_params = {
+            'angle_threshold': 30.0,
+            'curvature_threshold': 0.1,
+            'min_region_size': 50,
+            'max_region_size': 5000
+        }
+    
+    print(f"Segmentation parameters: {segmentation_params}")
+    
+    # Perform segmentation
+    try:
+        segments = region_growing_segmentation(tri_mesh, segmentation_params)
+        print(f"Segmentation completed: {len(segments)} regions found")
+    except Exception as e:
+        print(f"Segmentation failed: {e}")
+        print("Falling back to single region analysis...")
+        return analyze_mesh_roughness(mesh, k, r)
+    
+    # Analyze each region
+    region_results = []
+    all_roughness_characteristics = []
+    
+    for i, segment_faces in enumerate(segments):
+        print(f"\n--- Analyzing Region {i+1}/{len(segments)} ---")
+        print(f"Region size: {len(segment_faces)} faces")
+        
+        # Create a submesh for this region
+        region_faces = tri_mesh.faces[segment_faces]
+        
+        # Get unique vertices used by these faces
+        unique_vertex_indices = np.unique(region_faces.flatten())
+        vertex_map = {old_idx: new_idx for new_idx, old_idx in enumerate(unique_vertex_indices)}
+        
+        # Create new vertices and remapped faces
+        region_vertices = tri_mesh.vertices[unique_vertex_indices]
+        region_faces_remapped = np.array([[vertex_map[vertex_idx] for vertex_idx in face] for face in region_faces])
+        
+        # Create trimesh object for this region
+        region_mesh = trimesh.Trimesh(vertices=region_vertices, faces=region_faces_remapped)
+        
+        # Convert back to Open3D for roughness analysis
+        region_o3d_mesh = o3d.geometry.TriangleMesh()
+        region_o3d_mesh.vertices = o3d.utility.Vector3dVector(region_mesh.vertices)
+        region_o3d_mesh.triangles = o3d.utility.Vector3iVector(region_mesh.faces)
+        region_o3d_mesh.compute_vertex_normals()
+        
+        # Analyze roughness for this region
+        region_stats = analyze_mesh_roughness(region_o3d_mesh, k, r)
+        
+        # Store results
+        region_result = {
+            'region_id': i,
+            'num_faces': len(segment_faces),
+            'num_vertices': len(region_mesh.vertices),
+            'stats': region_stats,
+            'segment_faces': segment_faces,
+            'region_mesh': region_o3d_mesh
+        }
+        region_results.append(region_result)
+        
+        # Collect all roughness characteristics for overall statistics
+        all_roughness_characteristics.extend(region_stats['roughness_characteristics'])
+    
+    # Compute overall statistics
+    overall_stats = {
+        'num_regions': len(segments),
+        'total_vertices': len(vertices),
+        'total_faces': len(faces),
+        'overall_min_roughness': np.min(all_roughness_characteristics),
+        'overall_max_roughness': np.max(all_roughness_characteristics),
+        'overall_mean_roughness': np.mean(all_roughness_characteristics),
+        'overall_std_roughness': np.std(all_roughness_characteristics),
+        'overall_median_roughness': np.median(all_roughness_characteristics),
+        'region_results': region_results
+    }
+    
+    print(f"\n=== OVERALL STATISTICS ===")
+    print(f"Total regions: {overall_stats['num_regions']}")
+    print(f"Overall min roughness: {overall_stats['overall_min_roughness']:.6f}")
+    print(f"Overall max roughness: {overall_stats['overall_max_roughness']:.6f}")
+    print(f"Overall mean roughness: {overall_stats['overall_mean_roughness']:.6f}")
+    print(f"Overall std roughness: {overall_stats['overall_std_roughness']:.6f}")
+    print(f"Overall median roughness: {overall_stats['overall_median_roughness']:.6f}")
     
     return overall_stats
 
@@ -433,6 +740,150 @@ def visualize_segmented_curvature(mesh, segmentation_results, window_name="Segme
     print_region_comparison_summary(region_results)
 
 
+def visualize_segmented_roughness(mesh, segmentation_results, window_name="Segmented Roughness Analysis", region_offset=0.1):
+    """
+    Visualize roughness analysis for each segmented region.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Original mesh
+        segmentation_results (dict): Results from segment_mesh_and_analyze_roughness
+        window_name (str): Name of the visualization window
+        region_offset (float): Percentage of region to offset inward to avoid edge artifacts
+    """
+    region_results = segmentation_results['region_results']
+    
+    print(f"\nVisualizing {len(region_results)} segmented regions (roughness analysis)...")
+    
+    # Get the original mesh vertices and faces
+    original_vertices = np.asarray(mesh.vertices)
+    original_faces = np.asarray(mesh.triangles)
+    
+    for i, region_result in enumerate(region_results):
+        print(f"\n--- Visualizing Region {i+1}/{len(region_results)} ---")
+        print(f"Region {i+1} statistics:")
+        print(f"  Faces: {region_result['num_faces']}")
+        print(f"  Vertices: {region_result['num_vertices']}")
+        print(f"  Min roughness: {region_result['stats']['min_roughness']:.6f}")
+        print(f"  Max roughness: {region_result['stats']['max_roughness']:.6f}")
+        print(f"  Mean roughness: {region_result['stats']['mean_roughness']:.6f}")
+        
+        # Create a copy of the original mesh for visualization
+        viz_mesh = o3d.geometry.TriangleMesh()
+        viz_mesh.vertices = o3d.utility.Vector3dVector(original_vertices)
+        viz_mesh.triangles = o3d.utility.Vector3iVector(original_faces)
+        viz_mesh.compute_vertex_normals()
+        
+        # Initialize all vertices to grey
+        num_vertices = len(original_vertices)
+        colors = np.full((num_vertices, 3), 0.5)  # Grey color
+        
+        # Get the segment faces for this region
+        segment_faces = region_result['segment_faces']
+        
+        # Get the region mesh vertices and their roughness characteristics
+        region_vertices = np.asarray(region_result['region_mesh'].vertices)
+        region_roughness_characteristics = region_result['stats']['roughness_characteristics']
+        
+        # Create a proper mapping from region vertices to original vertices
+        region_vertex_indices = []
+        for face_idx in segment_faces:
+            face = original_faces[face_idx]
+            region_vertex_indices.extend(face)
+        region_vertex_indices = list(set(region_vertex_indices))  # Remove duplicates
+        region_vertices_set = set(region_vertex_indices)
+        
+        # Create a proper mapping from original vertex indices to region vertex indices
+        original_to_region_mapping = {}
+        
+        # For each face in the region, map its vertices
+        for face_idx in segment_faces:
+            face = original_faces[face_idx]
+            for vertex_idx in face:
+                if vertex_idx in region_vertices_set:
+                    # Get the original vertex position
+                    original_vertex_pos = original_vertices[vertex_idx]
+                    
+                    # Find the closest vertex in the region mesh
+                    distances = np.linalg.norm(region_vertices - original_vertex_pos, axis=1)
+                    closest_region_vertex_idx = np.argmin(distances)
+                    
+                    # Only use this mapping if the vertices are very close (same vertex)
+                    if distances[closest_region_vertex_idx] < 1e-6:  # Small threshold for numerical precision
+                        original_to_region_mapping[vertex_idx] = closest_region_vertex_idx
+        
+        # Create roughness characteristic array for the full mesh (grey for non-region vertices)
+        full_mesh_roughness_characteristics = np.zeros(num_vertices)
+        
+        # Apply region roughness characteristics to the mapped vertices
+        for vertex_idx in region_vertices_set:
+            if vertex_idx < num_vertices and vertex_idx in original_to_region_mapping:
+                region_vertex_idx = original_to_region_mapping[vertex_idx]
+                if region_vertex_idx < len(region_roughness_characteristics):
+                    full_mesh_roughness_characteristics[vertex_idx] = region_roughness_characteristics[region_vertex_idx]
+        
+        # Detect and analyze roughness patches
+        print(f"\n--- Analyzing Roughness Patches for Region {i+1} ---")
+        patch_info = detect_roughness_patches(
+            viz_mesh, 
+            full_mesh_roughness_characteristics, 
+            region_vertices_set,
+            offset_percentage=region_offset
+        )
+        
+        # Calculate region area and normalize patch statistics
+        region_area = calculate_region_area(viz_mesh, region_vertices_set)
+        patch_info = normalize_patch_count_by_area(patch_info, region_area)
+        
+        # Get the offset region for visualization
+        offset_region_set = None
+        if region_offset > 0:
+            offset_region_set = offset_region_boundaries(viz_mesh, region_vertices_set, region_offset)
+        
+        # Print patch statistics
+        print(f"Roughness Patch Analysis Results:")
+        print(f"  Region area: {region_area:.6f} square units")
+        print(f"  High roughness threshold: {patch_info['high_roughness_threshold']:.6f}")
+        print(f"  Number of patches: {patch_info['num_patches']}")
+        print(f"  Normalized patch count: {patch_info['normalized_patch_count']:.6f} patches per unit area")
+        print(f"  Total high roughness vertices: {patch_info['total_high_roughness_vertices']}")
+        print(f"  Normalized high roughness vertices: {patch_info['normalized_high_roughness_vertices']:.6f} per unit area")
+        if patch_info['num_patches'] > 0:
+            print(f"  Average patch size: {patch_info['avg_patch_size']:.1f} vertices")
+            print(f"  Normalized average patch size: {patch_info['normalized_avg_patch_size']:.6f} per unit area")
+            print(f"  Largest patch: {patch_info['max_patch_size']} vertices")
+            print(f"  Normalized largest patch: {patch_info['normalized_max_patch_size']:.6f} per unit area")
+            print(f"  Smallest patch: {patch_info['min_patch_size']} vertices")
+            print(f"  Normalized smallest patch: {patch_info['normalized_min_patch_size']:.6f} per unit area")
+        
+        # Store patch information in region results
+        region_result['patch_info'] = patch_info
+        
+        # Use the existing visualize_roughness_characteristic function with the full mesh
+        # But we need to modify it slightly to handle the grey regions
+        visualize_roughness_with_grey_regions(
+            viz_mesh, 
+            full_mesh_roughness_characteristics, 
+            region_vertices_set,
+            f"{window_name} - Region {i+1}",
+            offset_region_set
+        )
+        
+        # Visualize patches if any exist
+        if patch_info['num_patches'] > 0:
+            print(f"\nVisualizing roughness patches for Region {i+1}...")
+            visualize_roughness_patches(
+                viz_mesh,
+                full_mesh_roughness_characteristics,
+                region_vertices_set,
+                patch_info,
+                f"{window_name} - Patches - Region {i+1}",
+                offset_region_set
+            )
+    
+    # Print comparison summary across all regions
+    print_region_comparison_summary(region_results)
+
+
 def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_vertices_set, window_name="Bending Energy Visualization", offset_region_set=None):
     """
     Visualize the bending energy values on the mesh using color coding, with non-region vertices in grey.
@@ -498,6 +949,83 @@ def visualize_bending_energy_with_grey_regions(mesh, bending_energies, region_ve
         print("Color coding: Red = High curvature, Blue = Low curvature, Black = Excluded boundary, Grey = Other regions")
     else:
         print("Color coding: Red = High curvature, Blue = Low curvature, Grey = Other regions")
+    print("Note: Using 95th percentile normalization to handle extreme outliers")
+    
+    o3d.visualization.draw_geometries(
+        [mesh, coordinate_frame],
+        window_name=window_name,
+        width=1200,
+        height=800,
+        point_show_normal=False,
+        mesh_show_back_face=True
+    )
+
+
+def visualize_roughness_with_grey_regions(mesh, roughness_characteristics, region_vertices_set, window_name="Surface Roughness Visualization", offset_region_set=None):
+    """
+    Visualize the surface roughness characteristic values on the mesh using color coding, with non-region vertices in grey.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        roughness_characteristics (numpy.ndarray): Surface roughness characteristic values for each vertex (0 for non-region vertices)
+        region_vertices_set (set): Set of vertex indices that belong to the current region
+        window_name (str): Name of the visualization window
+        offset_region_set (set): Set of vertex indices for the offset region (if None, no offset is shown)
+    """
+    # Use percentile-based normalization to handle extreme outliers (only for non-zero values)
+    non_zero_roughness = roughness_characteristics[roughness_characteristics > 0]
+    
+    if len(non_zero_roughness) > 0:
+        percentile_95 = np.percentile(non_zero_roughness, 95)
+        
+        # Create a more robust normalization that handles outliers
+        if np.max(non_zero_roughness) > np.min(non_zero_roughness):
+            # Use 95th percentile as the upper bound for better visualization
+            upper_bound = min(percentile_95, np.max(non_zero_roughness))
+            normalized_roughness = np.clip(roughness_characteristics / upper_bound, 0, 1)
+        else:
+            normalized_roughness = np.zeros_like(roughness_characteristics)
+    else:
+        normalized_roughness = np.zeros_like(roughness_characteristics)
+        percentile_95 = 0
+    
+    # Create color map (red for high roughness, blue for low roughness, grey for non-region, black for offset)
+    colors = np.zeros((len(normalized_roughness), 3))
+    
+    for i, (roughness, normalized_roughness_value) in enumerate(zip(roughness_characteristics, normalized_roughness)):
+        if i in region_vertices_set and roughness > 0:
+            if offset_region_set is not None and i not in offset_region_set:
+                # Vertex in original region but not in offset region (boundary area) - color black
+                colors[i, :] = 0.0  # Black color
+            else:
+                # Region vertex: color based on roughness
+                colors[i, 0] = normalized_roughness_value  # Red channel (high roughness)
+                colors[i, 2] = 1.0 - normalized_roughness_value  # Blue channel (low roughness)
+        else:
+            # Non-region vertex: grey
+            colors[i, :] = 0.5  # Grey color
+    
+    # Apply colors to mesh
+    mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
+    
+    # Create coordinate frame
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+    
+    # Visualize
+    print(f"\nVisualizing surface roughness characteristic...")
+    if len(non_zero_roughness) > 0:
+        print(f"Min roughness: {np.min(non_zero_roughness):.6f}")
+        print(f"Max roughness: {np.max(non_zero_roughness):.6f}")
+        print(f"Mean roughness: {np.mean(non_zero_roughness):.6f}")
+        print(f"95th percentile: {percentile_95:.6f}")
+        print(f"Upper bound used for normalization: {min(percentile_95, np.max(non_zero_roughness)):.6f}")
+    else:
+        print("No roughness data for this region")
+    
+    if offset_region_set is not None:
+        print("Color coding: Red = High roughness, Blue = Low roughness, Black = Excluded boundary, Grey = Other regions")
+    else:
+        print("Color coding: Red = High roughness, Blue = Low roughness, Grey = Other regions")
     print("Note: Using 95th percentile normalization to handle extreme outliers")
     
     o3d.visualization.draw_geometries(
@@ -726,6 +1254,143 @@ def detect_curvature_patches(mesh, bending_energies, region_vertices_set, percen
     }
 
 
+def detect_roughness_patches(mesh, roughness_characteristics, region_vertices_set, percentile_threshold=95, offset_percentage=0.1):
+    """
+    Detect and count patches of high roughness within a region.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        roughness_characteristics (numpy.ndarray): Surface roughness characteristic values for each vertex
+        region_vertices_set (set): Set of vertex indices that belong to the current region
+        percentile_threshold (float): Percentile threshold for high roughness (default: 95)
+        offset_percentage (float): Percentage of region to offset inward to avoid edge artifacts (default: 0.1)
+    
+    Returns:
+        dict: Dictionary containing patch information
+    """
+    # Offset region boundaries to avoid edge artifacts
+    if offset_percentage > 0:
+        print(f"Offsetting region boundaries by {offset_percentage*100:.1f}% to avoid edge artifacts...")
+        analysis_region = offset_region_boundaries(mesh, region_vertices_set, offset_percentage)
+    else:
+        analysis_region = region_vertices_set
+    
+    # Get non-zero roughness for the offset region
+    region_roughness = [roughness_characteristics[i] for i in analysis_region if roughness_characteristics[i] > 0]
+    
+    if len(region_roughness) == 0:
+        return {
+            'num_patches': 0,
+            'patches': [],
+            'high_roughness_threshold': 0,
+            'high_roughness_vertices': set(),
+            'analysis_region_size': len(analysis_region),
+            'original_region_size': len(region_vertices_set)
+        }
+    
+    # Use the same normalization as the visualization function
+    # This ensures consistency between visualization and patch detection
+    non_zero_roughness = [r for r in region_roughness if r > 0]
+    
+    if len(non_zero_roughness) > 0:
+        # Use 95th percentile as the upper bound (same as visualization)
+        percentile_95 = np.percentile(non_zero_roughness, 95)
+        upper_bound = min(percentile_95, np.max(non_zero_roughness))
+        
+        # Normalize roughness the same way as visualization
+        normalized_roughness = np.clip(np.array(region_roughness) / upper_bound, 0, 1)
+        
+        # Find vertices that would appear red in visualization
+        # Red vertices have normalized_roughness > 0.5 (more red than blue)
+        red_threshold = 0.5
+        high_roughness_vertices = set()
+        
+        for i, vertex_idx in enumerate(analysis_region):
+            if roughness_characteristics[vertex_idx] > 0:
+                # Find the corresponding normalized roughness
+                roughness_idx = region_roughness.index(roughness_characteristics[vertex_idx])
+                if roughness_idx < len(normalized_roughness):
+                    normalized_roughness_value = normalized_roughness[roughness_idx]
+                    if normalized_roughness_value > red_threshold:
+                        high_roughness_vertices.add(vertex_idx)
+    else:
+        high_roughness_vertices = set()
+        upper_bound = 0
+    
+    if len(high_roughness_vertices) == 0:
+        return {
+            'num_patches': 0,
+            'patches': [],
+            'high_roughness_threshold': upper_bound,
+            'high_roughness_vertices': high_roughness_vertices,
+            'analysis_region_size': len(analysis_region),
+            'original_region_size': len(region_vertices_set)
+        }
+    
+    # Build adjacency graph for the mesh
+    vertices = np.asarray(mesh.vertices)
+    faces = np.asarray(mesh.triangles)
+    
+    # Create vertex adjacency dictionary
+    vertex_adjacency = {}
+    for face in faces:
+        for i in range(3):
+            v1, v2, v3 = face[i], face[(i+1)%3], face[(i+2)%3]
+            if v1 not in vertex_adjacency:
+                vertex_adjacency[v1] = set()
+            if v2 not in vertex_adjacency:
+                vertex_adjacency[v2] = set()
+            vertex_adjacency[v1].add(v2)
+            vertex_adjacency[v2].add(v1)
+    
+    # Find connected components (patches) among high roughness vertices
+    patches = []
+    visited = set()
+    
+    for start_vertex in high_roughness_vertices:
+        if start_vertex in visited:
+            continue
+        
+        # BFS to find connected component
+        patch = set()
+        queue = [start_vertex]
+        visited.add(start_vertex)
+        
+        while queue:
+            current_vertex = queue.pop(0)
+            patch.add(current_vertex)
+            
+            # Check neighbors
+            if current_vertex in vertex_adjacency:
+                for neighbor in vertex_adjacency[current_vertex]:
+                    if (neighbor in high_roughness_vertices and 
+                        neighbor not in visited):
+                        visited.add(neighbor)
+                        queue.append(neighbor)
+        
+        if len(patch) > 0:
+            patches.append(patch)
+    
+    # Calculate patch statistics
+    patch_sizes = [len(patch) for patch in patches]
+    
+    return {
+        'num_patches': len(patches),
+        'patches': patches,
+        'patch_sizes': patch_sizes,
+        'high_roughness_threshold': upper_bound,
+        'high_roughness_vertices': high_roughness_vertices,
+        'total_high_roughness_vertices': len(high_roughness_vertices),
+        'avg_patch_size': np.mean(patch_sizes) if patch_sizes else 0,
+        'max_patch_size': np.max(patch_sizes) if patch_sizes else 0,
+        'min_patch_size': np.min(patch_sizes) if patch_sizes else 0,
+        'red_threshold_used': 0.5,
+        'analysis_region_size': len(analysis_region),
+        'original_region_size': len(region_vertices_set),
+        'offset_percentage': offset_percentage
+    }
+
+
 def visualize_curvature_patches(mesh, bending_energies, region_vertices_set, patch_info, window_name="Curvature Patches", offset_region_set=None):
     """
     Visualize curvature patches with different colors for each patch.
@@ -844,6 +1509,124 @@ def visualize_curvature_patches(mesh, bending_energies, region_vertices_set, pat
     )
 
 
+def visualize_roughness_patches(mesh, roughness_characteristics, region_vertices_set, patch_info, window_name="Roughness Patches", offset_region_set=None):
+    """
+    Visualize roughness patches with different colors for each patch.
+    
+    Args:
+        mesh (o3d.geometry.TriangleMesh): Input mesh
+        roughness_characteristics (numpy.ndarray): Surface roughness characteristic values for each vertex
+        region_vertices_set (set): Set of vertex indices that belong to the current region
+        patch_info (dict): Patch information from detect_roughness_patches
+        window_name (str): Name of the visualization window
+        offset_region_set (set): Set of vertex indices for the offset region (if None, no offset is shown)
+    """
+    # Use percentile-based normalization to handle extreme outliers (only for non-zero values)
+    non_zero_roughness = roughness_characteristics[roughness_characteristics > 0]
+    
+    if len(non_zero_roughness) > 0:
+        percentile_95 = np.percentile(non_zero_roughness, 95)
+        
+        # Create a more robust normalization that handles outliers
+        if np.max(non_zero_roughness) > np.min(non_zero_roughness):
+            # Use 95th percentile as the upper bound for better visualization
+            upper_bound = min(percentile_95, np.max(non_zero_roughness))
+            normalized_roughness = np.clip(roughness_characteristics / upper_bound, 0, 1)
+        else:
+            normalized_roughness = np.zeros_like(roughness_characteristics)
+    else:
+        normalized_roughness = np.zeros_like(roughness_characteristics)
+        percentile_95 = 0
+    
+    # Create color map
+    colors = np.zeros((len(normalized_roughness), 3))
+    
+    # Generate distinct colors for patches
+    num_patches = patch_info['num_patches']
+    if num_patches > 0:
+        # Use a color palette for patches
+        patch_colors = []
+        for i in range(num_patches):
+            # Generate distinct colors using HSV
+            hue = i / num_patches
+            saturation = 0.8
+            value = 0.9
+            
+            # Convert HSV to RGB
+            h = hue * 6
+            c = value * saturation
+            x = c * (1 - abs(h % 2 - 1))
+            m = value - c
+            
+            if h < 1:
+                r, g, b = c, x, 0
+            elif h < 2:
+                r, g, b = x, c, 0
+            elif h < 3:
+                r, g, b = 0, c, x
+            elif h < 4:
+                r, g, b = 0, x, c
+            elif h < 5:
+                r, g, b = x, 0, c
+            else:
+                r, g, b = c, 0, x
+            
+            patch_colors.append([r + m, g + m, b + m])
+    
+    # Apply colors
+    for i, (roughness, normalized_roughness_value) in enumerate(zip(roughness_characteristics, normalized_roughness)):
+        if i in region_vertices_set and roughness > 0:
+            if offset_region_set is not None and i not in offset_region_set:
+                # Vertex in original region but not in offset region (boundary area) - color black
+                colors[i, :] = 0.0  # Black color
+            else:
+                # Check if this vertex belongs to a patch
+                vertex_in_patch = False
+                for patch_idx, patch in enumerate(patch_info['patches']):
+                    if i in patch:
+                        colors[i] = patch_colors[patch_idx]
+                        vertex_in_patch = True
+                        break
+                
+                if not vertex_in_patch:
+                    # Region vertex but not in a patch: use standard blue-red coloring
+                    colors[i, 0] = normalized_roughness_value  # Red channel (high roughness)
+                    colors[i, 2] = 1.0 - normalized_roughness_value  # Blue channel (low roughness)
+        else:
+            # Non-region vertex: grey
+            colors[i, :] = 0.5  # Grey color
+    
+    # Apply colors to mesh
+    mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
+    
+    # Create coordinate frame
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+    
+    # Visualize
+    print(f"\nVisualizing roughness patches...")
+    print(f"High roughness threshold: {patch_info['high_roughness_threshold']:.6f}")
+    print(f"Number of patches: {patch_info['num_patches']}")
+    print(f"Total high roughness vertices: {patch_info['total_high_roughness_vertices']}")
+    if patch_info['num_patches'] > 0:
+        print(f"Average patch size: {patch_info['avg_patch_size']:.1f}")
+        print(f"Largest patch: {patch_info['max_patch_size']} vertices")
+        print(f"Smallest patch: {patch_info['min_patch_size']} vertices")
+    
+    if offset_region_set is not None:
+        print("Color coding: Different colors = Different patches, Blue-Red = Standard roughness, Black = Excluded boundary, Grey = Other regions")
+    else:
+        print("Color coding: Different colors = Different patches, Blue-Red = Standard roughness, Grey = Other regions")
+    
+    o3d.visualization.draw_geometries(
+        [mesh, coordinate_frame],
+        window_name=window_name,
+        width=1200,
+        height=800,
+        point_show_normal=False,
+        mesh_show_back_face=True
+    )
+
+
 def calculate_region_area(mesh, region_vertices_set):
     """
     Calculate the surface area of a region.
@@ -885,7 +1668,7 @@ def normalize_patch_count_by_area(patch_info, region_area):
     Normalize patch count and statistics by region area.
     
     Args:
-        patch_info (dict): Patch information from detect_curvature_patches
+        patch_info (dict): Patch information from detect_curvature_patches or detect_roughness_patches
         region_area (float): Surface area of the region
     
     Returns:
@@ -894,9 +1677,16 @@ def normalize_patch_count_by_area(patch_info, region_area):
     if region_area <= 0:
         return patch_info
     
+    # Determine if this is curvature or roughness patch info
+    is_roughness = 'total_high_roughness_vertices' in patch_info
+    
     # Calculate normalized metrics
     normalized_patch_count = patch_info['num_patches'] / region_area
-    normalized_high_curvature_vertices = patch_info['total_high_curvature_vertices'] / region_area
+    
+    if is_roughness:
+        normalized_high_roughness_vertices = patch_info['total_high_roughness_vertices'] / region_area
+    else:
+        normalized_high_curvature_vertices = patch_info['total_high_curvature_vertices'] / region_area
     
     # Normalize patch sizes by area
     normalized_patch_sizes = [patch_size / region_area for patch_size in patch_info['patch_sizes']]
@@ -910,12 +1700,17 @@ def normalize_patch_count_by_area(patch_info, region_area):
     patch_info.update({
         'region_area': region_area,
         'normalized_patch_count': normalized_patch_count,
-        'normalized_high_curvature_vertices': normalized_high_curvature_vertices,
         'normalized_patch_sizes': normalized_patch_sizes,
         'normalized_avg_patch_size': normalized_avg_patch_size,
         'normalized_max_patch_size': normalized_max_patch_size,
         'normalized_min_patch_size': normalized_min_patch_size
     })
+    
+    # Add the appropriate normalized vertex count
+    if is_roughness:
+        patch_info['normalized_high_roughness_vertices'] = normalized_high_roughness_vertices
+    else:
+        patch_info['normalized_high_curvature_vertices'] = normalized_high_curvature_vertices
     
     return patch_info
 
@@ -936,14 +1731,19 @@ def print_region_comparison_summary(region_results):
     for i, region_result in enumerate(region_results):
         if 'patch_info' in region_result:
             patch_info = region_result['patch_info']
+            
+            # Determine if this is curvature or roughness patch info
+            is_roughness = 'normalized_high_roughness_vertices' in patch_info
+            
             comparison_data.append({
                 'region_id': i + 1,
                 'area': patch_info.get('region_area', 0),
                 'num_patches': patch_info.get('num_patches', 0),
                 'normalized_patch_count': patch_info.get('normalized_patch_count', 0),
-                'normalized_high_curvature_vertices': patch_info.get('normalized_high_curvature_vertices', 0),
+                'normalized_high_vertices': patch_info.get('normalized_high_roughness_vertices' if is_roughness else 'normalized_high_curvature_vertices', 0),
                 'avg_patch_size': patch_info.get('avg_patch_size', 0),
-                'normalized_avg_patch_size': patch_info.get('normalized_avg_patch_size', 0)
+                'normalized_avg_patch_size': patch_info.get('normalized_avg_patch_size', 0),
+                'is_roughness': is_roughness
             })
     
     if not comparison_data:
@@ -953,12 +1753,16 @@ def print_region_comparison_summary(region_results):
     # Sort by normalized patch count (descending)
     comparison_data.sort(key=lambda x: x['normalized_patch_count'], reverse=True)
     
+    # Determine the type of analysis based on the first region
+    analysis_type = "Roughness" if comparison_data[0]['is_roughness'] else "Curvature"
+    
+    print(f"Analysis Type: {analysis_type}")
     print(f"{'Region':<8} {'Area':<12} {'Patches':<10} {'Norm. Patches':<15} {'Norm. Vertices':<15} {'Avg Size':<10}")
     print(f"{'-'*8} {'-'*12} {'-'*10} {'-'*15} {'-'*15} {'-'*10}")
     
     for data in comparison_data:
         print(f"{data['region_id']:<8} {data['area']:<12.4f} {data['num_patches']:<10} "
-              f"{data['normalized_patch_count']:<15.6f} {data['normalized_high_curvature_vertices']:<15.6f} "
+              f"{data['normalized_patch_count']:<15.6f} {data['normalized_high_vertices']:<15.6f} "
               f"{data['avg_patch_size']:<10.1f}")
     
     # Calculate overall statistics
@@ -1023,8 +1827,8 @@ def main():
     parser.add_argument(
         "--k-neighbors",
         type=int,
-        default=50,
-        help="Number of nearest neighbors for curvature analysis (default: 10)"
+        default=100,
+        help="Number of nearest neighbors for curvature analysis"
     )
     parser.add_argument(
         "--segment-first",
@@ -1061,6 +1865,17 @@ def main():
         default=0.2,
         help="Percentage of region to offset inward to avoid edge artifacts (default: 0.1 = 10%)"
     )
+    parser.add_argument(
+        "--use-roughness-analysis",
+        action="store_true",
+        help="Use surface roughness characteristic analysis instead of local bending energy"
+    )
+    parser.add_argument(
+        "--radius",
+        type=float,
+        default=None,
+        help="Kernel radius for roughness analysis. If not specified, will be auto-calculated (default: None)"
+    )
     
     args = parser.parse_args()
     
@@ -1082,12 +1897,12 @@ def main():
             for i, geometry in enumerate(geometries):
                 if isinstance(geometry, o3d.geometry.TriangleMesh):
                     print(f"\n{'='*50}")
-                    print(f"Analyzing curvature for model {i+1}/{len(geometries)}")
+                    print(f"Analyzing {'roughness' if args.use_roughness_analysis else 'curvature'} for model {i+1}/{len(geometries)}")
                     print(f"{'='*50}")
                     
                     if args.segment_first:
                         # Segment first, then analyze each region
-                        print("Using segmented curvature analysis...")
+                        print(f"Using segmented {'roughness' if args.use_roughness_analysis else 'curvature'} analysis...")
                         
                         # Prepare segmentation parameters
                         segmentation_params = {
@@ -1098,39 +1913,58 @@ def main():
                         }
                         
                         # Perform segmented analysis
-                        segmentation_results = segment_mesh_and_analyze_curvature(
-                            geometry, 
-                            args.k_neighbors, 
-                            segmentation_params
-                        )
-                        
-                        # Visualize each region
-                        visualize_segmented_curvature(
-                            geometry,
-                            segmentation_results,
-                            f"Segmented Curvature - Model {i+1}",
-                            args.region_offset
-                        )
+                        if args.use_roughness_analysis:
+                            segmentation_results = segment_mesh_and_analyze_roughness(
+                                geometry, 
+                                args.k_neighbors, 
+                                args.radius,
+                                segmentation_params
+                            )
+                            
+                            # Visualize each region
+                            visualize_segmented_roughness(
+                                geometry,
+                                segmentation_results,
+                                f"Segmented Roughness - Model {i+1}",
+                                args.region_offset
+                            )
+                        else:
+                            segmentation_results = segment_mesh_and_analyze_curvature(
+                                geometry, 
+                                args.k_neighbors, 
+                                segmentation_params
+                            )
+                            
+                            # Visualize each region
+                            visualize_segmented_curvature(
+                                geometry,
+                                segmentation_results,
+                                f"Segmented Curvature - Model {i+1}",
+                                args.region_offset
+                            )
                     else:
                         # Regular single-region analysis
-                        print("Using single-region curvature analysis...")
+                        print(f"Using single-region {'roughness' if args.use_roughness_analysis else 'curvature'} analysis...")
                         
-                        # Analyze curvature
-                        stats = analyze_mesh_curvature(geometry, args.k_neighbors)
-                        
-                        # Visualize bending energy
-                        visualize_bending_energy(
-                            geometry, 
-                            stats['bending_energies'],
-                            f"Bending Energy - Model {i+1}"
-                        )
-                    
-                    # Ask user if they want to continue to next model
-                    if i < len(geometries) - 1:
-                        response = input(f"\nPress Enter to analyze next model, or 'q' to quit: ").strip().lower()
-                        if response == 'q':
-                            print("Analysis stopped by user.")
-                            break
+                        # Analyze curvature or roughness
+                        if args.use_roughness_analysis:
+                            stats = analyze_mesh_roughness(geometry, args.k_neighbors, args.radius)
+                            
+                            # Visualize roughness characteristic
+                            visualize_roughness_characteristic(
+                                geometry, 
+                                stats['roughness_characteristics'],
+                                f"Surface Roughness - Model {i+1}"
+                            )
+                        else:
+                            stats = analyze_mesh_curvature(geometry, args.k_neighbors)
+                            
+                            # Visualize bending energy
+                            visualize_bending_energy(
+                                geometry, 
+                                stats['bending_energies'],
+                                f"Bending Energy - Model {i+1}"
+                            )
                 else:
                     print(f"Model {i+1} is not a triangle mesh, skipping curvature analysis.")
         else:
