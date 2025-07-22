@@ -2,6 +2,7 @@ import open3d as o3d
 import numpy as np
 import copy
 from src.segmentation import extract_fracture_surface_mesh
+from src.utils.geometry_utils import get_adjacent_faces_for_fracture, compute_curvature_for_faces
 
 print("DEBUG: preprocessing.py top level executed")
 
@@ -43,6 +44,31 @@ def preprocess_fragment(fragment_info, params, viz_collector=None):
     fracture_surfaces = extract_fracture_surface_mesh(original_mesh, fragment_name, params)
     if not isinstance(fracture_surfaces, list):
         fracture_surfaces = [fracture_surfaces] if fracture_surfaces is not None else []
+
+    # For each fracture surface, compute and store only local adjacency and curvature
+    fracture_surface_data = []
+    for surf in fracture_surfaces:
+        if surf is None or not surf.has_triangles():
+            continue
+        # Find face indices of this surface in the original mesh
+        surf_faces = np.asarray(surf.triangles)
+        mesh_faces = np.asarray(original_mesh.triangles)
+        def find_face_indices_in_mesh(mesh_faces, submesh_faces):
+            indices = []
+            for tri in submesh_faces:
+                matches = np.where(np.all(mesh_faces == tri, axis=1))[0]
+                if len(matches) > 0:
+                    indices.append(matches[0])
+            return indices
+        fracture_face_indices = find_face_indices_in_mesh(mesh_faces, surf_faces)
+        adjacent_face_indices = get_adjacent_faces_for_fracture(original_mesh, fracture_face_indices)
+        adjacent_face_curvatures = compute_curvature_for_faces(original_mesh, adjacent_face_indices)
+        fracture_surface_data.append({
+            'fracture_face_indices': fracture_face_indices,
+            'adjacent_face_indices': adjacent_face_indices,
+            'adjacent_face_curvatures': adjacent_face_curvatures
+        })
+    fragment_info['fracture_surface_data'] = fracture_surface_data
 
     # --- Step 2: For each surface, sample points, extract features, and store as lists ---
     features_list = []

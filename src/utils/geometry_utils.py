@@ -147,20 +147,34 @@ def compute_adjacent_face_normal_similarity(mesh_src, adj_faces_src, mesh_tgt, a
     return float(np.mean(similarity))
 
 
-def compute_face_curvatures(mesh, face_indices):
+def get_adjacent_faces_for_fracture(original_mesh, fracture_face_indices):
     """
-    Estimate curvature for each face as the angle between the face normal and the average normal of its neighbors.
-    Returns a numpy array of curvature values (in radians).
+    Returns a list of face indices that are adjacent to the given fracture faces,
+    but not part of the fracture surface itself.
+    """
+    tris = np.asarray(original_mesh.triangles)
+    tri_mesh = trimesh.Trimesh(vertices=np.asarray(original_mesh.vertices), faces=tris, process=False)
+    fracture_set = set(fracture_face_indices)
+    adjacent_faces = set()
+    for f1, f2 in tri_mesh.face_adjacency:
+        if f1 in fracture_set and f2 not in fracture_set:
+            adjacent_faces.add(f2)
+        elif f2 in fracture_set and f1 not in fracture_set:
+            adjacent_faces.add(f1)
+    return list(adjacent_faces)
+
+def compute_curvature_for_faces(mesh, face_indices):
+    """
+    Compute curvature for a subset of faces, using only their actual neighbors.
     """
     tris = np.asarray(mesh.triangles)
     normals = np.asarray(mesh.triangle_normals)
+    tri_mesh = trimesh.Trimesh(vertices=np.asarray(mesh.vertices), faces=tris, process=False)
+    face_neighbors = [set() for _ in range(len(tris))]
+    for f1, f2 in tri_mesh.face_adjacency:
+        face_neighbors[f1].add(f2)
+        face_neighbors[f2].add(f1)
     curvatures = np.zeros(len(face_indices))
-    # Build adjacency
-    face_neighbors = defaultdict(set)
-    for i, tri1 in enumerate(tris):
-        for j, tri2 in enumerate(tris):
-            if i != j and len(set(tri1) & set(tri2)) >= 2:
-                face_neighbors[i].add(j)
     for idx, face_idx in enumerate(face_indices):
         neighbors = list(face_neighbors[face_idx])
         if not neighbors:
@@ -190,8 +204,8 @@ def compute_curvature_similarity(mesh_src, adj_faces_src, mesh_tgt, adj_faces_tg
     Compare curvature distributions of two sets of adjacent faces.
     Returns a similarity score in [0, 1] (1 = perfect match).
     """
-    src_curv = compute_face_curvatures(mesh_src, adj_faces_src)
-    tgt_curv = compute_face_curvatures(mesh_tgt, adj_faces_tgt)
+    src_curv = compute_curvature_for_faces(mesh_src, adj_faces_src)
+    tgt_curv = compute_curvature_for_faces(mesh_tgt, adj_faces_tgt)
     if len(src_curv) == 0 or len(tgt_curv) == 0:
         return 0.0
     src_mean = np.mean(src_curv)

@@ -115,10 +115,10 @@ def test_proposed_pairwise_match(source_fragment, target_fragment, transformatio
 
 def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
     matches = []
-    w1 = params.get('composite_score_icp_weight', 0.5)
+    w1 = params.get('composite_score_icp_weight', 0.6)
     w2 = params.get('composite_score_adjacent_weight', 0.2)
-    w3 = params.get('composite_score_bumpiness_weight', 0.15)
-    w4 = params.get('composite_score_curvature_weight', 0.15)
+    w3 = params.get('composite_score_bumpiness_weight', 0.1)
+    w4 = params.get('composite_score_curvature_weight', 0.1)
     # Loop over all surface pairs
     for idx_i, (target_pcd, target_fpfh) in enumerate(zip(frag_i_data['pcds_for_features'], frag_i_data['features_list'])):
         for idx_j, (source_pcd, source_fpfh) in enumerate(zip(frag_j_data['pcds_for_features'], frag_j_data['features_list'])):
@@ -163,8 +163,20 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         return indices
                     source_fracture_indices = find_face_indices_in_mesh(frag_j_data['original_mesh'], source_fracture_faces)
                     target_fracture_indices = find_face_indices_in_mesh(frag_i_data['original_mesh'], target_fracture_faces)
-                    adj_source = get_adjacent_faces(frag_j_data['original_mesh'], source_fracture_indices)
-                    adj_target = get_adjacent_faces(frag_i_data['original_mesh'], target_fracture_indices)
+                    # Use the precomputed per-surface data
+                    source_surface_data = frag_j_data.get('fracture_surface_data', [None])[idx_j] if idx_j < len(frag_j_data.get('fracture_surface_data', [])) else None
+                    target_surface_data = frag_i_data.get('fracture_surface_data', [None])[idx_i] if idx_i < len(frag_i_data.get('fracture_surface_data', [])) else None
+                    if source_surface_data and target_surface_data:
+                        adj_source = source_surface_data['adjacent_face_indices']
+                        adj_target = target_surface_data['adjacent_face_indices']
+                        src_curv = np.asarray(source_surface_data['adjacent_face_curvatures']) if len(adj_source) > 0 else np.array([])
+                        tgt_curv = np.asarray(target_surface_data['adjacent_face_curvatures']) if len(adj_target) > 0 else np.array([])
+                    else:
+                        adj_source = []
+                        adj_target = []
+                        src_curv = np.array([])
+                        tgt_curv = np.array([])
+                    # Use adj_source, adj_target for normal and bumpiness similarity as before
                     source_mesh_transformed = copy.deepcopy(frag_j_data['original_mesh'])
                     source_mesh_transformed.transform(transform_j_to_i)
                     adjacent_similarity = compute_adjacent_face_normal_similarity(
@@ -175,20 +187,31 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         source_mesh_transformed, adj_source,
                         frag_i_data['original_mesh'], adj_target
                     )
-                    curvature_similarity = compute_curvature_similarity(
-                        source_mesh_transformed, adj_source,
-                        frag_i_data['original_mesh'], adj_target
-                    )
+                    # Curvature similarity using precomputed arrays
+                    if len(src_curv) == 0 or len(tgt_curv) == 0:
+                        curvature_similarity = 0.0
+                    else:
+                        src_mean = np.mean(src_curv)
+                        tgt_mean = np.mean(tgt_curv)
+                        denom = max(src_mean, tgt_mean, 1e-6)
+                        curvature_similarity = 1.0 - abs(src_mean - tgt_mean) / denom
+                        curvature_similarity = np.clip(curvature_similarity, 0, 1)
                 else:
                     adjacent_similarity = 0.0
                     bumpiness_similarity = 0.0
                     curvature_similarity = 0.0
+                # After computing each similarity component, ensure it is not NaN
+                fitness_ji = 0.0 if np.isnan(fitness_ji) else fitness_ji
+                adjacent_similarity = 0.0 if np.isnan(adjacent_similarity) else adjacent_similarity
+                bumpiness_similarity = 0.0 if np.isnan(bumpiness_similarity) else bumpiness_similarity
+                curvature_similarity = 0.0 if np.isnan(curvature_similarity) else curvature_similarity
                 composite_score = (
                     w1 * fitness_ji +
                     w2 * adjacent_similarity +
                     w3 * bumpiness_similarity +
                     w4 * curvature_similarity
                 )
+                composite_score = np.nan_to_num(composite_score, nan=0.0)
                 confidence_ji = float(fitness_ji) / (rmse_ji + 1e-6)
                 matches.append({
                     'source_idx': j, 'target_idx': i,
@@ -238,8 +261,20 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         return indices
                     source_fracture_indices = find_face_indices_in_mesh(frag_i_data['original_mesh'], source_fracture_faces)
                     target_fracture_indices = find_face_indices_in_mesh(frag_j_data['original_mesh'], target_fracture_faces)
-                    adj_source = get_adjacent_faces(frag_i_data['original_mesh'], source_fracture_indices)
-                    adj_target = get_adjacent_faces(frag_j_data['original_mesh'], target_fracture_indices)
+                    # Use the precomputed per-surface data
+                    source_surface_data = frag_i_data.get('fracture_surface_data', [None])[idx_i] if idx_i < len(frag_i_data.get('fracture_surface_data', [])) else None
+                    target_surface_data = frag_j_data.get('fracture_surface_data', [None])[idx_j] if idx_j < len(frag_j_data.get('fracture_surface_data', [])) else None
+                    if source_surface_data and target_surface_data:
+                        adj_source = source_surface_data['adjacent_face_indices']
+                        adj_target = target_surface_data['adjacent_face_indices']
+                        src_curv = np.asarray(source_surface_data['adjacent_face_curvatures']) if len(adj_source) > 0 else np.array([])
+                        tgt_curv = np.asarray(target_surface_data['adjacent_face_curvatures']) if len(adj_target) > 0 else np.array([])
+                    else:
+                        adj_source = []
+                        adj_target = []
+                        src_curv = np.array([])
+                        tgt_curv = np.array([])
+                    # Use adj_source, adj_target for normal and bumpiness similarity as before
                     source_mesh_transformed = copy.deepcopy(frag_i_data['original_mesh'])
                     source_mesh_transformed.transform(transform_i_to_j)
                     adjacent_similarity = compute_adjacent_face_normal_similarity(
@@ -250,20 +285,31 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         source_mesh_transformed, adj_source,
                         frag_j_data['original_mesh'], adj_target
                     )
-                    curvature_similarity = compute_curvature_similarity(
-                        source_mesh_transformed, adj_source,
-                        frag_j_data['original_mesh'], adj_target
-                    )
+                    # Curvature similarity using precomputed arrays
+                    if len(src_curv) == 0 or len(tgt_curv) == 0:
+                        curvature_similarity = 0.0
+                    else:
+                        src_mean = np.mean(src_curv)
+                        tgt_mean = np.mean(tgt_curv)
+                        denom = max(src_mean, tgt_mean, 1e-6)
+                        curvature_similarity = 1.0 - abs(src_mean - tgt_mean) / denom
+                        curvature_similarity = np.clip(curvature_similarity, 0, 1)
                 else:
                     adjacent_similarity = 0.0
                     bumpiness_similarity = 0.0
                     curvature_similarity = 0.0
+                # After computing each similarity component, ensure it is not NaN
+                fitness_ij = 0.0 if np.isnan(fitness_ij) else fitness_ij
+                adjacent_similarity = 0.0 if np.isnan(adjacent_similarity) else adjacent_similarity
+                bumpiness_similarity = 0.0 if np.isnan(bumpiness_similarity) else bumpiness_similarity
+                curvature_similarity = 0.0 if np.isnan(curvature_similarity) else curvature_similarity
                 composite_score = (
                     w1 * fitness_ij +
                     w2 * adjacent_similarity +
                     w3 * bumpiness_similarity +
                     w4 * curvature_similarity
                 )
+                composite_score = np.nan_to_num(composite_score, nan=0.0)
                 confidence_ij = float(fitness_ij) / (rmse_ij + 1e-6)
                 matches.append({
                     'source_idx': i, 'target_idx': j,
