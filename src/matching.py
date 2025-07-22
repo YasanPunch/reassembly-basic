@@ -8,7 +8,7 @@ from src.utils.geometry_utils import get_adjacent_faces, compute_adjacent_face_n
 import open3d as o3d
 import math
 
-print("DEBUG: matching.py top level executed") # <--- ADD THIS
+print("DEBUG: matching.py top level executed")
 
 def sample_points_on_surface(mesh, n_points=500):
     # Uniformly sample points on the mesh surface
@@ -350,6 +350,17 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                 composite_score *= distance_penalty
                 composite_score *= surface_distance_penalty
                 composite_score *= intersection_penalty
+                # Compute total surface coverage as the average of both directions
+                total_coverage = (coverage_A_by_B + coverage_B_by_A) / 2.0
+                # Intersection penalty (softer)
+                if min_dist < -0.1:
+                    intersection_penalty = 0.01
+                    print(f"[Penalty] {frag_j_data['name']} -> {frag_i_data['name']} | min_dist={min_dist:.4f} < -0.1, strong penalty.")
+                elif min_dist < 0:
+                    intersection_penalty = np.exp(-5 * abs(min_dist))
+                    print(f"[Penalty] {frag_j_data['name']} -> {frag_i_data['name']} | min_dist={min_dist:.4f} < 0, soft penalty: {intersection_penalty:.4f}")
+                else:
+                    intersection_penalty = 1.0
                 # Use precomputed average normals for each fracture surface
                 avg_normal_src = None
                 avg_normal_tgt = None
@@ -368,7 +379,9 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         print(f"[Normal Penalty] {frag_j_data['name']} -> {frag_i_data['name']} | Angle between normals: {angle:.2f}°, penalty: {normal_alignment_penalty:.4f}")
                 else:
                     normal_alignment_penalty = 1.0
-                composite_score *= normal_alignment_penalty
+                # Composite score: ICP fitness * total_coverage * normal_alignment_penalty * intersection_penalty
+                composite_score = fitness_ji * total_coverage * normal_alignment_penalty * intersection_penalty
+                print(f"[Score] {frag_j_data['name']} -> {frag_i_data['name']} | ICP: {fitness_ji:.4f} | Coverage: {total_coverage:.4f} | Normal penalty: {normal_alignment_penalty:.4f} | Intersection penalty: {intersection_penalty:.4f} | Composite: {composite_score:.4f}")
                 confidence_ji = float(fitness_ji) / (rmse_ji + 1e-6)
                 matches.append({
                     'source_idx': j, 'target_idx': i,
@@ -378,13 +391,9 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                     'confidence': confidence_ji,
                     'source_name': frag_j_data['name'], 'target_name': frag_i_data['name'],
                     'icp_fitness': fitness_ji,
-                    'adjacent_similarity': adjacent_similarity,
-                    'bumpiness_similarity': bumpiness_similarity,
-                    'curvature_similarity': curvature_similarity,
-                    'distance_penalty': distance_penalty,
-                    'intersection_penalty': intersection_penalty,
-                    'coverage_A_by_B': coverage_A_by_B,
-                    'coverage_B_by_A': coverage_B_by_A
+                    'total_coverage': total_coverage,
+                    'normal_alignment_penalty': normal_alignment_penalty,
+                    'intersection_penalty': intersection_penalty
                 })
                 # Also try the reverse direction (i to j)
                 if debug:
@@ -396,19 +405,9 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                     transform_i_to_j, fitness_ij, rmse_ij = align_fragments_pcd(
                         target_pcd, source_pcd, target_fpfh, source_fpfh, params
                     )
-                # Early exit: skip if fitness is too low
                 if transform_i_to_j is None or fitness_ij < 0.2:
                     print(f"[Reject] {frag_i_data['name']} -> {frag_j_data['name']} | ICP fitness too low: {fitness_ij:.4f}")
                     continue
-                if params.get("use_boolean_intersection_test", False):
-                    is_valid = test_proposed_pairwise_match(
-                        frag_i_data, frag_j_data, transform_i_to_j, params
-                    )
-                    if not is_valid:
-                        print(f"[Reject] {frag_i_data['name']} -> {frag_j_data['name']} | Boolean intersection test failed.")
-                        continue
-                    else:
-                        print(f"  ✅ Penetration test passed: {frag_i_data['name']} -> {frag_j_data['name']} is a valid match.")
                 source_fracture_mesh = frag_i_data.get('fracture_surfaces', [None])[idx_i]
                 target_fracture_mesh = frag_j_data.get('fracture_surfaces', [None])[idx_j]
                 if source_fracture_mesh is not None and target_fracture_mesh is not None:
@@ -424,125 +423,50 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                     pts_target = sampled_points_cache[key_target]
                     min_dist, dists = min_distance_between_surfaces(pts_source, pts_target)
                     distance_penalty = np.exp(-min_dist/2)
-                    # Surface-to-surface distance penalty (with tolerance)
-                    epsilon = 0.05  # Allow up to 0.05 units of overlap
-                    if min_dist < -epsilon:
-                        print(f"[Reject] {frag_i_data['name']} -> {frag_j_data['name']} | Intersecting (min_dist={min_dist:.4f} < -{epsilon}), skipping match.")
-                        continue
-                    if min_dist < 0:
-                        surface_distance_penalty = np.exp(-5 * abs(min_dist))  # Softer penalty for tiny overlaps
-                        print(f"[Penalty] {frag_i_data['name']} -> {frag_j_data['name']} | min_dist={min_dist:.4f} < 0, soft penalty: {surface_distance_penalty:.4f}")
-                    else:
-                        surface_distance_penalty = np.exp(-min_dist)
-                    print(f"[Scoring] {frag_i_data['name']} -> {frag_j_data['name']} | Min distance: {min_dist:.4f} | Distance penalty: {distance_penalty:.4f} | Surface distance penalty: {surface_distance_penalty:.4f}")
-                    if min_dist > 3.0:
-                        print(f"[Reject] {frag_i_data['name']} -> {frag_j_data['name']} | Min distance {min_dist:.4f} > 3.0, skipping expensive checks.")
-                        continue
-                    frac_inside, frac_deep = robust_intersection_check(pts_source, frag_j_data['original_mesh'])
-                    # Harsher intersection penalty
-                    if frac_deep > 0.1:
-                        print(f"[Severe Penalty] {frag_i_data['name']} -> {frag_j_data['name']} | Deep intersection detected (frac_deep={frac_deep:.3f}), setting intersection_penalty to 0.01")
+                    epsilon = 0.05
+                    if min_dist < -0.1:
                         intersection_penalty = 0.01
+                        print(f"[Penalty] {frag_i_data['name']} -> {frag_j_data['name']} | min_dist={min_dist:.4f} < -0.1, strong penalty.")
+                    elif min_dist < 0:
+                        intersection_penalty = np.exp(-5 * abs(min_dist))
+                        print(f"[Penalty] {frag_i_data['name']} -> {frag_j_data['name']} | min_dist={min_dist:.4f} < 0, soft penalty: {intersection_penalty:.4f}")
                     else:
-                        intersection_penalty = max(0.1, 1.0 - min(1.0, frac_deep * 10))
-                    print(f"[Scoring] {frag_i_data['name']} -> {frag_j_data['name']} | Fraction inside: {frac_inside:.4f} | Fraction deep: {frac_deep:.4f} | Intersection penalty: {intersection_penalty:.4f}")
+                        intersection_penalty = 1.0
                     coverage_A_by_B = surface_coverage(pts_source, pts_target)
                     coverage_B_by_A = surface_coverage(pts_target, pts_source)
-                    print(f"[Scoring] {frag_i_data['name']} -> {frag_j_data['name']} | Coverage A by B: {coverage_A_by_B:.4f} | Coverage B by A: {coverage_B_by_A:.4f}")
-                else:
-                    distance_penalty = 1.0
-                    intersection_penalty = 1.0
-                    coverage_A_by_B = 0.0
-                    coverage_B_by_A = 0.0
-                    print(f"[Scoring] {frag_i_data['name']} -> {frag_j_data['name']} | Fracture surfaces missing, using default penalties and zero coverage.")
-                # Remove hard rejection for empty adjacent faces in reverse direction
-                if source_fracture_faces is not None and target_fracture_faces is not None:
-                    source_fracture_faces = np.asarray(source_fracture_faces)
-                    target_fracture_faces = np.asarray(target_fracture_faces)
-                    def find_face_indices_in_mesh(mesh, submesh_triangles):
-                        mesh_tris = np.asarray(mesh.triangles)
-                        submesh_tris = np.asarray(submesh_triangles)
-                        indices = []
-                        for tri in submesh_tris:
-                            matches = np.where(np.all(mesh_tris == tri, axis=1))[0]
-                            if len(matches) > 0:
-                                indices.append(matches[0])
-                        return indices
-                    source_fracture_indices = find_face_indices_in_mesh(frag_i_data['original_mesh'], source_fracture_faces)
-                    target_fracture_indices = find_face_indices_in_mesh(frag_j_data['original_mesh'], target_fracture_faces)
-                    adj_source = get_adjacent_faces(frag_i_data['original_mesh'], source_fracture_indices)
-                    adj_target = get_adjacent_faces(frag_j_data['original_mesh'], target_fracture_indices)
-                    source_mesh_transformed = copy.deepcopy(frag_i_data['original_mesh'])
-                    source_mesh_transformed.transform(transform_i_to_j)
-                    if len(adj_source) == 0 or len(adj_target) == 0:
-                        print(f"[Penalty] {frag_i_data['name']} -> {frag_j_data['name']} | Adjacent faces empty, applying penalty but not skipping match.")
-                        adjacent_similarity = 0.0
-                        bumpiness_similarity = 0.0
-                        curvature_similarity = 0.0
+                    total_coverage = (coverage_A_by_B + coverage_B_by_A) / 2.0
+                    avg_normal_src = None
+                    avg_normal_tgt = None
+                    if 'fracture_surface_normals' in frag_i_data and 'fracture_surface_normals' in frag_j_data:
+                        if idx_i < len(frag_i_data['fracture_surface_normals']) and idx_j < len(frag_j_data['fracture_surface_normals']):
+                            avg_normal_src = frag_i_data['fracture_surface_normals'][idx_i]
+                            avg_normal_tgt = frag_j_data['fracture_surface_normals'][idx_j]
+                    if avg_normal_src is not None and avg_normal_tgt is not None:
+                        dot = np.clip(np.dot(avg_normal_src, avg_normal_tgt), -1.0, 1.0)
+                        angle = np.degrees(np.arccos(dot))
+                        if angle < 90 or angle > 270:
+                            normal_alignment_penalty = 0.01
+                            print(f"[Normal Penalty] {frag_i_data['name']} -> {frag_j_data['name']} | Angle between normals: {angle:.2f}°, strong penalty.")
+                        else:
+                            normal_alignment_penalty = max(0.01, 1 - abs(angle - 180) / 90)
+                            print(f"[Normal Penalty] {frag_i_data['name']} -> {frag_j_data['name']} | Angle between normals: {angle:.2f}°, penalty: {normal_alignment_penalty:.4f}")
                     else:
-                        adjacent_similarity = compute_adjacent_face_normal_similarity(
-                            source_mesh_transformed, adj_source,
-                            frag_j_data['original_mesh'], adj_target
-                        )
-                        bumpiness_similarity = compute_bumpiness_similarity(
-                            source_mesh_transformed, adj_source,
-                            frag_j_data['original_mesh'], adj_target
-                        )
-                        curvature_similarity = compute_curvature_similarity(
-                            source_mesh_transformed, adj_source,
-                            frag_j_data['original_mesh'], adj_target
-                        )
-                else:
-                    adjacent_similarity = 0.0
-                    bumpiness_similarity = 0.0
-                    curvature_similarity = 0.0
-                composite_score = (
-                    w1 * fitness_ij +
-                    w2 * adjacent_similarity +
-                    w3 * bumpiness_similarity +
-                    w4 * curvature_similarity +
-                    1.5 * min(coverage_A_by_B, coverage_B_by_A) +  # promote full coverage
-                    1.0 * max(coverage_A_by_B, coverage_B_by_A)    # promote partial coverage
-                )
-                composite_score *= distance_penalty
-                composite_score *= surface_distance_penalty
-                composite_score *= intersection_penalty
-                # Use precomputed average normals for each fracture surface (reverse direction)
-                avg_normal_src = None
-                avg_normal_tgt = None
-                if 'fracture_surface_normals' in frag_i_data and 'fracture_surface_normals' in frag_j_data:
-                    if idx_i < len(frag_i_data['fracture_surface_normals']) and idx_j < len(frag_j_data['fracture_surface_normals']):
-                        avg_normal_src = frag_i_data['fracture_surface_normals'][idx_i]
-                        avg_normal_tgt = frag_j_data['fracture_surface_normals'][idx_j]
-                if avg_normal_src is not None and avg_normal_tgt is not None:
-                    dot = np.clip(np.dot(avg_normal_src, avg_normal_tgt), -1.0, 1.0)
-                    angle = np.degrees(np.arccos(dot))
-                    if angle < 90 or angle > 270:
-                        normal_alignment_penalty = 0.01
-                        print(f"[Normal Penalty] {frag_i_data['name']} -> {frag_j_data['name']} | Angle between normals: {angle:.2f}°, strong penalty.")
-                    else:
-                        normal_alignment_penalty = max(0.01, 1 - abs(angle - 180) / 90)
-                        print(f"[Normal Penalty] {frag_i_data['name']} -> {frag_j_data['name']} | Angle between normals: {angle:.2f}°, penalty: {normal_alignment_penalty:.4f}")
-                else:
-                    normal_alignment_penalty = 1.0
-                composite_score *= normal_alignment_penalty
-                confidence_ij = float(fitness_ij) / (rmse_ij + 1e-6)
-                matches.append({
-                    'source_idx': i, 'target_idx': j,
-                    'source_surface_idx': idx_i, 'target_surface_idx': idx_j,
-                    'transformation': transform_i_to_j,
-                    'score': composite_score, 'rmse': rmse_ij,
-                    'confidence': confidence_ij,
-                    'source_name': frag_i_data['name'], 'target_name': frag_j_data['name'],
-                    'icp_fitness': fitness_ij,
-                    'adjacent_similarity': adjacent_similarity,
-                    'bumpiness_similarity': bumpiness_similarity,
-                    'curvature_similarity': curvature_similarity,
-                    'distance_penalty': distance_penalty,
-                    'intersection_penalty': intersection_penalty,
-                    'coverage_A_by_B': coverage_A_by_B,
-                    'coverage_B_by_A': coverage_B_by_A
-                })
+                        normal_alignment_penalty = 1.0
+                    composite_score = fitness_ij * total_coverage * normal_alignment_penalty * intersection_penalty
+                    print(f"[Score] {frag_i_data['name']} -> {frag_j_data['name']} | ICP: {fitness_ij:.4f} | Coverage: {total_coverage:.4f} | Normal penalty: {normal_alignment_penalty:.4f} | Intersection penalty: {intersection_penalty:.4f} | Composite: {composite_score:.4f}")
+                    confidence_ij = float(fitness_ij) / (rmse_ij + 1e-6)
+                    matches.append({
+                        'source_idx': i, 'target_idx': j,
+                        'source_surface_idx': idx_i, 'target_surface_idx': idx_j,
+                        'transformation': transform_i_to_j,
+                        'score': composite_score, 'rmse': rmse_ij,
+                        'confidence': confidence_ij,
+                        'source_name': frag_i_data['name'], 'target_name': frag_j_data['name'],
+                        'icp_fitness': fitness_ij,
+                        'total_coverage': total_coverage,
+                        'normal_alignment_penalty': normal_alignment_penalty,
+                        'intersection_penalty': intersection_penalty
+                    })
             except Exception as e:
                 print(f"[Error] Exception in _match_fragment_pair for {frag_j_data['name']} -> {frag_i_data['name']}: {e}")
                 continue
