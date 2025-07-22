@@ -43,6 +43,12 @@ class App:
         self._scene_widget.scene = rendering.Open3DScene(w.renderer)
         self._scene_widget.set_view_controls(gui.SceneWidget.Controls.ROTATE_CAMERA) # Default camera control
 
+        # --- Visualization: Set background and lighting for the scene widget ---
+        self._scene_widget.scene.set_background([1, 1, 1, 1])  # White background
+        self._scene_widget.scene.scene.set_sun_light([0, 1, 0], [1, 1, 1], 100000)
+        self._scene_widget.scene.scene.enable_sun_light(True)
+        # ---------------------------------------------------------------
+
         self._panels_layout = gui.ScrollableVert()
 
         self._left_panel = LeftPanel(self)
@@ -53,8 +59,8 @@ class App:
 
         w.set_on_layout(self._on_layout)
         w.add_child(self._scene_widget) # Add the single scene widget
-        w.add_child(self._left_panel._db_tree_section)
-        w.add_child(self._left_panel._properties_section)
+        w.add_child(self._left_panel.item_tree.section)
+        w.add_child(self._left_panel.properties_panel.section)
         w.add_child(self._panels_layout)
 
         p = self._panels_layout
@@ -119,13 +125,13 @@ class App:
         panel_width = 17 * em
 
         # Position left panel
-        self._left_panel._db_tree_section.frame = gui.Rect(r.x, r.y, panel_width, r.height / 2)
-        self._left_panel._properties_section.frame = gui.Rect(r.x, r.y + r.height / 2, panel_width, r.height / 2)
+        self._left_panel.item_tree.section.frame = gui.Rect(r.x, r.y, panel_width, r.height / 2)
+        self._left_panel.properties_panel.section.frame = gui.Rect(r.x, r.y + r.height / 2, panel_width, r.height / 2)
 
         # Position right panel
         self._panels_layout.frame = gui.Rect(r.get_right() - panel_width, r.y, panel_width, r.height)
 
-        # Position the main scene widget in the center
+        # Position the main scene widget in the center (ensure it's not overlapped)
         scene_x = r.x + panel_width
         scene_width = r.width - 2 * panel_width
         self._scene_widget.frame = gui.Rect(scene_x, r.y, scene_width, r.height)
@@ -316,31 +322,35 @@ class App:
         except Exception as e:
             print(f"Error closing about dialog: {e}")
 
-    def _add_object_to_scene(self, path, mesh=None, geometry=None):
+    def _add_object_to_scene(self, path, geometry=None):
         """Adds a model or point cloud to the single 3D scene."""
-        
-        # Add geometry to the scene. Use path as a unique name.
-        if mesh:
-            self._scene_widget.scene.add_model(path, mesh)
-            self._scene_objects[path] = {'type': 'model', 'mesh': mesh}
-        elif geometry:
-            self._scene_widget.scene.add_geometry(path, geometry, self.settings.material)
+        print(f"[DEBUG] _add_object_to_scene called with path: {path}, mesh: {geometry is not None}")
+        if geometry is not None:
+            # Use add_geometry instead of add_model, and ensure a material is provided
+            import open3d.visualization.rendering as rendering
+            if hasattr(self.settings, 'material') and self.settings.material is not None:
+                material = self.settings.material
+            else:
+                material = rendering.MaterialRecord()
+                material.shader = "defaultLit"
+            self._scene_widget.scene.add_geometry(path, geometry, material)
             self._scene_objects[path] = {'type': 'geometry', 'geometry': geometry}
+            print(f"[DEBUG] Geometry added to scene: {path}")
         else:
-            return
+            print(f"[ERROR] No geometry provided for: {path}")
 
         # Update camera to frame all visible objects
         self._update_camera_bounds()
 
-        # Add object to the left panel UI
-        self._left_panel.add_object(path, len(self._scene_objects) - 1)
+        # Add object to the item tree UI
+        self._left_panel.item_tree.add_object(path, name=os.path.basename(path))
     
     def _update_camera_bounds(self):
         """Calculates the bounding box of all visible objects and adjusts the camera."""
         bounds = None
         for path, obj_info in self._scene_objects.items():
-            # Check if object is visible (we'll need to get this from left_panel)
-            obj_in_panel = next((o for o in self._left_panel.get_all_objects() if o['path'] == path), None)
+            # Check if object is visible (get from item tree)
+            obj_in_panel = next((o for o in self._left_panel.item_tree.get_all_objects() if o['path'] == path), None)
             if obj_in_panel and obj_in_panel['visible']:
                 if obj_info['type'] == 'model':
                     geom_bounds = obj_info['mesh'].get_axis_aligned_bounding_box()
@@ -352,7 +362,7 @@ class App:
                 else:
                     bounds = bounds.get_union(geom_bounds)
         
-        if bounds and bounds.get_volume() > 0:
+        if bounds and bounds.volume() > 0:
             self._scene_widget.setup_camera(60, bounds, bounds.get_center())
         else:
             self._scene_widget.setup_camera(60, o3d.geometry.AxisAlignedBoundingBox([-1,-1,-1], [1,1,1]), [0,0,0])
@@ -360,32 +370,22 @@ class App:
 
     def load(self, path):
         geometry = None
-        geometry_type = o3d.io.read_file_geometry_type(path)
-
-        mesh = None
-        if geometry_type & o3d.io.CONTAINS_TRIANGLES:
-            mesh = o3d.io.read_triangle_model(path)
-        if mesh is None:
-            print("[Info]", path, "appears to be a point cloud")
-            cloud = None
-            try:
-                cloud = o3d.io.read_point_cloud(path)
-            except Exception:
-                pass
-            if cloud is not None:
-                print("[Info] Successfully read", path)
+        # Try to load as mesh
+        mesh = o3d.io.read_triangle_mesh(path)
+        if mesh is not None and mesh.has_vertices():
+            geometry = mesh
+        else:
+            # Try to load as point cloud
+            cloud = o3d.io.read_point_cloud(path)
+            if cloud is not None and cloud.has_points():
                 if not cloud.has_normals():
                     cloud.estimate_normals()
-                cloud.normalize_normals()
                 geometry = cloud
-            else:
-                print("[WARNING] Failed to read points", path)
 
-        if geometry is not None or mesh is not None:
-            try:
-                self._add_object_to_scene(path=path, mesh=mesh, geometry=geometry)
-            except Exception as e:
-                print(e)
+        if geometry is not None:
+            self._add_object_to_scene(path=path, geometry=geometry)
+        else:
+            print(f"[ERROR] Could not load any geometry or mesh from: {path}")
 
     def export_image(self, path, width, height):
         return
@@ -419,14 +419,8 @@ def main():
             else:
                 w.window.show_message_box("Error", "Could not open file '" + path + "'")
     else:
-        paths = [
-            "C:/sem7/FYP/Reassembly/yasan-reassembly-final-approach/reassembly-basic/data/input_fragments"
-        ]
-        for path in paths:
-            if os.path.exists(path):
-                w.load(path)
-            else:
-                w.window.show_message_box("Error", "Could not open file '" + path + "'")
+        # The app should start empty and only load files when the user imports them via the menu.
+        pass
 
     # Run the event loop. This will not return until the last window is closed.
     gui.Application.instance.run()
