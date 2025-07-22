@@ -11,6 +11,7 @@ from models.models_panel import ModelsPanel
 from processing.processing_panel import ProcessingPanel
 from settings.settings import Settings
 from settings.settings_panel import SettingsPanel
+from left_panel.item_tree.items.base_model_item import BaseModelItem
 
 
 class App:
@@ -363,7 +364,7 @@ class App:
         base_model_items = self._left_panel.item_tree.get_items_by_type('base_model')
         
         for item in base_model_items:
-            if isinstance(item, self._left_panel.item_tree.items.BaseModelItem):
+            if isinstance(item, BaseModelItem):
                 path = item.mesh_path
                 print(f"[DEBUG] Checking base model item: {path}, visible: {item.is_visible}")
                 

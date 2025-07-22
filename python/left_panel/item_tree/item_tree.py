@@ -74,6 +74,9 @@ class ItemTree:
         # Ensure the object is shown by default
         self.app._scene_widget.scene.show_geometry(mesh_path, is_visible)
         
+        # Trigger layout update to refresh the UI
+        self.app.window.set_needs_layout()
+        
         return item
 
     def add_segmentation_item(self, label: str, segmented_mesh=None, original_mesh_path: str = "",
@@ -101,6 +104,9 @@ class ItemTree:
         self.segmentation_results_dropdown.add_child(cb)
         self._items['segmentation'].append(item)
         self._item_widgets[item.id] = cb
+        
+        # Trigger layout update to refresh the UI
+        self.app.window.set_needs_layout()
         
         return item
 
@@ -133,6 +139,9 @@ class ItemTree:
         self._items['classification'].append(item)
         self._item_widgets[item.id] = cb
         
+        # Trigger layout update to refresh the UI
+        self.app.window.set_needs_layout()
+        
         return item
 
     def add_pairwise_item(self, label: str, fragment1_path: str = "", fragment2_path: str = "",
@@ -162,6 +171,9 @@ class ItemTree:
         self._items['pairwise'].append(item)
         self._item_widgets[item.id] = cb
         
+        # Trigger layout update to refresh the UI
+        self.app.window.set_needs_layout()
+        
         return item
 
     def add_assembly_item(self, label: str, assembled_mesh=None, fragment_paths: List[str] = None,
@@ -189,6 +201,9 @@ class ItemTree:
         self.global_reassembly_results_dropdown.add_child(cb)
         self._items['assembly'].append(item)
         self._item_widgets[item.id] = cb
+        
+        # Trigger layout update to refresh the UI
+        self.app.window.set_needs_layout()
         
         return item
 
@@ -243,6 +258,10 @@ class ItemTree:
             # Note: Open3D GUI doesn't have a direct remove_child method
             # This is a limitation - we'd need to rebuild the dropdown
             print(f"[WARNING] Cannot remove widget from dropdown for {item_type}")
+
+    def refresh_layout(self):
+        """Trigger a layout update for the item tree section."""
+        self.app.window.set_needs_layout()
 
     # Legacy compatibility methods
     def add_object(self, path, name=None):
