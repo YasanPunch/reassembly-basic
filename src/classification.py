@@ -16,6 +16,7 @@ from roughness_analysis import analyze_mesh_roughness
 from mesh_utils import segment_mesh_and_analyze_curvature, segment_mesh_and_analyze_roughness
 from visualization import visualize_bending_energy, visualize_roughness_characteristic
 from segmented_visualization import visualize_segmented_curvature, visualize_segmented_roughness
+from supervised_learning import run_supervised_fracture_detection
 
 
 def main():
@@ -99,6 +100,11 @@ def main():
         default=None,
         help="Kernel radius for roughness analysis. If not specified, will be auto-calculated (default: None)"
     )
+    parser.add_argument(
+        "--supervised-learning",
+        action="store_true",
+        help="Use supervised learning to optimize parameters and classify fracture surfaces"
+    )
     
     args = parser.parse_args()
     
@@ -145,12 +151,15 @@ def main():
                             )
                             
                             # Visualize each region
-                            visualize_segmented_roughness(
-                                geometry,
-                                segmentation_results,
-                                f"Segmented Roughness - Model {i+1}",
-                                args.region_offset
-                            )
+                            if args.supervised_learning:
+                                run_supervised_fracture_detection(geometry, segmentation_results)
+                            else:
+                                visualize_segmented_roughness(
+                                    geometry,
+                                    segmentation_results,
+                                    f"Segmented Roughness - Model {i+1}",
+                                    args.region_offset
+                                )
                         else:
                             segmentation_results = segment_mesh_and_analyze_curvature(
                                 geometry, 
@@ -159,12 +168,15 @@ def main():
                             )
                             
                             # Visualize each region
-                            visualize_segmented_curvature(
-                                geometry,
-                                segmentation_results,
-                                f"Segmented Curvature - Model {i+1}",
-                                args.region_offset
-                            )
+                            if args.supervised_learning:
+                                run_supervised_fracture_detection(geometry, segmentation_results)
+                            else:
+                                visualize_segmented_curvature(
+                                    geometry,
+                                    segmentation_results,
+                                    f"Segmented Curvature - Model {i+1}",
+                                    args.region_offset
+                                )
                     else:
                         # Regular single-region analysis
                         print(f"Using single-region {'roughness' if args.use_roughness_analysis else 'curvature'} analysis...")
