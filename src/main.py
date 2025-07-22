@@ -6,6 +6,10 @@ print("o3d-version: ", o3d.__version__) # Keep for debugging
 import time
 import numpy as np
 import copy # For deep copying geometries for visualization log
+import random
+
+np.random.seed(42)
+random.seed(42)
 
 # For checking module paths (can be removed in final version)
 #import importlib.util

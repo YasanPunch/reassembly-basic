@@ -1,7 +1,6 @@
 import numpy as np
 from itertools import combinations
 from src.alignment import align_fragments_pcd
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import trimesh
 import copy
 
@@ -213,18 +212,16 @@ def find_pairwise_matches(fragments_data, params, debug=False, top_n_per_pair=3)
     print(f"\nFinding pairwise matches among {num_fragments} fragments...")
     pairs = list(combinations(range(num_fragments), 2))
     results = []
-    with ThreadPoolExecutor() as executor:
-        future_to_pair = {
-            executor.submit(_match_fragment_pair, i, j, fragments_data[i], fragments_data[j], params, debug): (i, j)
-            for i, j in pairs
-        }
-        for future in as_completed(future_to_pair):
-            i, j = future_to_pair[future]
-            matches = future.result()
-            if matches:
-                # Only keep top N matches for this pair (by score)
-                matches_sorted = sorted(matches, key=lambda x: x['score'], reverse=True)
-                results.extend(matches_sorted[:top_n_per_pair])
+    
+    # Use deterministic sequential processing instead of parallel processing
+    # This ensures consistent results across runs
+    for i, j in pairs:
+        matches = _match_fragment_pair(i, j, fragments_data[i], fragments_data[j], params, debug)
+        if matches:
+            # Only keep top N matches for this pair (by score)
+            matches_sorted = sorted(matches, key=lambda x: x['score'], reverse=True)
+            results.extend(matches_sorted[:top_n_per_pair])
+    
     # Sort all results by score (descending)
     results.sort(key=lambda x: x['score'], reverse=True)
     print(f"Found {len(results)} potential pairwise matches above threshold (top {top_n_per_pair} per pair).")

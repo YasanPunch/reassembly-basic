@@ -1,8 +1,13 @@
 import open3d as o3d
 import numpy as np
 import copy
+import random
 
 print("DEBUG: alignment.py top level executed")
+
+# Set random seed for deterministic RANSAC behavior
+random.seed(42)
+np.random.seed(42)
 
 def execute_global_registration(source_pcd, target_pcd, source_fpfh, target_fpfh, params):
     """

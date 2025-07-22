@@ -5,6 +5,9 @@ from src.segmentation import extract_fracture_surface_mesh
 
 print("DEBUG: preprocessing.py top level executed")
 
+# Set random seed for deterministic noise addition
+np.random.seed(42)
+
 def preprocess_fragment(fragment_info, params, viz_collector=None): 
     """
     Preprocesses a single fragment:
