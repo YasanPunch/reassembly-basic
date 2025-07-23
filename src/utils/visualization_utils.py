@@ -18,6 +18,22 @@ def get_color(index, total_items=20): # Added total_items for better cmap indexi
         colors = [[1,0,0],[0,1,0],[0,0,1],[1,1,0],[1,0,1],[0,1,1],[0.8,0.5,0.2],[0.5,0.2,0.8],[0.2,0.8,0.5]]
         return colors[index % len(colors)]
 
+
+def draw_registration_result(
+    source, target, transformation, window_name="Registration Result"
+):
+    # ... (remains the same, but ensure geometries are copies if modified)
+    source_temp = copy.deepcopy(source)
+    target_temp = copy.deepcopy(target)
+    source_temp.paint_uniform_color([1, 0.706, 0])
+    target_temp.paint_uniform_color([0, 0.651, 0.929])
+    if transformation is not None:
+        source_temp.transform(transformation)
+    o3d.visualization.draw_geometries(
+        [source_temp, target_temp], window_name=window_name
+    )
+
+
 def debug_visualize_voxel_downsampling(
     original_mesh, surf, pcd, fragment_name, surface_index
 ):

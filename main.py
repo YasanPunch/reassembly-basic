@@ -10,6 +10,8 @@ import random
 np.random.seed(42)
 random.seed(42)
 
+from src.utils.visualization_utils import draw_registration_result
+
 import src.io_utils
 import src.preprocessing
 import src.matching
@@ -168,10 +170,12 @@ def main(args):
             if not target_geom_to_viz.has_vertex_normals():
                 target_geom_to_viz.compute_vertex_normals()
 
-    # LIMIT DEBUG VISUALIZATION TO TOP N PAIRWISE MATCHES (CHANGE N HERE IF NEEDED)
-    DEBUG_TOP_N_MATCHES = 5
-    if args.debug_pairwise_matching and pairwise_matches:
-        pairwise_matches = pairwise_matches[:DEBUG_TOP_N_MATCHES]
+            draw_registration_result(
+                source_geom_to_viz,
+                target_geom_to_viz,
+                match_viz["transformation"],
+                window_name=f"Pairwise Match {i_viz+1}/{len(sorted_matches_for_viz)}: {s_data['name']} to {t_data['name']} (Score: {match_viz['score']:.3f})",
+            )
 
     # 5. Global Assembly --------------------------------------------------------------------------------------------
     print("\n[5. Performing Global Assembly]")
