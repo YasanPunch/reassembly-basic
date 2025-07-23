@@ -3,7 +3,7 @@ import os
 from typing import List, Dict, Any, Optional
 from .items import (
     BaseItem, BaseModelItem, SegmentationResultItem, 
-    ClassificationResultItem, PairwiseResultItem, AssemblyResultItem, PreprocessedItem
+    ClassificationResultItem, PairwiseResultItem, AssemblyResultItem, PreprocessedItem, PreprocessedResultItem
 )
 
 
@@ -40,6 +40,7 @@ class ItemTree:
         self._items: Dict[str, List[BaseItem]] = {
             'base_model': [],
             'preprocessing': [],
+            'preprocessing_results': [],  # Container for PreprocessedResultItem
             'segmentation': [],
             'pairwise': [],
             'assembly': [],
@@ -82,16 +83,18 @@ class ItemTree:
         
         return item
 
-    def add_preprocessing_item(self, label: str, preprocessed_mesh=None, original_mesh_path: str = "",
+    def add_preprocessing_item(self, label: str, preprocessed_mesh=None, original_mesh=None, original_mesh_path: str = "",
                              preprocessing_parameters: Dict[str, Any] = None, preprocessing_steps: List[str] = None,
-                             quality_metrics: Dict[str, float] = None, is_visible: bool = True) -> PreprocessedItem:
+                             quality_metrics: Dict[str, float] = None, scene_path: str = "", is_visible: bool = True) -> PreprocessedItem:
         """Add a preprocessing result item to the tree."""
         item = PreprocessedItem(
-            label=label, preprocessed_mesh=preprocessed_mesh, 
+            label=label, preprocessed_mesh=preprocessed_mesh,
+            original_mesh=original_mesh,
             original_mesh_path=original_mesh_path,
             preprocessing_parameters=preprocessing_parameters,
             preprocessing_steps=preprocessing_steps,
             quality_metrics=quality_metrics,
+            scene_path=scene_path,
             is_visible=is_visible
         )
         
@@ -101,7 +104,9 @@ class ItemTree:
         
         def on_checked(checked, item_id=item.id):
             item.is_visible = checked
-            # TODO: Show/hide preprocessed mesh in scene
+            # Show/hide preprocessed mesh in scene using stored scene path
+            if item.preprocessed_mesh and item.scene_path:
+                self.app._scene_widget.scene.show_geometry(item.scene_path, checked)
         
         cb.set_on_checked(on_checked)
         item.set_ui_widget(cb)
@@ -112,6 +117,68 @@ class ItemTree:
         self._item_widgets[item.id] = cb
         
         # Trigger layout update to refresh the UI
+        self.app.window.set_needs_layout()
+        
+        return item
+
+    def add_preprocessing_result_item(self, label: str, preprocessed_items: List[PreprocessedItem] = None,
+                                    batch_parameters: Dict[str, Any] = None, is_visible: bool = True) -> PreprocessedResultItem:
+        """Add a preprocessing result item (batch container) to the tree."""
+        item = PreprocessedResultItem(
+            label=label,
+            preprocessed_items=preprocessed_items or [],
+            batch_parameters=batch_parameters or {},
+            is_visible=is_visible
+        )
+        
+        # Create a collapsible container for the batch
+        batch_container = gui.CollapsableVert(label, 0.25 * self.app.window.theme.font_size)
+        batch_container.set_is_open(True)  # Start expanded
+        
+        # Create UI widget for the batch (checkbox inside the container)
+        cb = gui.Checkbox(label)
+        cb.checked = is_visible
+        
+        def on_checked(checked, item_id=item.id):
+            item.is_visible = checked
+            # Show/hide all preprocessed items in this batch
+            for preprocessed_item in item.preprocessed_items:
+                if preprocessed_item.preprocessed_mesh and preprocessed_item.scene_path:
+                    self.app._scene_widget.scene.show_geometry(preprocessed_item.scene_path, checked)
+        
+        cb.set_on_checked(on_checked)
+        item.set_ui_widget(cb)
+        
+        # Add batch checkbox to the container
+        batch_container.add_child(cb)
+        
+        # Add child items (individual preprocessed items) inside the container
+        for preprocessed_item in item.preprocessed_items:
+            child_cb = gui.Checkbox(preprocessed_item.label)  # No need for manual indentation
+            child_cb.checked = preprocessed_item.is_visible
+            
+            def on_child_checked(checked, child_item=preprocessed_item):
+                child_item.is_visible = checked
+                # Show/hide individual preprocessed mesh in scene
+                if child_item.preprocessed_mesh and child_item.scene_path:
+                    self.app._scene_widget.scene.show_geometry(child_item.scene_path, checked)
+            
+            child_cb.set_on_checked(on_child_checked)
+            preprocessed_item.set_ui_widget(child_cb)
+            
+            # Add child to the batch container (nested)
+            batch_container.add_child(child_cb)
+            self._item_widgets[preprocessed_item.id] = child_cb
+        
+        # Add the batch container to the main dropdown
+        self.preprocessing_results_dropdown.add_child(batch_container)
+        self._items['preprocessing_results'].append(item)
+        self._item_widgets[item.id] = batch_container
+        
+        # Store reference to the batch container in the item
+        item.batch_container = batch_container
+        
+        # Trigger layout update
         self.app.window.set_needs_layout()
         
         return item

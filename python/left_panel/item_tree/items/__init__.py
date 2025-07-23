@@ -5,13 +5,15 @@ from .classification_results_item import ClassificationResultItem
 from .pairwise_results_item import PairwiseResultItem
 from .global_reassembly_results_item import AssemblyResultItem
 from .preprocessed_item import PreprocessedItem
+from .preprocessed_result_item import PreprocessedResultItem
 
 __all__ = [
     "BaseItem",
-    "BaseModelItem", 
+    "BaseModelItem",
     "SegmentationResultItem",
     "ClassificationResultItem",
     "PairwiseResultItem",
     "AssemblyResultItem",
-    "PreprocessedItem"
+    "PreprocessedItem",
+    "PreprocessedResultItem"
 ] 

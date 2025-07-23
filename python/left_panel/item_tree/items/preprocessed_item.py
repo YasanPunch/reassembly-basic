@@ -9,29 +9,33 @@ class PreprocessedItem(BaseItem):
     Contains preprocessed mesh data and preprocessing metadata.
     """
     
-    def __init__(self, label: str, preprocessed_mesh=None, original_mesh_path: str = "",
+    def __init__(self, label: str, preprocessed_mesh=None, original_mesh=None, original_mesh_path: str = "",
                  preprocessing_parameters: Dict[str, Any] = None, preprocessing_steps: List[str] = None,
-                 quality_metrics: Dict[str, float] = None, is_visible: bool = True):
+                 quality_metrics: Dict[str, float] = None, scene_path: str = "", is_visible: bool = True):
         """
         Initialize a preprocessed item.
         
         Args:
             label (str): Display label for the item
             preprocessed_mesh: Open3D mesh or point cloud object (preprocessed result)
+            original_mesh: Open3D mesh object (original input mesh)
             original_mesh_path (str): Path to the original mesh that was preprocessed
             preprocessing_parameters (dict): Parameters used for preprocessing
             preprocessing_steps (list): List of preprocessing steps applied
             quality_metrics (dict): Quality metrics after preprocessing
+            scene_path (str): Path used for this geometry in the scene
             is_visible (bool): Whether the item is visible by default
         """
         super().__init__(label, is_visible)
         self._preprocessed_mesh = preprocessed_mesh
+        self._original_mesh = original_mesh
         self._original_mesh_path = original_mesh_path
         self._preprocessing_parameters = preprocessing_parameters or {}
         self._preprocessing_steps = preprocessing_steps or []
         self._quality_metrics = quality_metrics or {}
         self._processing_time = 0.0
         self._mesh_quality_score = 0.0
+        self._scene_path = scene_path
         
     @property
     def preprocessed_mesh(self):
@@ -42,6 +46,16 @@ class PreprocessedItem(BaseItem):
     def preprocessed_mesh(self, value):
         """Set the preprocessed Open3D mesh or point cloud object."""
         self._preprocessed_mesh = value
+    
+    @property
+    def original_mesh(self):
+        """Get the original Open3D mesh object."""
+        return self._original_mesh
+    
+    @original_mesh.setter
+    def original_mesh(self, value):
+        """Set the original Open3D mesh object."""
+        self._original_mesh = value
     
     @property
     def original_mesh_path(self) -> str:
@@ -103,6 +117,16 @@ class PreprocessedItem(BaseItem):
         """Set the overall mesh quality score."""
         self._mesh_quality_score = max(0.0, min(1.0, value))
     
+    @property
+    def scene_path(self) -> str:
+        """Get the scene path for this geometry."""
+        return self._scene_path
+    
+    @scene_path.setter
+    def scene_path(self, value: str):
+        """Set the scene path for this geometry."""
+        self._scene_path = value
+    
     def get_item_type(self) -> str:
         """Get the type of this item."""
         return "PreprocessedItem"
@@ -142,15 +166,33 @@ class PreprocessedItem(BaseItem):
             return len(self._preprocessed_mesh.points)
         return 0
     
+    def get_original_vertex_count(self) -> int:
+        """Get the number of vertices in the original mesh."""
+        if self._original_mesh is None:
+            return 0
+        if hasattr(self._original_mesh, 'vertices'):
+            return len(self._original_mesh.vertices)
+        return 0
+    
     def get_triangle_count(self) -> int:
         """Get the number of triangles in the preprocessed mesh (0 for point clouds)."""
         if self._preprocessed_mesh is None or not hasattr(self._preprocessed_mesh, 'triangles'):
             return 0
         return len(self._preprocessed_mesh.triangles)
     
+    def get_original_triangle_count(self) -> int:
+        """Get the number of triangles in the original mesh."""
+        if self._original_mesh is None or not hasattr(self._original_mesh, 'triangles'):
+            return 0
+        return len(self._original_mesh.triangles)
+    
     def get_face_count(self) -> int:
         """Get the number of faces in the preprocessed mesh."""
         return self.get_triangle_count()
+    
+    def get_original_face_count(self) -> int:
+        """Get the number of faces in the original mesh."""
+        return self.get_original_triangle_count()
     
     def is_mesh(self) -> bool:
         """Check if this item contains a mesh (vs point cloud)."""
@@ -159,6 +201,10 @@ class PreprocessedItem(BaseItem):
     def is_point_cloud(self) -> bool:
         """Check if this item contains a point cloud (vs mesh)."""
         return self._preprocessed_mesh is not None and hasattr(self._preprocessed_mesh, 'points')
+    
+    def has_original_mesh(self) -> bool:
+        """Check if this item has the original mesh stored."""
+        return self._original_mesh is not None
     
     def get_processing_summary(self) -> Dict[str, Any]:
         """Get a summary of the preprocessing operation."""
@@ -169,6 +215,9 @@ class PreprocessedItem(BaseItem):
             'quality_score': self._mesh_quality_score,
             'vertex_count': self.get_vertex_count(),
             'triangle_count': self.get_triangle_count(),
+            'original_vertex_count': self.get_original_vertex_count(),
+            'original_triangle_count': self.get_original_triangle_count(),
+            'has_original_mesh': self.has_original_mesh(),
             'quality_metrics': self._quality_metrics
         }
     
@@ -177,6 +226,8 @@ class PreprocessedItem(BaseItem):
         base_dict = super().to_dict()
         base_dict.update({
             'original_mesh_path': self._original_mesh_path,
+            'has_original_mesh': self.has_original_mesh(),
+            'scene_path': self._scene_path,
             'preprocessing_parameters': self._preprocessing_parameters,
             'preprocessing_steps': self._preprocessing_steps,
             'quality_metrics': self._quality_metrics,
@@ -185,10 +236,13 @@ class PreprocessedItem(BaseItem):
             'step_count': self.get_step_count(),
             'vertex_count': self.get_vertex_count(),
             'triangle_count': self.get_triangle_count(),
+            'original_vertex_count': self.get_original_vertex_count(),
+            'original_triangle_count': self.get_original_triangle_count(),
             'is_mesh': self.is_mesh(),
             'is_point_cloud': self.is_point_cloud()
         })
         return base_dict
     
     def __str__(self) -> str:
-        return f"PreprocessedItem(id={self._id}, label='{self._label}', steps={self.get_step_count()}, quality={self._mesh_quality_score:.3f}, visible={self._is_visible})" 
+        has_original = "✓" if self.has_original_mesh() else "✗"
+        return f"PreprocessedItem(id={self._id}, label='{self._label}', steps={self.get_step_count()}, quality={self._mesh_quality_score:.3f}, original={has_original}, visible={self._is_visible})" 

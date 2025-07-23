@@ -8,10 +8,11 @@ import open3d.visualization.rendering as rendering  # type: ignore
 from configuration.configuration_panel import ConfigurationPanel
 from left_panel.left_panel import LeftPanel
 from models.models_panel import ModelsPanel
-from processing.processing_panel import ProcessingPanel
+from panels.processing_panel import ProcessingPanel
 from settings.settings import Settings
 from settings.settings_panel import SettingsPanel
 from left_panel.item_tree.items.base_model_item import BaseModelItem
+
 
 
 class App:
@@ -22,6 +23,7 @@ class App:
     MENU_SHOW_MODELS = 13
     MENU_SHOW_CONFIGS = 14
     MENU_SHOW_PCPROCESSING = 12
+
     MENU_ABOUT = 21
 
     DEFAULT_IBL = "default"
@@ -58,6 +60,7 @@ class App:
         self._configuration_panel = ConfigurationPanel(self)
         self._processing_panel = ProcessingPanel(self)
 
+
         w.set_on_layout(self._on_layout)
         w.add_child(self._scene_widget) # Add the single scene widget
         w.add_child(self._left_panel.item_tree.section)
@@ -70,6 +73,7 @@ class App:
         p.add_child(self._models_panel._panel)
         p.add_child(self._configuration_panel._panel)
         p.add_child(self._processing_panel._panel)
+
 
         # ---- Menu ----
         # The menu is global (because the macOS menu is global), so only create
@@ -89,6 +93,7 @@ class App:
             settings_menu.set_checked(App.MENU_SHOW_CONFIGS, True)
             settings_menu.add_item("Processing", App.MENU_SHOW_PCPROCESSING)
             settings_menu.set_checked(App.MENU_SHOW_PCPROCESSING, True)
+
             help_menu = gui.Menu()
             help_menu.add_item("About", App.MENU_ABOUT)
 
@@ -116,6 +121,7 @@ class App:
         w.set_on_menu_item_activated(
             App.MENU_SHOW_CONFIGS, self._on_menu_toggle_configs_panel
         )
+
         w.set_on_menu_item_activated(App.MENU_ABOUT, self._on_menu_about)
         # Menu ----
 
@@ -166,6 +172,8 @@ class App:
         self._processing_panel._panel.frame = gui.Rect(
             r.get_right() - 2 * panel_width, r.get_bottom() - height, panel_width, height
         )
+
+
 
     def _on_menu_open(self):
         try:
@@ -287,6 +295,8 @@ class App:
             self.window.set_needs_layout()
         except Exception as e:
             print(f"Error toggling processing panel: {e}")
+
+
 
     def _on_menu_about(self):
         try:

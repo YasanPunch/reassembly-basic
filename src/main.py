@@ -7,19 +7,6 @@ import time
 import numpy as np
 import copy # For deep copying geometries for visualization log
 
-# For checking module paths (can be removed in final version)
-#import importlib.util
-#import sys
-# print("--- Python Path (sys.path) ---")
-# for p_path in sys.path:
-#     print(p_path)
-# print("--------------------------------")
-# spec_preprocessing = importlib.util.find_spec("src.preprocessing")
-# if spec_preprocessing:
-#     print(f"DEBUG: Python found 'src.preprocessing' at: {spec_preprocessing.origin}")
-# else:
-#     print("DEBUG: Python could NOT find 'src.preprocessing' via importlib.util.find_spec")
-# ---
 
 import src.io_utils
 import src.preprocessing
