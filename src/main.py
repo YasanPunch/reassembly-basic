@@ -2,32 +2,17 @@ import os
 import json
 import argparse
 import open3d as o3d
-print("o3d-version: ", o3d.__version__) # Keep for debugging
 import time
 import numpy as np
-import copy # For deep copying geometries for visualization log
+import copy
 import random
 
 np.random.seed(42)
 random.seed(42)
 
-# For checking module paths (can be removed in final version)
-#import importlib.util
-#import sys
-# print("--- Python Path (sys.path) ---")
-# for p_path in sys.path:
-#     print(p_path)
-# print("--------------------------------")
-# spec_preprocessing = importlib.util.find_spec("src.preprocessing")
-# if spec_preprocessing:
-#     print(f"DEBUG: Python found 'src.preprocessing' at: {spec_preprocessing.origin}")
-# else:
-#     print("DEBUG: Python could NOT find 'src.preprocessing' via importlib.util.find_spec")
-# ---
-
 import src.io_utils
 import src.preprocessing
-import src.segmentation # Though preprocessing calls segmentation
+import src.segmentation
 import src.feature_extraction
 import src.matching
 import src.assembly
