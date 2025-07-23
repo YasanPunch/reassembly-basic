@@ -53,10 +53,6 @@
   "// Boolean penetration test parameters:": null,
   "boolean_penetration_threshold": 0.05,
   "// Maximum allowed penetration ratio (0.1 = 10% of smaller fragment volume)": null,
-  "max_assembly_overlap_factor_aabb": 0.95,
-  "overlap_check_sample_points": 300,
-  "overlap_penetration_allowance_ratio": 0.25,
-  "overlap_penetration_depth_factor": 0.25,
   "debug_assembly": true,
   "disable_overlap_check": true,
 

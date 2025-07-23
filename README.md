@@ -9,7 +9,7 @@ USE THIS COMMAND TO EXECUTE -> python -m src.main --visualize_steps_file data/lo
 
   --visualize steps file is not necessary. It should log debug steps into a file. Not tested.
 
-SAME COMMAND WITHOUT DEBUG -> python -m src.main --visualize_steps_file data/log_auto_test.pkl --num_viz_pairwise 3 --top_n_matches_per_pair 3
+SAME COMMAND WITHOUT DEBUG -> python -m src.main --num_viz_pairwise 3 --top_n_matches_per_pair 3
 
 NOTE
 
