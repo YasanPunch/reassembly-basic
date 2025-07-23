@@ -1,5 +1,4 @@
-import open3d.visualization.gui as gui  # type: ignore
-import os
+import open3d.visualization.gui as gui
 from .item_tree.item_tree import ItemTree
 from .properties_panel import PropertiesPanel
 

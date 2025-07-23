@@ -1,10 +1,16 @@
-import open3d.visualization.gui as gui  # type: ignore
+import open3d.visualization.gui as gui
 import os
 from typing import List, Dict, Any, Optional
 from .items import (
-    BaseItem, BaseModelItem, SegmentationResultItem, 
-    ClassificationResultItem, PairwiseResultItem, AssemblyResultItem, PreprocessedItem, PreprocessedResultItem,
-    SegmentedItem, SegmentationResultItem, SegmentationBatchItem
+    BaseItem,
+    BaseModelItem,
+    SegmentationResultItem,
+    ClassificationResultItem,
+    PairwiseResultItem,
+    AssemblyResultItem,
+    PreprocessedItem,
+    PreprocessedResultItem,
+    SegmentationBatchItem,
 )
 
 

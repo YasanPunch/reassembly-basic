@@ -1,6 +1,5 @@
 import uuid
 from abc import ABC, abstractmethod
-import open3d.visualization.gui as gui  # type: ignore
 
 
 class BaseItem(ABC):

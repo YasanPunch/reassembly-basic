@@ -3,8 +3,8 @@ import sys
 import json
 
 import open3d as o3d
-import open3d.visualization.gui as gui  # type: ignore
-import open3d.visualization.rendering as rendering  # type: ignore
+import open3d.visualization.gui as gui
+import open3d.visualization.rendering as rendering
 
 from configuration.configuration_panel import ConfigurationPanel
 from left_panel.left_panel import LeftPanel
@@ -13,7 +13,6 @@ from panels.processing_panel import ProcessingPanel
 from settings.settings import Settings
 from settings.settings_panel import SettingsPanel
 from left_panel.item_tree.items.base_model_item import BaseModelItem
-
 
 
 class App:
@@ -52,7 +51,7 @@ class App:
                                        Uses DEFAULT_CONFIG_FILE if None.
         """
         self.settings = Settings()
-        
+
         # Load configuration parameters
         self.config_file = config_file or App.DEFAULT_CONFIG_FILE
         self.params = self._load_parameters()
@@ -66,7 +65,7 @@ class App:
             "Reassembly", width, height
         )
         w = self.window
-        
+
         # Create the main 3D scene widget
         self._scene_widget = gui.SceneWidget()
         self._scene_widget.scene = rendering.Open3DScene(w.renderer)
@@ -86,7 +85,6 @@ class App:
         self._configuration_panel = ConfigurationPanel(self)
         self._processing_panel = ProcessingPanel(self)
 
-
         w.set_on_layout(self._on_layout)
         w.add_child(self._scene_widget) # Add the single scene widget
         w.add_child(self._left_panel.item_tree.section)
@@ -99,7 +97,6 @@ class App:
         p.add_child(self._settings_panel._settings_panel)
         p.add_child(self._models_panel._panel)
         p.add_child(self._configuration_panel._panel)
-
 
         # ---- Menu ----
         # The menu is global (because the macOS menu is global), so only create
@@ -206,19 +203,19 @@ class App:
             "use_boolean_intersection_test": True,
             "boolean_penetration_threshold": 0.1,
         }
-        
+
         # Try to save the default config file
         try:
             config_dir = os.path.dirname(self.config_file)
             if config_dir and not os.path.exists(config_dir):
                 os.makedirs(config_dir, exist_ok=True)
-            
+
             with open(self.config_file, 'w') as f:
                 json.dump(default_params, f, indent=4)
             print(f"[DEBUG] Created default config file at {self.config_file}")
         except Exception as e:
             print(f"[WARNING] Could not create default config file: {e}")
-        
+
         return default_params
 
     def get_parameter(self, key, default=None):
@@ -256,7 +253,7 @@ class App:
             config_dir = os.path.dirname(save_path)
             if config_dir and not os.path.exists(config_dir):
                 os.makedirs(config_dir, exist_ok=True)
-            
+
             with open(save_path, 'w') as f:
                 json.dump(self.params, f, indent=4)
             print(f"[DEBUG] Parameters saved to {save_path}")
@@ -299,7 +296,7 @@ class App:
     def _on_layout(self, layout_context):
         r = self.window.content_rect
         em = layout_context.theme.font_size
-        
+
         panel_width = 17 * em
 
         # Position left panel
@@ -343,8 +340,6 @@ class App:
         self._processing_panel._panel.frame = gui.Rect(
             r.get_right() - 2 * panel_width, r.get_bottom() - height, panel_width, height
         )
-
-
 
     def _on_menu_open(self):
         try:
@@ -467,8 +462,6 @@ class App:
         except Exception as e:
             print(f"Error toggling processing panel: {e}")
 
-
-
     def _on_menu_about(self):
         try:
             em = self.window.theme.font_size
@@ -509,7 +502,6 @@ class App:
         print(f"[DEBUG] _add_object_to_scene called with path: {path}, mesh: {geometry is not None}")
         if geometry is not None:
             # Use add_geometry instead of add_model, and ensure a material is provided
-            import open3d.visualization.rendering as rendering
             if hasattr(self.settings, 'material') and self.settings.material is not None:
                 material = self.settings.material
             else:
@@ -527,7 +519,7 @@ class App:
             mesh=geometry, 
             label=os.path.basename(path)
         )
-        
+
         # Store the item reference for later use
         if not hasattr(self, '_base_model_items'):
             self._base_model_items = {}
@@ -535,24 +527,24 @@ class App:
 
         # Update camera to frame all visible objects AFTER adding to item tree
         self._update_camera_bounds()
-    
+
     def _update_camera_bounds(self):
         """Calculates the bounding box of all visible objects and adjusts the camera."""
         print(f"[DEBUG] _update_camera_bounds called with {len(self._scene_objects)} scene objects")
         bounds = None
-        
+
         # Get all base model items from the item tree
         base_model_items = self._left_panel.item_tree.get_items_by_type('base_model')
-        
+
         for item in base_model_items:
             if isinstance(item, BaseModelItem):
                 path = item.mesh_path
                 print(f"[DEBUG] Checking base model item: {path}, visible: {item.is_visible}")
-                
+
                 if item.is_visible and path in self._scene_objects:
                     print(f"[DEBUG] Object {path} is visible, calculating bounds")
                     obj_info = self._scene_objects[path]
-                    
+
                     if obj_info['type'] == 'model':
                         geom_bounds = obj_info['mesh'].get_axis_aligned_bounding_box()
                     else: # geometry
@@ -564,7 +556,7 @@ class App:
                         bounds = bounds.get_union(geom_bounds)
                 else:
                     print(f"[DEBUG] Object {path} not found in scene or not visible")
-        
+
         if bounds and bounds.volume() > 0:
             print(f"[DEBUG] Setting camera with bounds: {bounds}")
             self._scene_widget.setup_camera(60, bounds, bounds.get_center())
@@ -588,36 +580,36 @@ class App:
         """
         try:
             print(f"[DEBUG] Creating geometry viewer window: {window_name}")
-            
+
             # Create a new window
             viewer_window = gui.Application.instance.create_window(window_name, 800, 600)
-            
+
             # Create scene widget
             scene_widget = gui.SceneWidget()
             scene_widget.scene = rendering.Open3DScene(viewer_window.renderer)
             scene_widget.set_view_controls(gui.SceneWidget.Controls.ROTATE_CAMERA)
-            
+
             # Set up scene
             scene_widget.scene.set_background([1, 1, 1, 1])  # White background
             scene_widget.scene.scene.set_sun_light([0, 1, 0], [1, 1, 1], 100000)
             scene_widget.scene.scene.enable_sun_light(True)
-            
+
             # Add geometries to the scene
             material = rendering.MaterialRecord()
             material.shader = "defaultLit"
-            
+
             for i, geometry in enumerate(geometries):
                 geometry_name = f"geometry_{i}"
                 scene_widget.scene.add_geometry(geometry_name, geometry, material)
-            
+
             # Set up layout
             def on_layout(layout_context):
                 r = viewer_window.content_rect
                 scene_widget.frame = gui.Rect(r.x, r.y, r.width, r.height)
-            
+
             viewer_window.set_on_layout(on_layout)
             viewer_window.add_child(scene_widget)
-            
+
             # Calculate bounds and set up camera
             bounds = None
             for geometry in geometries:
@@ -631,21 +623,21 @@ class App:
                         max_bound = bounds.get_max_bound()
                         geom_min = geom_bounds.get_min_bound()
                         geom_max = geom_bounds.get_max_bound()
-                        
+
                         new_min = [min(min_bound[i], geom_min[i]) for i in range(3)]
                         new_max = [max(max_bound[i], geom_max[i]) for i in range(3)]
                         bounds = o3d.geometry.AxisAlignedBoundingBox(new_min, new_max)
-            
+
             if bounds and bounds.volume() > 0:
                 scene_widget.setup_camera(60, bounds, bounds.get_center())
             else:
                 # Default camera setup
                 default_bounds = o3d.geometry.AxisAlignedBoundingBox([-1, -1, -1], [1, 1, 1])
                 scene_widget.setup_camera(60, default_bounds, [0, 0, 0])
-            
+
             print(f"[DEBUG] Geometry viewer window created successfully: {window_name}")
             return viewer_window, scene_widget
-            
+
         except Exception as e:
             print(f"[ERROR] Failed to create geometry viewer: {e}")
             return None, None
@@ -687,19 +679,6 @@ class App:
             self._add_object_to_scene(path=path, geometry=geometry)
         else:
             print(f"[ERROR] Could not load any geometry or mesh from: {path}")
-
-    def export_image(self, path, width, height):
-        return
-
-        def on_image(image):
-            img = image
-
-            quality = 9  # png
-            if path.endswith(".jpg"):
-                quality = 100
-            o3d.io.write_image(path, img, quality)
-
-        self._scene.scene.scene.render_to_image(on_image)
 
     def run(self):
         pass

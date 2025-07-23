@@ -2,21 +2,8 @@ import os
 import sys
 import time
 import numpy as np
-import open3d as o3d
-from typing import List, Dict, Any, Optional, Callable, Tuple
-import copy
-
-# Add src to path for segmentation imports
-src_path = os.path.join(os.path.dirname(__file__), '..', '..', 'src')
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
-try:
-    import segmentation
-    print("Successfully imported segmentation module")
-except ImportError as e:
-    print(f"Warning: Could not import segmentation module: {e}")
-    segmentation = None
-
+from typing import List, Dict, Any, Optional, Callable
+import segmentation
 
 class SegmentationEngine:
     """

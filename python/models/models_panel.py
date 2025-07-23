@@ -1,5 +1,4 @@
-import open3d.visualization.gui as gui  # type: ignore
-import os
+import open3d.visualization.gui as gui
 
 
 class ModelsPanel:

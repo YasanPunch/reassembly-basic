@@ -2,6 +2,8 @@ import open3d as o3d
 import open3d.visualization.gui as gui  # type: ignore
 import open3d.visualization.rendering as rendering
 from typing import List
+from panels.preprocessing_dialog import PreprocessingDialog
+from panels.segmentation_dialog import SegmentationDialog
 
 class ProcessingPanel:
     def __init__(self, app):
@@ -76,37 +78,34 @@ class ProcessingPanel:
             # Show error dialog
             self._show_error_dialog("No base models selected", "Please select base models in the item tree before preprocessing.")
             return
-        
+
         # Show preprocessing dialog
-        from panels.preprocessing_dialog import PreprocessingDialog
         preprocessing_dialog = PreprocessingDialog(self.app)
         preprocessing_dialog.show_dialog(selected_items)
-    
+
     def _get_selected_base_models(self) -> List:
         """Get the currently selected base model items."""
         selected_items = []
         base_model_items = self.app._left_panel.item_tree.get_items_by_type('base_model')
-        
+
         for item in base_model_items:
             if item.is_visible:  # Checked items are visible
                 selected_items.append(item)
-        
-        return selected_items
-    
 
-    
+        return selected_items
+
     def _show_error_dialog(self, title: str, message: str):
         """Show an error dialog."""
         dialog = gui.Dialog(title)
         content = gui.Vert(0, gui.Margins(1.0, 1.0, 1.0, 1.0))
         content.add_child(gui.Label(message))
-        
+
         button_layout = gui.Horiz(0.25)
         ok_button = gui.Button("OK")
         ok_button.set_on_clicked(lambda: self.app.window.close_dialog())
         button_layout.add_child(ok_button)
         content.add_child(button_layout)
-        
+
         dialog.add_child(content)
         self.app.window.show_dialog(dialog)
 
@@ -118,26 +117,25 @@ class ProcessingPanel:
             # Show error dialog
             self._show_error_dialog("No preprocessed items selected", "Please select preprocessed items in the item tree before segmentation.")
             return
-        
+
         # Show segmentation dialog
-        from panels.segmentation_dialog import SegmentationDialog
         segmentation_dialog = SegmentationDialog(self.app)
         segmentation_dialog.show_dialog(selected_items)
-    
+
     def _get_selected_preprocessed_items(self) -> List:
         """Get the currently selected preprocessed items."""
         selected_items = []
-        
+
         # Get all preprocessing batches
         preprocessing_batches = self.app._left_panel.item_tree.get_items_by_type('preprocessing_results')
-        
+
         for batch in preprocessing_batches:
             if batch.is_visible:  # Checked batches are visible
                 # Get all preprocessed items from this batch
                 for preprocessed_item in batch.preprocessed_items:
                     if preprocessed_item.is_visible:  # Checked items are visible
                         selected_items.append(preprocessed_item)
-        
+
         return selected_items
 
     def _on_pairwise_matching(self):
