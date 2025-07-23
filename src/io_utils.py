@@ -82,6 +82,59 @@ def load_fragments_from_directory(directory_path):
     return fragments
 
 
+def load_fragments_from_paths(file_paths):
+    """
+    Loads all supported 3D model files from a list of file paths.
+    Args:
+        file_paths (list): List of file paths to load fragments from.
+    Returns:
+        list: A list of dictionaries containing fragment data:
+              [{"mesh": o3d.geometry.TriangleMesh, "name": str, "original_index": int, "path": str}, ...]
+    """
+    fragments = []
+    supported_extensions = [
+        ".obj",
+        ".stl",
+        ".ply",
+        ".off",
+        ".gltf",
+        ".glb",
+    ]  # Trimesh supports many
+    print(f"Loading fragments from {len(file_paths)} file paths")
+
+    for i, file_path in enumerate(file_paths):
+        if not os.path.isfile(file_path):
+            print(f"Warning: File path does not exist: {file_path}. Skipping.")
+            continue
+
+        filename = os.path.basename(file_path)
+        if not any(filename.lower().endswith(ext) for ext in supported_extensions):
+            print(f"Warning: Unsupported file format: {filename}. Skipping.")
+            continue
+
+        fragment = load_fragment(file_path)
+        if fragment:
+            # Check if mesh is empty
+            if not fragment.has_vertices() or not fragment.has_triangles():
+                print(
+                    f"Warning: Fragment {filename} is empty or has no triangles. Skipping."
+                )
+                continue
+            fragments.append(
+                {
+                    "mesh": fragment,
+                    "name": filename,
+                    "original_index": len(fragments),
+                    "path": file_path,
+                }
+            )
+        else:
+            print(f"Warning: Failed to load fragment: {filename}")
+
+    print(f"Loaded {len(fragments)} fragments.")
+    return fragments
+
+
 def save_mesh(mesh, file_path):
     """
     Saves an Open3D mesh to a file.

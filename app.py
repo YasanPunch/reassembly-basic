@@ -399,11 +399,15 @@ class App:
         else:
             print(f"[ERROR] No geometry provided for: {path}")
 
+        fragments_data_raw = src.io_utils.load_fragments_from_paths([path])
+
         # Add object to the item tree UI using the new item system
         base_model_item = self._left_panel.item_tree.add_base_model_item(
-            mesh_path=path, 
-            mesh=geometry, 
-            label=os.path.basename(path)
+            mesh_path=fragments_data_raw[0]["path"],
+            mesh=fragments_data_raw[0]["mesh"],
+            label=fragments_data_raw[0]["name"],
+            name=fragments_data_raw[0]["name"],
+            original_index=fragments_data_raw[0]["original_index"],
         )
 
         # Store the item reference for later use
