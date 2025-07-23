@@ -22,22 +22,9 @@ def main(args):
     start_time = time.time()
 
     # 1. Load Parameters --------------------------------------------------------------------------------------------
-    print("\n[1. Loading Parameters]")
     try:
-        with open(args.config_file, "r") as f:
-            params = json.load(f)
-        print(f"  Parameters loaded from: {args.config_file}")
-
-        # Override snapping parameter if command-line argument is provided
-        if args.disable_snapping:
-            params["enable_post_processing_snapping"] = False
-            print("  Post-processing snapping disabled via command-line argument")
-
-    except FileNotFoundError:
-        print(f"Error: Config file not found at {args.config_file}. Exiting.")
-        return
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from {args.config_file}. Exiting.")
+        params = src.io_utils.load_parameters(args.config_file)
+    except (FileNotFoundError, json.JSONDecodeError):
         return
 
     # 2. Load Fragments --------------------------------------------------------------------------------------------

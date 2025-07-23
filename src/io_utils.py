@@ -1,6 +1,7 @@
 import open3d as o3d
 import trimesh
 import os
+import json
 
 def load_fragment(file_path, file_type=None):
     """
@@ -67,7 +68,14 @@ def load_fragments_from_directory(directory_path):
                 if not fragment.has_vertices() or not fragment.has_triangles():
                     print(f"Warning: Fragment {filename} is empty or has no triangles. Skipping.")
                     continue
-                fragments.append({"mesh": fragment, "name": filename, "original_index": len(fragments)})
+                fragments.append(
+                    {
+                        "mesh": fragment,
+                        "name": filename,
+                        "original_index": len(fragments),
+                        "path": file_path,
+                    }
+                )
         else:
             print(f"Skipping non-supported file or directory: {filename}")
     print(f"Loaded {len(fragments)} fragments.")
@@ -129,3 +137,31 @@ def combine_meshes(mesh_list, transformations=None):
         combined_mesh += temp_mesh # Open3D supports += for mesh union
 
     return combined_mesh
+
+
+def load_parameters(config_file=None):
+    """Load parameters from a JSON configuration file.
+
+    Args:
+        config_file (str): Path to the JSON configuration file.
+
+    Returns:
+        dict: Loaded parameters from the config file.
+
+    Raises:
+        FileNotFoundError: If the config file is not found.
+        json.JSONDecodeError: If the JSON file cannot be decoded.
+    """
+    print("\n[1. Loading Parameters]")
+    try:
+        with open(config_file, "r") as f:
+            params = json.load(f)
+        print(f"  Parameters loaded from: {config_file}")
+        return params
+
+    except FileNotFoundError:
+        print(f"Error: Config file not found at {config_file}. Exiting.")
+        raise
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from {config_file}. Exiting.")
+        raise

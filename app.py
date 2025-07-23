@@ -1,6 +1,6 @@
 import os
-import sys
 import json
+import argparse
 
 import open3d as o3d
 import open3d.visualization.gui as gui
@@ -13,6 +13,7 @@ from python.settings.settings import Settings
 from python.settings.settings_panel import SettingsPanel
 from python.left_panel.item_tree.items.base_model_item import BaseModelItem
 
+import src.io_utils
 
 class App:
     """
@@ -52,7 +53,7 @@ class App:
 
         # Load configuration parameters
         self.config_file = config_file or App.DEFAULT_CONFIG_FILE
-        self.params = self._load_parameters()
+        self.params = src.io_utils.load_parameters(self.config_file)
 
         self._scene_objects = {}  # To store {'path': {'mesh' | 'geometry', 'transform'}}
 
@@ -140,74 +141,10 @@ class App:
         # Menu ----
 
     def _load_parameters(self):
-        """
-        Loads configuration parameters from JSON file.
-        
-        Returns:
-            dict: Dictionary containing reconstruction parameters
-        """
-        print(f"[DEBUG] Loading parameters from: {self.config_file}")
         try:
-            with open(self.config_file, 'r') as f:
-                params = json.load(f)
-            print(f"[DEBUG] Successfully loaded {len(params)} parameters from {self.config_file}")
-            return params
-        except FileNotFoundError:
-            print(f"[WARNING] Config file not found at {self.config_file}. Creating default configuration.")
-            return self._create_default_parameters()
-        except json.JSONDecodeError:
-            print(f"[ERROR] Could not decode JSON from {self.config_file}. Using default configuration.")
-            return self._create_default_parameters()
-        except Exception as e:
-            print(f"[ERROR] Unexpected error loading parameters: {e}. Using default configuration.")
-            return self._create_default_parameters()
-
-    def _create_default_parameters(self):
-        """
-        Creates default configuration parameters if config file is not found or invalid.
-        
-        Returns:
-            dict: Dictionary containing default reconstruction parameters
-        """
-        print("[DEBUG] Creating default configuration parameters")
-        default_params = {
-            "voxel_downsample_size": 7.0,
-            "normal_estimation_radius": 14.0,
-            "normal_estimation_max_nn": 30,
-            "fpfh_feature_radius": 35.0,
-            "fpfh_feature_max_nn": 100,
-            "ransac_distance_threshold_factor": 1.5,
-            "ransac_edge_length_factor": 0.9,
-            "ransac_iterations": 1000000,
-            "ransac_n_points": 4,
-            "ransac_confidence": 0.999,
-            "icp_max_correspondence_distance_factor": 2.0,
-            "icp_relative_fitness": 1e-6,
-            "icp_relative_rmse": 1e-6,
-            "icp_max_iteration": 50,
-            "min_match_score": 0.3,
-            "min_boundary_edges_for_fracture_face": 1,
-            "fracture_surface_dense_sample_points": 10000,
-            "add_preprocessing_noise": True,
-            "preprocessing_noise_factor": 0.01,
-            "orient_normals_k": 15,
-            "use_boolean_intersection_test": True,
-            "boolean_penetration_threshold": 0.1,
-        }
-
-        # Try to save the default config file
-        try:
-            config_dir = os.path.dirname(self.config_file)
-            if config_dir and not os.path.exists(config_dir):
-                os.makedirs(config_dir, exist_ok=True)
-
-            with open(self.config_file, 'w') as f:
-                json.dump(default_params, f, indent=4)
-            print(f"[DEBUG] Created default config file at {self.config_file}")
-        except Exception as e:
-            print(f"[WARNING] Could not create default config file: {e}")
-
-        return default_params
+            params = src.io_utils.load_parameters()
+        except (FileNotFoundError, json.JSONDecodeError):
+            return
 
     def get_parameter(self, key, default=None):
         """
@@ -499,133 +436,18 @@ class App:
 
     def _update_camera_bounds(self):
         """Calculates the bounding box of all visible objects and adjusts the camera."""
-        print(f"[DEBUG] _update_camera_bounds called with {len(self._scene_objects)} scene objects")
-        bounds = None
+        print(
+            f"[DEBUG] _update_camera_bounds called with {len(self._scene_objects)} scene objects"
+        )
 
-        # Get all base model items from the item tree
-        base_model_items = self._left_panel.item_tree.get_items_by_type('base_model')
-
-        for item in base_model_items:
-            if isinstance(item, BaseModelItem):
-                path = item.mesh_path
-                print(f"[DEBUG] Checking base model item: {path}, visible: {item.is_visible}")
-
-                if item.is_visible and path in self._scene_objects:
-                    print(f"[DEBUG] Object {path} is visible, calculating bounds")
-                    obj_info = self._scene_objects[path]
-
-                    if obj_info['type'] == 'model':
-                        geom_bounds = obj_info['mesh'].get_axis_aligned_bounding_box()
-                    else: # geometry
-                        geom_bounds = obj_info['geometry'].get_axis_aligned_bounding_box()
-
-                    if bounds is None:
-                        bounds = geom_bounds
-                    else:
-                        bounds = bounds.get_union(geom_bounds)
-                else:
-                    print(f"[DEBUG] Object {path} not found in scene or not visible")
-
-        if bounds and bounds.volume() > 0:
-            print(f"[DEBUG] Setting camera with bounds: {bounds}")
-            self._scene_widget.setup_camera(60, bounds, bounds.get_center())
-        else:
-            print(f"[DEBUG] No valid bounds, using default camera")
-            self._scene_widget.setup_camera(60, o3d.geometry.AxisAlignedBoundingBox([-1,-1,-1], [1,1,1]), [0,0,0])
-
-    def show_geometry_viewer(self, geometries, window_name="Geometry Viewer"):
-        """
-        Show geometries in a separate window using the GUI framework.
-        
-        This method creates a new window with a scene widget to display geometries
-        without using draw_geometries, avoiding threading conflicts.
-        
-        Args:
-            geometries (list): List of Open3D geometry objects (meshes, point clouds, etc.)
-            window_name (str): Title for the viewer window
-            
-        Returns:
-            tuple: (window, scene_widget) for potential future use
-        """
-        try:
-            print(f"[DEBUG] Creating geometry viewer window: {window_name}")
-
-            # Create a new window
-            viewer_window = gui.Application.instance.create_window(window_name, 800, 600)
-
-            # Create scene widget
-            scene_widget = gui.SceneWidget()
-            scene_widget.scene = rendering.Open3DScene(viewer_window.renderer)
-            scene_widget.set_view_controls(gui.SceneWidget.Controls.ROTATE_CAMERA)
-
-            # Set up scene
-            scene_widget.scene.set_background([1, 1, 1, 1])  # White background
-            scene_widget.scene.scene.set_sun_light([0, 1, 0], [1, 1, 1], 100000)
-            scene_widget.scene.scene.enable_sun_light(True)
-
-            # Add geometries to the scene
-            material = rendering.MaterialRecord()
-            material.shader = "defaultLit"
-
-            for i, geometry in enumerate(geometries):
-                geometry_name = f"geometry_{i}"
-                scene_widget.scene.add_geometry(geometry_name, geometry, material)
-
-            # Set up layout
-            def on_layout(layout_context):
-                r = viewer_window.content_rect
-                scene_widget.frame = gui.Rect(r.x, r.y, r.width, r.height)
-
-            viewer_window.set_on_layout(on_layout)
-            viewer_window.add_child(scene_widget)
-
-            # Calculate bounds and set up camera
-            bounds = None
-            for geometry in geometries:
-                if hasattr(geometry, 'get_axis_aligned_bounding_box'):
-                    geom_bounds = geometry.get_axis_aligned_bounding_box()
-                    if bounds is None:
-                        bounds = geom_bounds
-                    else:
-                        # Use min/max to create union bounds
-                        min_bound = bounds.get_min_bound()
-                        max_bound = bounds.get_max_bound()
-                        geom_min = geom_bounds.get_min_bound()
-                        geom_max = geom_bounds.get_max_bound()
-
-                        new_min = [min(min_bound[i], geom_min[i]) for i in range(3)]
-                        new_max = [max(max_bound[i], geom_max[i]) for i in range(3)]
-                        bounds = o3d.geometry.AxisAlignedBoundingBox(new_min, new_max)
-
-            if bounds and bounds.volume() > 0:
-                scene_widget.setup_camera(60, bounds, bounds.get_center())
-            else:
-                # Default camera setup
-                default_bounds = o3d.geometry.AxisAlignedBoundingBox([-1, -1, -1], [1, 1, 1])
-                scene_widget.setup_camera(60, default_bounds, [0, 0, 0])
-
-            print(f"[DEBUG] Geometry viewer window created successfully: {window_name}")
-            return viewer_window, scene_widget
-
-        except Exception as e:
-            print(f"[ERROR] Failed to create geometry viewer: {e}")
-            return None, None
-
-    def show_debug_visualization(self, geometries, window_name="Debug Visualization"):
-        """
-        Convenience method for showing debug visualizations.
-        
-        Args:
-            geometries (list): List of Open3D geometry objects
-            window_name (str): Title for the debug window
-            
-        Returns:
-            tuple: (window, scene_widget) for potential future use
-        """
-        return self.show_geometry_viewer(geometries, window_name)
+        bounds = self._scene_widget.scene.bounding_box
+        self._scene_widget.setup_camera(60, bounds, bounds.get_center())
+        self._scene_widget.set_on_sun_direction_changed(
+            self._settings_panel._on_sun_dir
+        )
 
     def load(self, path):
-        print(f"[DEBUG] Attempting to load file: {path}")
+        print(f"\n[DEBUG] Attempting to load file: {path}")
         geometry = None
         # Try to load as mesh
         mesh = o3d.io.read_triangle_mesh(path)
@@ -653,39 +475,84 @@ class App:
         pass
 
 
-def main():
+def main(args):
     # We need to initialize the application, which finds the necessary shaders
     # for rendering and prepares the cross-platform window abstraction.
     gui.Application.instance.initialize()
 
-    # Parse command line arguments for config file
-    config_file = None
-    if len(sys.argv) > 1:
-        # Check if first argument is a config file (ends with .json)
-        if sys.argv[1].endswith('.json'):
-            config_file = sys.argv[1]
-            # Remove config file from paths to process
-            paths = sys.argv[2:]
-        else:
-            paths = sys.argv[1:]
-    else:
-        paths = []
+    w = App(1024, 768, config_file=args.config_file)
 
-    w = App(1024, 768, config_file=config_file)
-
-    if paths:
-        for path in paths:
-            if os.path.exists(path):
-                w.load(path)
-            else:
-                w.window.show_message_box("Error", "Could not open file '" + path + "'")
-    else:
-        # The app should start empty and only load files when the user imports them via the menu.
-        pass
+    # Load fragments
+    fragments_data_raw = src.io_utils.load_fragments_from_directory(args.input_dir)
+    for frag_info_raw in fragments_data_raw:
+        w.load(frag_info_raw["path"])
 
     # Run the event loop. This will not return until the last window is closed.
     gui.Application.instance.run()
 
 
 if __name__ == "__main__":
-    main()
+    print("DEBUG: __main__ block entered.")
+
+    parser = argparse.ArgumentParser(
+        description="3D Model Fragment Reconstructor - Advanced"
+    )
+    parser.add_argument(
+        "--input_dir",
+        type=str,
+        default="data/input_fragments",
+        help="Directory containing input fragment files.",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="data/output_assembly",
+        help="Directory to save the reconstructed model.",
+    )
+    parser.add_argument(
+        "--config_file",
+        type=str,
+        default="config/reconstruction_params.json",
+        help="Path to the JSON configuration file.",
+    )
+    parser.add_argument(
+        "--visualize_final",
+        action="store_true",
+        help="Enable Open3D visualization of the final assembled model.",
+    )
+    parser.add_argument(
+        "--num_viz_pairwise",
+        type=int,
+        default=0,
+        help="Number of top pairwise matches to visualize directly during runtime (0 for none).",
+    )
+    parser.add_argument(
+        "--visualize_segmentation",
+        action="store_true",
+        help="Enable visualization of segmentation results for each fragment.",
+    )
+    parser.add_argument(
+        "--debug_pairwise_matching",
+        action="store_true",
+        help="Enable debug visualization for pairwise matching.",
+    )
+    parser.add_argument(
+        "--top_n_matches_per_pair",
+        type=int,
+        default=3,
+        help="Number of top matches to keep per fragment pair (default: 3)",
+    )
+    parser.add_argument(
+        "--disable_snapping",
+        action="store_true",
+        help="Disable post-processing snapping step (useful when snapping messes up correctly aligned fragments)",
+    )
+
+    parsed_args = parser.parse_args()
+
+    if parsed_args.num_viz_pairwise > 0:
+        print(
+            f"DEBUG: Will attempt to visualize top {parsed_args.num_viz_pairwise} pairwise matches if found."
+        )
+
+    main(parsed_args)
