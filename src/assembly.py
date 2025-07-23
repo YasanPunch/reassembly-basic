@@ -12,9 +12,7 @@ cmap = plt.get_cmap("tab20")
 
 class Assembler:
 
-    def __init__(
-        self, fragments_data, pairwise_matches, params, visualization_log=None
-    ):
+    def __init__(self, fragments_data, pairwise_matches, params):
         self.fragments_data = copy.deepcopy(fragments_data)
         self.pairwise_matches = sorted(
             pairwise_matches, key=lambda x: x["score"], reverse=True
@@ -27,9 +25,6 @@ class Assembler:
         self.fragment_transforms = [np.eye(4) for _ in range(self.num_fragments)]
         self.is_fragment_placed = [False] * self.num_fragments
         self.assembly_components = []
-        self.visualization_log = (
-            visualization_log if visualization_log is not None else []
-        )
 
     def _get_transformed_mesh(self, fragment_idx_in_assembler_list):
         mesh = copy.deepcopy(self.original_meshes[fragment_idx_in_assembler_list])
@@ -92,45 +87,12 @@ class Assembler:
         if self.num_fragments == 0:
             return None
         if self.num_fragments == 1:
-            frag_data = self.fragments_data[0]
-            mesh_to_log = self.original_meshes[0]
-            if self.visualization_log is not None:
-                self.visualization_log.append(
-                    {
-                        "step": "assembly_single_fragment",
-                        "type": "mesh",
-                        "fragment_name": frag_data["name"],
-                        "original_index": frag_data["original_index"],
-                        "fragment_idx_in_valid_list": 0,
-                        "transform": np.eye(4),
-                        "vertices": np.asarray(mesh_to_log.vertices),
-                        "triangles": np.asarray(mesh_to_log.triangles),
-                    }
-                )
             return self._get_transformed_mesh(0)
 
         if not self.pairwise_matches:
             print(
                 "No pairwise matches for assembly. Cannot proceed with greedy strategy."
             )
-            if self.visualization_log is not None:  # Log unplaced if no matches
-                for i_log, fd_log in enumerate(self.fragments_data):
-                    self.visualization_log.append(
-                        {
-                            "step": "assembly_failed_no_pairwise_matches",
-                            "type": "mesh",
-                            "fragment_name": fd_log["name"],
-                            "original_index": fd_log["original_index"],
-                            "fragment_idx_in_valid_list": i_log,
-                            "transform": np.eye(4),  # At origin
-                            "vertices": np.asarray(
-                                self.original_meshes[i_log].vertices
-                            ),
-                            "triangles": np.asarray(
-                                self.original_meshes[i_log].triangles
-                            ),
-                        }
-                    )
             return None
 
         seed_idx = self.pairwise_matches[0]["target_idx"]
@@ -145,21 +107,6 @@ class Assembler:
         current_assembly_components = [
             (self._get_transformed_mesh(seed_idx), seed_name)
         ]
-
-        if self.visualization_log is not None:
-            seed_mesh_transformed_o3d = current_assembly_components[0][0]
-            self.visualization_log.append(
-                {
-                    "step": "assembly_seed_placed",
-                    "type": "mesh",
-                    "fragment_name": seed_name,
-                    "original_index": self.fragments_data[seed_idx]["original_index"],
-                    "fragment_idx_in_valid_list": seed_idx,
-                    "transform": self.fragment_transforms[seed_idx],
-                    "vertices": np.asarray(seed_mesh_transformed_o3d.vertices),
-                    "triangles": np.asarray(seed_mesh_transformed_o3d.triangles),
-                }
-            )
 
         num_placed = 1
         rejected_matches = []
@@ -264,7 +211,6 @@ class Assembler:
                                     placed_mesh_o3d,
                                     placed_name,
                                     self.params,
-                                    viz_collector=self.visualization_log,
                                     min_volume_override=min_volume_all,
                                 )
                             )
@@ -278,22 +224,6 @@ class Assembler:
                             )
                             if not is_valid:
                                 penetration_ok = False
-                                if self.visualization_log is not None:
-                                    self.visualization_log.append(
-                                        {
-                                            "step": "overlap_check_failed_boolean_penetration",
-                                            "type": "event",
-                                            "mesh1_name": candidate_name,
-                                            "mesh2_name": placed_name,
-                                            "reason": f"Boolean penetration test failed: {penetration_ratio*100:.1f}% penetration",
-                                            "penetration_ratio": penetration_ratio,
-                                            "max_penetration_allowed": self.params.get(
-                                                "boolean_penetration_threshold", 0.1
-                                            )
-                                            * 100,
-                                            "min_volume_used": min_volume_all,
-                                        }
-                                    )
                                 break
 
                         if penetration_ok:
@@ -343,31 +273,6 @@ class Assembler:
                             f"  Placed fragment: {newly_placed_name} "
                             f"(idx in list: {newly_placed_idx_in_list}) via match score {best_candidate_score:.3f}."
                         )
-                        if self.visualization_log is not None:
-                            log_entry = {
-                                "step": "assembly_fragment_placed",
-                                "type": "mesh",
-                                "fragment_name": newly_placed_name,
-                                "original_index": self.fragments_data[newly_placed_idx_in_list][
-                                    "original_index"
-                                ],
-                                "fragment_idx_in_valid_list": newly_placed_idx_in_list,
-                                "transform": self.fragment_transforms[newly_placed_idx_in_list],
-                                "vertices": np.asarray(self._get_transformed_mesh(newly_placed_idx_in_list).vertices),
-                                "triangles": np.asarray(self._get_transformed_mesh(newly_placed_idx_in_list).triangles),
-                                "matched_via_score": best_candidate_score,
-                                "overlap_ratio": best_candidate_overlap_ratio,
-                            }
-                            if best_candidate_match_info is not None:
-                                log_entry["match_details"] = {
-                                    "source_idx": best_candidate_match_info["source_idx"],
-                                    "target_idx": best_candidate_match_info["target_idx"],
-                                    "source_name": best_candidate_match_info["source_name"],
-                                    "target_name": best_candidate_match_info["target_name"],
-                                    "score": best_candidate_match_info["score"],
-                                    "rmse": best_candidate_match_info["rmse"],
-                                }
-                            self.visualization_log.append(log_entry)
                         break
                     elif user_input in ["r", "reject"]:
                         # Reject the match, add to rejected_matches
@@ -459,25 +364,6 @@ class Assembler:
             )
             for idx_unplaced in unplaced_indices:
                 print(f" - {self.fragments_data[idx_unplaced]['name']}")
-                if self.visualization_log is not None:  # Log unplaced fragments
-                    self.visualization_log.append(
-                        {
-                            "step": "assembly_fragment_unplaced",
-                            "type": "mesh",
-                            "fragment_name": self.fragments_data[idx_unplaced]["name"],
-                            "original_index": self.fragments_data[idx_unplaced][
-                                "original_index"
-                            ],
-                            "fragment_idx_in_valid_list": idx_unplaced,
-                            "transform": np.eye(4),  # At origin, as it wasn't placed
-                            "vertices": np.asarray(
-                                self.original_meshes[idx_unplaced].vertices
-                            ),
-                            "triangles": np.asarray(
-                                self.original_meshes[idx_unplaced].triangles
-                            ),
-                        }
-                    )
 
         final_meshes_to_combine_o3d = []
         final_transforms_for_combine = []
