@@ -297,7 +297,7 @@ if __name__ == "__main__":
         
         # Ensure this default config matches the new parameters we need
         dummy_cfg_content = {
-            "voxel_downsample_size": 7.0,
+            "voxel_downsample_size": 3.0,
             "normal_estimation_radius": 14.0,
             "normal_estimation_max_nn": 30,
             "fpfh_feature_radius": 35.0,
