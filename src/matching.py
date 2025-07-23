@@ -3,67 +3,7 @@ from itertools import combinations
 from src.alignment import align_fragments_pcd
 import trimesh
 import copy
-
-def boolean_intersection_penetration_test(mesh1_o3d, mesh1_name, mesh2_o3d, mesh2_name, params, viz_collector=None):
-    """Boolean intersection test for penetration detection during pairwise matching."""
-    try:
-        # Convert Open3D meshes to Trimesh
-        mesh1_tri = trimesh.Trimesh(
-            vertices=np.asarray(mesh1_o3d.vertices),
-            faces=np.asarray(mesh1_o3d.triangles)
-        )
-        mesh2_tri = trimesh.Trimesh(
-            vertices=np.asarray(mesh2_o3d.vertices),
-            faces=np.asarray(mesh2_o3d.triangles)
-        )
-        
-        # Ensure meshes are watertight
-        if not mesh1_tri.is_watertight and len(mesh1_tri.faces) > 0:
-            mesh1_tri.fill_holes()
-        if not mesh2_tri.is_watertight and len(mesh2_tri.faces) > 0:
-            mesh2_tri.fill_holes()
-            
-        # Check if meshes are valid
-        if len(mesh1_tri.faces) == 0 or len(mesh2_tri.faces) == 0:
-            return True, 0.0, None
-            
-        # Calculate volumes
-        vol1 = mesh1_tri.volume
-        vol2 = mesh2_tri.volume
-        
-        if vol1 <= 0 or vol2 <= 0:
-            return True, 0.0, None
-            
-        # Perform boolean intersection
-        try:
-            intersection_mesh = trimesh.boolean.intersection([mesh1_tri, mesh2_tri])
-            
-            if intersection_mesh is None or len(intersection_mesh.faces) == 0:
-                return True, 0.0, None
-                
-            # Calculate intersection volume and ratio
-            intersection_volume = intersection_mesh.volume
-            total_volume = min(vol1, vol2)  # Use smaller volume for ratio calculation
-            intersection_ratio = (intersection_volume / total_volume) if total_volume > 0 else 0.0
-            
-            # Get penetration threshold from params (default to 0.1 = 10%)
-            penetration_threshold = params.get("boolean_penetration_threshold", 0.1)
-            
-            # Check if penetration ratio is acceptable
-            if intersection_ratio <= penetration_threshold:
-                # Acceptable penetration - match is valid
-                return True, intersection_ratio, intersection_mesh
-            else:
-                # Too much penetration - reject match
-                return False, intersection_ratio, intersection_mesh
-            
-        except Exception as bool_error:
-            print(f"Boolean intersection failed: {bool_error}")
-            return None, 0.0, None
-            
-    except Exception as e:
-        print(f"Boolean test error: {e}")
-        return None, 0.0, None
+from src.utils.geometry_utils import boolean_intersection_penetration_test
 
 def test_proposed_pairwise_match(source_fragment, target_fragment, transformation, params):
     """
