@@ -302,3 +302,49 @@ def interactive_step_visualization(log_data, original_fragments_list):
         print("   # Create fragments_data_map = {name: original_index for name, original_index in ...}")
         print("   # replay_visualization_log('log.pkl', fragments_data_map=fragments_data_map)")
         pass
+
+
+def debug_visualize_voxel_downsampling(
+    original_mesh, surf, pcd, fragment_name, surface_index
+):
+    """
+    Debug visualization function to show voxel downsampling results.
+
+    Args:
+        original_mesh: The original mesh
+        surf: The fracture surface mesh
+        pcd: The downsampled point cloud
+        fragment_name: Name of the fragment
+        surface_index: Index of the current surface
+    """
+    print(
+        f"    [DEBUG] Visualizing voxel downsampled point cloud for surface {surface_index} of {fragment_name} ({len(pcd.points)} points)"
+    )
+
+    # Create visualization geometries
+    vis_geoms = []
+
+    # Original mesh in gray
+    original_mesh_vis = copy.deepcopy(original_mesh)
+    original_mesh_vis.paint_uniform_color([0.8, 0.8, 0.8])
+    vis_geoms.append(original_mesh_vis)
+
+    # Add wireframe for better structure visibility
+    wireframe = o3d.geometry.LineSet.create_from_triangle_mesh(original_mesh_vis)
+    wireframe.paint_uniform_color([0.5, 0.5, 0.5])
+    vis_geoms.append(wireframe)
+
+    # Current fracture surface in green
+    surf_vis = copy.deepcopy(surf)
+    surf_vis.paint_uniform_color([0.0, 1.0, 0.0])  # Green for fracture surface
+    vis_geoms.append(surf_vis)
+
+    # Downsampled point cloud in red
+    if pcd.has_points():
+        pcd_vis = copy.deepcopy(pcd)
+        pcd_vis.paint_uniform_color([1.0, 0.0, 0.0])  # Red for downsampled points
+        vis_geoms.append(pcd_vis)
+
+    # Display with informative window title
+    window_title = f"[DEBUG] Voxel Downsampling: {fragment_name} Surface {surface_index} (Gray=Original, Green=Surface, Red=Downsampled Points)"
+    o3d.visualization.draw_geometries(vis_geoms, window_name=window_title)
