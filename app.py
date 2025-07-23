@@ -7,11 +7,9 @@ import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 
 from python.left_panel.left_panel import LeftPanel
-from python.models.models_panel import ModelsPanel
 from python.panels.processing_panel import ProcessingPanel
 from python.settings.settings import Settings
 from python.settings.settings_panel import SettingsPanel
-from python.left_panel.item_tree.items.base_model_item import BaseModelItem
 
 import src.io_utils
 
@@ -31,7 +29,6 @@ class App:
     MENU_EXPORT = 2
     MENU_QUIT = 3
     MENU_SHOW_SETTINGS = 11
-    MENU_SHOW_MODELS = 13
     MENU_SHOW_PCPROCESSING = 12
 
     MENU_ABOUT = 21
@@ -80,7 +77,6 @@ class App:
 
         self._left_panel = LeftPanel(self)
         self._settings_panel = SettingsPanel(self)
-        self._models_panel = ModelsPanel(self)
         self._processing_panel = ProcessingPanel(self)
 
         w.set_on_layout(self._on_layout)
@@ -93,7 +89,6 @@ class App:
 
         p.add_child(self._processing_panel._panel)
         p.add_child(self._settings_panel._settings_panel)
-        p.add_child(self._models_panel._panel)
 
         # ---- Menu ----
         # The menu is global (because the macOS menu is global), so only create
@@ -107,8 +102,6 @@ class App:
             settings_menu = gui.Menu()
             settings_menu.add_item("Lighting & Materials", App.MENU_SHOW_SETTINGS)
             settings_menu.set_checked(App.MENU_SHOW_SETTINGS, True)
-            settings_menu.add_item("Models", App.MENU_SHOW_MODELS)
-            settings_menu.set_checked(App.MENU_SHOW_MODELS, True)
             settings_menu.add_item("Processing", App.MENU_SHOW_PCPROCESSING)
             settings_menu.set_checked(App.MENU_SHOW_PCPROCESSING, True)
 
@@ -132,9 +125,6 @@ class App:
         )
         w.set_on_menu_item_activated(
             App.MENU_SHOW_PCPROCESSING, self._on_menu_toggle_processing_panel
-        )
-        w.set_on_menu_item_activated(
-            App.MENU_SHOW_MODELS, self._on_menu_toggle_models_panel
         )
 
         w.set_on_menu_item_activated(App.MENU_ABOUT, self._on_menu_about)
@@ -332,16 +322,6 @@ class App:
             gui.Application.instance.quit()
         except Exception as e:
             print(f"Error quitting application: {e}")
-
-    def _on_menu_toggle_models_panel(self):
-        try:
-            self._models_panel._panel.visible = not self._models_panel._panel.visible
-            gui.Application.instance.menubar.set_checked(
-                App.MENU_SHOW_MODELS, self._models_panel._panel.visible
-            )
-            self.window.set_needs_layout()
-        except Exception as e:
-            print(f"Error toggling models panel: {e}")
 
     def _on_menu_toggle_settings_panel(self):
         try:
