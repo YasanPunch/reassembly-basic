@@ -1,7 +1,7 @@
 
 {
   "// --- I. Preprocessing, Point Cloud Generation ---": null,
-  "voxel_downsample_size": 3.0,
+  "voxel_downsample_size": 1.0,
   "fracture_surface_dense_sample_points": 10000,
   "add_preprocessing_noise": true,
   "preprocessing_noise_factor": 0.01,
