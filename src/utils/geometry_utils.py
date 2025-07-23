@@ -70,17 +70,11 @@ def compute_fpfh_features(pcd, voxel_size, radius_normal, radius_feature):
     """
     pcd.estimate_normals(
         o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
-    
+
     fpfh = o3d.pipelines.registration.compute_fpfh_feature(
         pcd,
         o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
     return fpfh
-
-
-def get_bounding_box_dimensions(mesh):
-    """Returns the dimensions (length, width, height) of the mesh's AABB."""
-    aabb = mesh.get_axis_aligned_bounding_box()
-    return aabb.get_extent()
 
 
 def boolean_intersection_penetration_test(mesh1_o3d, mesh1_name, mesh2_o3d, mesh2_name, params, viz_collector=None, min_volume_override=None):
