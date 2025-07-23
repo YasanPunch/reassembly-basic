@@ -2,7 +2,7 @@ import trimesh
 import numpy as np
 import open3d as o3d
 import copy
-from src.io_utils import combine_meshes, save_mesh # Assuming this is for if __name__ == '__main__'
+from src.io_utils import combine_meshes, save_mesh
 from src.utils.geometry_utils import boolean_intersection_penetration_test
 from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt

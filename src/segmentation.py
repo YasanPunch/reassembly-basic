@@ -701,52 +701,29 @@ def identify_fracture_candidate_faces(tri_mesh_fragment, params=None):
     """
     if params is None:
         params = {}
-    
+
     # Convert trimesh to Open3D mesh
     o3d_mesh = o3d.geometry.TriangleMesh()
     o3d_mesh.vertices = o3d.utility.Vector3dVector(tri_mesh_fragment.vertices)
     o3d_mesh.triangles = o3d.utility.Vector3iVector(tri_mesh_fragment.faces)
     o3d_mesh.compute_vertex_normals()
-    
+
     # Run segmentation
     result_mesh = extract_fracture_surface_mesh(
         o3d_mesh, 
         tri_mesh_fragment.metadata.get('name', 'Unnamed'),
         params
     )
-    
+
     if result_mesh is None:
         return np.zeros(len(tri_mesh_fragment.faces), dtype=bool)
-    
+
     # Create boolean mask
     face_mask = np.zeros(len(tri_mesh_fragment.faces), dtype=bool)
     result_faces_set = set(map(tuple, np.asarray(result_mesh.triangles)))
-    
+
     for i, face in enumerate(tri_mesh_fragment.faces):
         if tuple(sorted(face)) in result_faces_set or tuple(face) in result_faces_set:
             face_mask[i] = True
-    
+
     return face_mask
-
-
-if __name__ == '__main__':
-    # Test with a simple cube
-    print("Testing region growing segmentation on a cube...")
-    test_mesh = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=1.0)
-    test_mesh.compute_vertex_normals()
-    
-    # Test parameters
-    test_params = {
-        'max_curvature_deg': 45.0,
-        'area_limit_fraction': 0.1,
-        'visualize_segmentation': True,
-        'use_bumpiness_detection': False
-    }
-    
-    # Run segmentation
-    result = extract_fracture_surface_mesh(test_mesh, "TestCube", test_params)
-    
-    if result:
-        # Visualize results
-        vis_geometries = visualize_segmentation(test_mesh, result, "TestCube")
-        o3d.visualization.draw_geometries(vis_geometries, window_name="Region Growing Segmentation Test")
