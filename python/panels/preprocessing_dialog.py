@@ -8,6 +8,17 @@ from left_panel.item_tree.items import PreprocessedItem
 class PreprocessingDialog:
     """
     Dialog for preprocessing operations with parameter configuration.
+    
+    This dialog integrates with the app's parameter system to provide a consistent
+    interface for configuring preprocessing parameters. It automatically loads
+    current parameters from the app and allows users to modify them for the
+    current preprocessing operation.
+    
+    The dialog includes:
+    - Parameter fields initialized with current app parameters
+    - Reset to defaults functionality
+    - Load from config file functionality
+    - Automatic parameter saving when preprocessing starts
     """
     
     def __init__(self, app):
@@ -29,6 +40,9 @@ class PreprocessingDialog:
         content.add_child(title)
         content.add_fixed(int(round(0.5 * em)))
         
+        # Get current parameters from app
+        current_params = self.app.get_all_parameters()
+        
         # Parameters section
         params_section = gui.CollapsableVert("Parameters", 0.25 * em)
         
@@ -36,7 +50,7 @@ class PreprocessingDialog:
         voxel_layout = gui.Horiz(0.25 * em)
         voxel_layout.add_child(gui.Label("Voxel Size:"))
         voxel_size_edit = gui.NumberEdit(gui.NumberEdit.Type.DOUBLE)
-        voxel_size_edit.set_value(7.0)
+        voxel_size_edit.set_value(current_params.get("voxel_downsample_size", 7.0))
         voxel_size_edit.set_limits(0.1, 50.0)
         voxel_layout.add_child(voxel_size_edit)
         params_section.add_child(voxel_layout)
@@ -45,7 +59,7 @@ class PreprocessingDialog:
         normal_radius_layout = gui.Horiz(0.25 * em)
         normal_radius_layout.add_child(gui.Label("Normal Radius:"))
         normal_radius_edit = gui.NumberEdit(gui.NumberEdit.Type.DOUBLE)
-        normal_radius_edit.set_value(14.0)
+        normal_radius_edit.set_value(current_params.get("normal_estimation_radius", 14.0))
         normal_radius_edit.set_limits(1.0, 100.0)
         normal_radius_layout.add_child(normal_radius_edit)
         params_section.add_child(normal_radius_layout)
@@ -54,7 +68,7 @@ class PreprocessingDialog:
         normal_nn_layout = gui.Horiz(0.25 * em)
         normal_nn_layout.add_child(gui.Label("Max Neighbors:"))
         normal_max_nn_edit = gui.NumberEdit(gui.NumberEdit.Type.INT)
-        normal_max_nn_edit.set_value(30)
+        normal_max_nn_edit.set_value(current_params.get("normal_estimation_max_nn", 30))
         normal_max_nn_edit.set_limits(5, 200)
         normal_nn_layout.add_child(normal_max_nn_edit)
         params_section.add_child(normal_nn_layout)
@@ -63,24 +77,51 @@ class PreprocessingDialog:
         sample_layout = gui.Horiz(0.25 * em)
         sample_layout.add_child(gui.Label("Sample Points:"))
         sample_points_edit = gui.NumberEdit(gui.NumberEdit.Type.INT)
-        sample_points_edit.set_value(10000)
+        sample_points_edit.set_value(current_params.get("fracture_surface_dense_sample_points", 10000))
         sample_points_edit.set_limits(1000, 100000)
         sample_layout.add_child(sample_points_edit)
         params_section.add_child(sample_layout)
         
         # Add noise checkbox
         add_noise_checkbox = gui.Checkbox("Add Noise")
-        add_noise_checkbox.checked = True
+        add_noise_checkbox.checked = current_params.get("add_preprocessing_noise", True)
         params_section.add_child(add_noise_checkbox)
         
         # Noise factor
         noise_layout = gui.Horiz(0.25 * em)
         noise_layout.add_child(gui.Label("Noise Factor:"))
         noise_factor_edit = gui.NumberEdit(gui.NumberEdit.Type.DOUBLE)
-        noise_factor_edit.set_value(0.01)
+        noise_factor_edit.set_value(current_params.get("preprocessing_noise_factor", 0.01))
         noise_factor_edit.set_limits(0.001, 0.1)
         noise_layout.add_child(noise_factor_edit)
         params_section.add_child(noise_layout)
+        
+        # Orient normals k parameter
+        orient_normals_layout = gui.Horiz(0.25 * em)
+        orient_normals_layout.add_child(gui.Label("Orient Normals K:"))
+        orient_normals_k_edit = gui.NumberEdit(gui.NumberEdit.Type.INT)
+        orient_normals_k_edit.set_value(current_params.get("orient_normals_k", 15))
+        orient_normals_k_edit.set_limits(5, 50)
+        orient_normals_layout.add_child(orient_normals_k_edit)
+        params_section.add_child(orient_normals_layout)
+        
+        # FPFH feature radius (for feature extraction)
+        fpfh_radius_layout = gui.Horiz(0.25 * em)
+        fpfh_radius_layout.add_child(gui.Label("FPFH Radius:"))
+        fpfh_radius_edit = gui.NumberEdit(gui.NumberEdit.Type.DOUBLE)
+        fpfh_radius_edit.set_value(current_params.get("fpfh_feature_radius", 35.0))
+        fpfh_radius_edit.set_limits(5.0, 100.0)
+        fpfh_radius_layout.add_child(fpfh_radius_edit)
+        params_section.add_child(fpfh_radius_layout)
+        
+        # FPFH max neighbors
+        fpfh_nn_layout = gui.Horiz(0.25 * em)
+        fpfh_nn_layout.add_child(gui.Label("FPFH Max Neighbors:"))
+        fpfh_max_nn_edit = gui.NumberEdit(gui.NumberEdit.Type.INT)
+        fpfh_max_nn_edit.set_value(current_params.get("fpfh_feature_max_nn", 100))
+        fpfh_max_nn_edit.set_limits(20, 500)
+        fpfh_nn_layout.add_child(fpfh_max_nn_edit)
+        params_section.add_child(fpfh_nn_layout)
         
         content.add_child(params_section)
         content.add_fixed(int(round(0.5 * em)))
@@ -99,6 +140,8 @@ class PreprocessingDialog:
         
         ok_button = gui.Button("Start Preprocessing")
         cancel_button = gui.Button("Cancel")
+        reset_button = gui.Button("Reset to Defaults")
+        load_config_button = gui.Button("Load from Config")
         
         # Store references for the button handlers
         dialog_content = {
@@ -109,6 +152,9 @@ class PreprocessingDialog:
             'sample_points_edit': sample_points_edit,
             'add_noise_checkbox': add_noise_checkbox,
             'noise_factor_edit': noise_factor_edit,
+            'orient_normals_k_edit': orient_normals_k_edit,
+            'fpfh_radius_edit': fpfh_radius_edit,
+            'fpfh_max_nn_edit': fpfh_max_nn_edit,
             'progress_label': progress_label,
             'progress_bar': progress_bar,
             'ok_button': ok_button,
@@ -118,7 +164,7 @@ class PreprocessingDialog:
         
         def on_ok_clicked():
             """Handle OK button click - start preprocessing"""
-            # Get parameters
+            # Get parameters from dialog
             parameters = {
                 "voxel_downsample_size": voxel_size_edit.double_value,
                 "normal_estimation_radius": normal_radius_edit.double_value,
@@ -126,8 +172,21 @@ class PreprocessingDialog:
                 "fracture_surface_dense_sample_points": sample_points_edit.int_value,
                 "add_preprocessing_noise": add_noise_checkbox.checked,
                 "preprocessing_noise_factor": noise_factor_edit.double_value,
-                "orient_normals_k": 15,  # Fixed for now
+                "orient_normals_k": orient_normals_k_edit.int_value,
+                "fpfh_feature_radius": fpfh_radius_edit.double_value,
+                "fpfh_feature_max_nn": fpfh_max_nn_edit.int_value,
             }
+            
+            # Update app's parameters with the new values
+            for key, value in parameters.items():
+                self.app.set_parameter(key, value)
+            
+            # Optionally save the updated parameters to the config file
+            try:
+                self.app.save_parameters()
+                print(f"[DEBUG] Updated parameters saved to {self.app.config_file}")
+            except Exception as e:
+                print(f"[WARNING] Could not save updated parameters: {e}")
             
             # Disable OK button and show progress
             ok_button.enabled = False
@@ -148,11 +207,51 @@ class PreprocessingDialog:
                 # Close dialog
                 self.app.window.close_dialog()
         
+        def on_reset_clicked():
+            """Handle Reset to Defaults button click"""
+            # Reset all fields to default values
+            voxel_size_edit.set_value(7.0)
+            normal_radius_edit.set_value(14.0)
+            normal_max_nn_edit.set_value(30)
+            sample_points_edit.set_value(10000)
+            add_noise_checkbox.checked = True
+            noise_factor_edit.set_value(0.01)
+            orient_normals_k_edit.set_value(15)
+            fpfh_radius_edit.set_value(35.0)
+            fpfh_max_nn_edit.set_value(100)
+        
+        def on_load_config_clicked():
+            """Handle Load from Config button click"""
+            # Reload parameters from config file and update UI
+            self.app.reload_parameters()
+            current_params = self.app.get_all_parameters()
+            
+            voxel_size_edit.set_value(current_params.get("voxel_downsample_size", 7.0))
+            normal_radius_edit.set_value(current_params.get("normal_estimation_radius", 14.0))
+            normal_max_nn_edit.set_value(current_params.get("normal_estimation_max_nn", 30))
+            sample_points_edit.set_value(current_params.get("fracture_surface_dense_sample_points", 10000))
+            add_noise_checkbox.checked = current_params.get("add_preprocessing_noise", True)
+            noise_factor_edit.set_value(current_params.get("preprocessing_noise_factor", 0.01))
+            orient_normals_k_edit.set_value(current_params.get("orient_normals_k", 15))
+            fpfh_radius_edit.set_value(current_params.get("fpfh_feature_radius", 35.0))
+            fpfh_max_nn_edit.set_value(current_params.get("fpfh_feature_max_nn", 100))
+        
         ok_button.set_on_clicked(on_ok_clicked)
         cancel_button.set_on_clicked(on_cancel_clicked)
+        reset_button.set_on_clicked(on_reset_clicked)
+        load_config_button.set_on_clicked(on_load_config_clicked)
         
-        button_layout.add_child(ok_button)
-        button_layout.add_child(cancel_button)
+        # Create button rows for better layout
+        button_row1 = gui.Horiz(0.25 * em)
+        button_row1.add_child(ok_button)
+        button_row1.add_child(cancel_button)
+        
+        button_row2 = gui.Horiz(0.25 * em)
+        button_row2.add_child(reset_button)
+        button_row2.add_child(load_config_button)
+        
+        button_layout.add_child(button_row1)
+        button_layout.add_child(button_row2)
         content.add_child(button_layout)
         
         # Set dialog content and show
@@ -341,3 +440,22 @@ class PreprocessingDialog:
                 total_weight += weight
         
         return total_score / total_weight if total_weight > 0 else 0.5
+
+    def get_preprocessing_parameters(self) -> Dict[str, Any]:
+        """
+        Get preprocessing-specific parameters from the app.
+        
+        Returns:
+            dict: Dictionary containing preprocessing parameters
+        """
+        return self.app.get_parameters_subset([
+            "voxel_downsample_size",
+            "normal_estimation_radius", 
+            "normal_estimation_max_nn",
+            "fracture_surface_dense_sample_points",
+            "add_preprocessing_noise",
+            "preprocessing_noise_factor",
+            "orient_normals_k",
+            "fpfh_feature_radius",
+            "fpfh_feature_max_nn"
+        ])

@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 
 import open3d as o3d
 import open3d.visualization.gui as gui  # type: ignore
@@ -16,6 +17,17 @@ from left_panel.item_tree.items.base_model_item import BaseModelItem
 
 
 class App:
+    """
+    Main application class for the 3D Model Fragment Reconstructor.
+    
+    This class manages the GUI application and provides access to configuration parameters
+    that can be used by any module or class under the app. Parameters are automatically
+    loaded from a JSON configuration file on initialization.
+    
+    Attributes:
+        params (dict): Dictionary containing all reconstruction parameters
+        config_file (str): Path to the configuration file
+    """
     MENU_OPEN = 1
     MENU_EXPORT = 2
     MENU_QUIT = 3
@@ -27,9 +39,23 @@ class App:
     MENU_ABOUT = 21
 
     DEFAULT_IBL = "default"
+    DEFAULT_CONFIG_FILE = "config/reconstruction_params.json"
 
-    def __init__(self, width, height):
+    def __init__(self, width, height, config_file=None):
+        """
+        Initialize the application with configuration parameters.
+        
+        Args:
+            width (int): Window width
+            height (int): Window height
+            config_file (str, optional): Path to JSON configuration file. 
+                                       Uses DEFAULT_CONFIG_FILE if None.
+        """
         self.settings = Settings()
+        
+        # Load configuration parameters
+        self.config_file = config_file or App.DEFAULT_CONFIG_FILE
+        self.params = self._load_parameters()
 
         self._scene_objects = {}  # To store {'path': {'mesh' | 'geometry', 'transform'}}
 
@@ -124,6 +150,151 @@ class App:
 
         w.set_on_menu_item_activated(App.MENU_ABOUT, self._on_menu_about)
         # Menu ----
+
+    def _load_parameters(self):
+        """
+        Loads configuration parameters from JSON file.
+        
+        Returns:
+            dict: Dictionary containing reconstruction parameters
+        """
+        print(f"[DEBUG] Loading parameters from: {self.config_file}")
+        try:
+            with open(self.config_file, 'r') as f:
+                params = json.load(f)
+            print(f"[DEBUG] Successfully loaded {len(params)} parameters from {self.config_file}")
+            return params
+        except FileNotFoundError:
+            print(f"[WARNING] Config file not found at {self.config_file}. Creating default configuration.")
+            return self._create_default_parameters()
+        except json.JSONDecodeError:
+            print(f"[ERROR] Could not decode JSON from {self.config_file}. Using default configuration.")
+            return self._create_default_parameters()
+        except Exception as e:
+            print(f"[ERROR] Unexpected error loading parameters: {e}. Using default configuration.")
+            return self._create_default_parameters()
+
+    def _create_default_parameters(self):
+        """
+        Creates default configuration parameters if config file is not found or invalid.
+        
+        Returns:
+            dict: Dictionary containing default reconstruction parameters
+        """
+        print("[DEBUG] Creating default configuration parameters")
+        default_params = {
+            "voxel_downsample_size": 7.0,
+            "normal_estimation_radius": 14.0,
+            "normal_estimation_max_nn": 30,
+            "fpfh_feature_radius": 35.0,
+            "fpfh_feature_max_nn": 100,
+            "ransac_distance_threshold_factor": 1.5,
+            "ransac_edge_length_factor": 0.9,
+            "ransac_iterations": 1000000,
+            "ransac_n_points": 4,
+            "ransac_confidence": 0.999,
+            "icp_max_correspondence_distance_factor": 2.0,
+            "icp_relative_fitness": 1e-6,
+            "icp_relative_rmse": 1e-6,
+            "icp_max_iteration": 50,
+            "min_match_score": 0.3,
+            "min_boundary_edges_for_fracture_face": 1,
+            "fracture_surface_dense_sample_points": 10000,
+            "add_preprocessing_noise": True,
+            "preprocessing_noise_factor": 0.01,
+            "orient_normals_k": 15,
+            "use_boolean_intersection_test": True,
+            "boolean_penetration_threshold": 0.1,
+        }
+        
+        # Try to save the default config file
+        try:
+            config_dir = os.path.dirname(self.config_file)
+            if config_dir and not os.path.exists(config_dir):
+                os.makedirs(config_dir, exist_ok=True)
+            
+            with open(self.config_file, 'w') as f:
+                json.dump(default_params, f, indent=4)
+            print(f"[DEBUG] Created default config file at {self.config_file}")
+        except Exception as e:
+            print(f"[WARNING] Could not create default config file: {e}")
+        
+        return default_params
+
+    def get_parameter(self, key, default=None):
+        """
+        Get a specific parameter value.
+        
+        Args:
+            key (str): Parameter key to retrieve
+            default: Default value if key doesn't exist
+            
+        Returns:
+            The parameter value or default if not found
+        """
+        return self.params.get(key, default)
+
+    def set_parameter(self, key, value):
+        """
+        Set a specific parameter value.
+        
+        Args:
+            key (str): Parameter key to set
+            value: Value to set for the parameter
+        """
+        self.params[key] = value
+
+    def save_parameters(self, config_file=None):
+        """
+        Save current parameters to JSON file.
+        
+        Args:
+            config_file (str, optional): Path to save config file. Uses current config_file if None.
+        """
+        save_path = config_file or self.config_file
+        try:
+            config_dir = os.path.dirname(save_path)
+            if config_dir and not os.path.exists(config_dir):
+                os.makedirs(config_dir, exist_ok=True)
+            
+            with open(save_path, 'w') as f:
+                json.dump(self.params, f, indent=4)
+            print(f"[DEBUG] Parameters saved to {save_path}")
+        except Exception as e:
+            print(f"[ERROR] Could not save parameters to {save_path}: {e}")
+
+    def reload_parameters(self, config_file=None):
+        """
+        Reload parameters from JSON file.
+        
+        Args:
+            config_file (str, optional): Path to config file. Uses current config_file if None.
+        """
+        if config_file:
+            self.config_file = config_file
+        self.params = self._load_parameters()
+        print(f"[DEBUG] Parameters reloaded from {self.config_file}")
+
+    def get_all_parameters(self):
+        """
+        Get all configuration parameters.
+        
+        Returns:
+            dict: Dictionary containing all reconstruction parameters
+        """
+        return self.params.copy()
+
+    def get_parameters_subset(self, keys):
+        """
+        Get a subset of parameters by key names.
+        
+        Args:
+            keys (list): List of parameter keys to retrieve
+            
+        Returns:
+            dict: Dictionary containing only the requested parameters
+        """
+        return {key: self.params.get(key) for key in keys}
 
     def _on_layout(self, layout_context):
         r = self.window.content_rect
@@ -449,10 +620,22 @@ def main():
     # for rendering and prepares the cross-platform window abstraction.
     gui.Application.instance.initialize()
 
-    w = App(1024, 768)
-
+    # Parse command line arguments for config file
+    config_file = None
     if len(sys.argv) > 1:
-        paths = sys.argv[1:]
+        # Check if first argument is a config file (ends with .json)
+        if sys.argv[1].endswith('.json'):
+            config_file = sys.argv[1]
+            # Remove config file from paths to process
+            paths = sys.argv[2:]
+        else:
+            paths = sys.argv[1:]
+    else:
+        paths = []
+
+    w = App(1024, 768, config_file=config_file)
+
+    if paths:
         for path in paths:
             if os.path.exists(path):
                 w.load(path)
