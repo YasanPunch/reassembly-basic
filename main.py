@@ -21,7 +21,7 @@ def main(args):
     print("--- 3D Model Fragment Reconstructor (Advanced) ---")
     start_time = time.time()
 
-    # 1. Load Parameters
+    # 1. Load Parameters --------------------------------------------------------------------------------------------
     print("\n[1. Loading Parameters]")
     try:
         with open(args.config_file, "r") as f:
@@ -40,7 +40,7 @@ def main(args):
         print(f"Error: Could not decode JSON from {args.config_file}. Exiting.")
         return
 
-    # 2. Load Fragments
+    # 2. Load Fragments --------------------------------------------------------------------------------------------
     print("\n[2. Loading Fragments]")
     if not os.path.isdir(args.input_dir):
         print(f"Error: Input directory not found at {args.input_dir}. Exiting.")
@@ -58,7 +58,7 @@ def main(args):
     #  'fracture_surface_mesh' (optional), 'pcd_for_features', 'features'}
     processed_fragments_pipeline_data = []
 
-    # 3. Preprocessing, Segmentation & Feature Extraction (per fragment)
+    # 3. Preprocessing, Segmentation & Feature Extraction (per fragment) --------------------------------------
     print("\n[3. Preprocessing, Segmentation, and Feature Extraction]")
     for i, frag_info_raw in enumerate(fragments_data_raw):
         print(
@@ -130,7 +130,7 @@ def main(args):
 
         return
 
-    # 4. Pairwise Matching
+    # 4. Pairwise Matching --------------------------------------------------------------------------------------------
     print("\n[4. Finding Pairwise Matches]")
     # pairwise_matches will be list of dicts. Indices refer to `valid_fragments_data`
     pairwise_matches = src.matching.find_pairwise_matches(
@@ -186,7 +186,7 @@ def main(args):
     if args.debug_pairwise_matching and pairwise_matches:
         pairwise_matches = pairwise_matches[:DEBUG_TOP_N_MATCHES]
 
-    # 5. Global Assembly
+    # 5. Global Assembly --------------------------------------------------------------------------------------------
     print("\n[5. Performing Global Assembly]")
     # The Assembler needs the 'original_mesh' from valid_fragments_data for the final assembly
     assembler = src.assembly.Assembler(valid_fragments_data, pairwise_matches, params)
