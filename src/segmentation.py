@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from collections import deque
 from scipy import ndimage
 from scipy.spatial import cKDTree
+from collections import Counter
+
 
 def get_color(index, total_items=20, cmap_name='tab10', num_variations=3):
     """
@@ -295,9 +297,9 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
     Main segmentation function using the paper's region growing approach.
     """
     params = params or {}
-    
+
     print(f"\n=== Segmenting {fragment_name} using Region Growing Algorithm ===")
-    
+
     # Parameter setup with paper's recommendations
     default_params = {
         'max_curvature_deg': params.get('max_curvature_deg', 30.0),  # Paper suggests this range
@@ -307,17 +309,17 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         'bumpiness_threshold': params.get('bumpiness_threshold', 0.2),
         'use_bumpiness_detection': params.get('use_bumpiness_detection', False)
     }
-    
+
     # Update params with defaults
     for key, value in default_params.items():
         if key not in params:
             params[key] = value
-    
+
     # Convert to trimesh
     if not o3d_mesh_fragment.has_triangles() or not o3d_mesh_fragment.has_vertices():
         print(f"    Segmenter: Input mesh {fragment_name} has no triangles/vertices.")
         return None
-        
+
     try:
         tri_mesh = trimesh.Trimesh(
             vertices=np.asarray(o3d_mesh_fragment.vertices),
@@ -326,34 +328,34 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
             process=False
         )
         tri_mesh.metadata['name'] = fragment_name
-        
+
         # Ensure we have face normals and areas
         if not hasattr(tri_mesh, 'face_normals') or tri_mesh.face_normals is None:
             tri_mesh.face_normals
         if not hasattr(tri_mesh, 'area_faces') or tri_mesh.area_faces is None:
             _ = tri_mesh.area_faces
-            
+
     except Exception as e:
         print(f"    Segmenter: Error converting O3D mesh {fragment_name} to Trimesh: {e}")
         return None
-    
+
     total_faces = len(tri_mesh.faces)
     print(f"    Total faces: {total_faces}")
     print(f"    Max curvature threshold: {params['max_curvature_deg']}°")
     print(f"    Min region area: {params['area_limit_fraction']*100:.1f}% of total")
-    
+
     # Perform region growing segmentation
     print(f"\n    Starting region growing segmentation...")
     regions = region_growing_segmentation(tri_mesh, params)
     print(f"    Found {len(regions)} regions after segmentation and cleanup")
-    
+
     # Calculate region properties
     region_properties = []
     for i, region in enumerate(regions):
         avg_normal = calculate_region_average_normal(tri_mesh, region)
         area = np.sum(tri_mesh.area_faces[region])
         area_fraction = area / tri_mesh.area
-        
+
         props = {
             'index': i,
             'faces': region,
@@ -363,62 +365,62 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
             'avg_normal': avg_normal,
             'bumpiness': 0.0
         }
-        
+
         # Calculate bumpiness if requested
         if params['use_bumpiness_detection']:
             props['bumpiness'] = calculate_region_bumpiness(tri_mesh, region, params)
-        
+
         region_properties.append(props)
-        
+
         print(f"    Region {i+1}: {len(region)} faces ({area_fraction*100:.1f}% of area), "
               f"avg_normal: [{avg_normal[0]:.2f}, {avg_normal[1]:.2f}, {avg_normal[2]:.2f}]")
         if params['use_bumpiness_detection']:
             print(f"        Bumpiness: {props['bumpiness']:.4f}")
-    
+
     # Sort regions by area (largest first)
     region_properties.sort(key=lambda x: x['area'], reverse=True)
-    
+
     # Identify fracture candidates
     face_is_fracture_candidate = np.zeros(len(tri_mesh.faces), dtype=bool)
     selected_regions = []
-    
+
     # If bumpiness detection is enabled, use it to identify rough surfaces
     if params['use_bumpiness_detection'] and any(r['bumpiness'] > 0 for r in region_properties):
         bumpiness_values = [r['bumpiness'] for r in region_properties]
         max_bumpiness = max(bumpiness_values)
         bumpiness_threshold = params['bumpiness_threshold'] * max_bumpiness
-        
+
         for props in region_properties:
             if props['bumpiness'] > bumpiness_threshold:
                 selected_regions.append(props['index'])
                 face_is_fracture_candidate[props['faces']] = True
                 print(f"    Region {props['index']+1} selected as fracture candidate (bumpiness: {props['bumpiness']:.4f})")
-    
+
     # Interactive visualization if enabled
     if params['visualize_segmentation'] and len(regions) > 0:
         print(f"\n    Visualizing {len(regions)} regions for interactive selection...")
-        
+
         shared_state = {'confirmed_selection': False, 'quit_without_selection': False, 'current_page': 0}
         PAGE_SIZE = 10
-        
+
         drawable_segment_infos = []
         highlight_color = np.array([0.0, 0.0, 0.0])  # Black highlight
-        
+
         mesh_vis = copy.deepcopy(o3d_mesh_fragment)
-        
+
         for i, props in enumerate(region_properties):
             seg_mesh = o3d.geometry.TriangleMesh()
             seg_mesh.vertices = o3d_mesh_fragment.vertices
             seg_mesh.triangles = o3d.utility.Vector3iVector(tri_mesh.faces[props['faces']])
             seg_mesh.remove_unreferenced_vertices()
-            
+
             if not seg_mesh.has_vertices() or not seg_mesh.has_triangles():
                 continue
-                
+
             seg_mesh.compute_vertex_normals()
             base_color = get_color(i, len(regions))
             seg_mesh.paint_uniform_color(base_color)
-            
+
             drawable_segment_infos.append({
                 'mesh': seg_mesh,
                 'id': props['index'],
@@ -426,30 +428,30 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
                 'selected': props['index'] in selected_regions,
                 'properties': props
             })
-        
+
         if drawable_segment_infos:
             num_total_segments = len(drawable_segment_infos)
             num_pages = (num_total_segments + PAGE_SIZE - 1) // PAGE_SIZE
-            
+
             vis = o3d.visualization.VisualizerWithKeyCallback()
             vis.create_window(
                 window_name=f"Select: {fragment_name} (Page 1/{num_pages}. N/P=Page. S=Confirm. Q=Skip.)",
                 width=1280, height=960
             )
-            
+
             for info in drawable_segment_infos:
                 vis.add_geometry(info['mesh'])
                 if info['selected']:
                     info['mesh'].paint_uniform_color(highlight_color)
-            
+
             def print_current_page_and_selection():
                 page_idx = shared_state['current_page']
                 global_start = page_idx * PAGE_SIZE + 1
                 global_end = min((page_idx + 1) * PAGE_SIZE, num_total_segments)
-                
+
                 print(f"\n  --- Page {page_idx + 1}/{num_pages} (Regions {global_start}-{global_end}) ---")
                 print(f"  Keys 1-9, 0 (for 10th) toggle selection.")
-                
+
                 # Show properties for visible regions
                 for i in range(page_idx * PAGE_SIZE, min((page_idx + 1) * PAGE_SIZE, num_total_segments)):
                     if i < len(drawable_segment_infos):
@@ -460,69 +462,69 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
                               f"{props['num_faces']} faces ({props['area_fraction']*100:.1f}%)")
                         if params['use_bumpiness_detection']:
                             print(f"       Bumpiness: {props['bumpiness']:.4f}")
-                
+
                 selected_ids = sorted([info['id'] + 1 for info in drawable_segment_infos if info['selected']])
                 print(f"  Selected: {selected_ids if selected_ids else 'None'}")
-            
+
             print_current_page_and_selection()
-            
+
             def toggle_segment_on_current_page(visualizer, key_idx):
                 page_idx = shared_state['current_page']
                 segment_idx = page_idx * PAGE_SIZE + key_idx
-                
+
                 if 0 <= segment_idx < num_total_segments:
                     info = drawable_segment_infos[segment_idx]
                     info['selected'] = not info['selected']
-                    
+
                     if info['selected']:
                         info['mesh'].paint_uniform_color(highlight_color)
                     else:
                         info['mesh'].paint_uniform_color(info['base_color'])
-                    
+
                     visualizer.update_geometry(info['mesh'])
                     print_current_page_and_selection()
-                    
+
                 return False
-            
+
             # Register key callbacks
             for i in range(PAGE_SIZE):
                 key_char = str((i + 1) % 10)
                 vis.register_key_callback(ord(key_char), 
                     lambda v, idx=i: toggle_segment_on_current_page(v, idx))
-            
+
             def change_page(visualizer, direction):
                 old_page = shared_state['current_page']
                 shared_state['current_page'] = (shared_state['current_page'] + direction + num_pages) % num_pages
                 if old_page != shared_state['current_page']:
                     print_current_page_and_selection()
                 return False
-            
+
             vis.register_key_callback(ord('N'), lambda v: change_page(v, 1))
             vis.register_key_callback(ord('P'), lambda v: change_page(v, -1))
-            
+
             def confirm_and_close(visualizer):
                 shared_state['confirmed_selection'] = True
                 print("\n  Selection Confirmed. Closing...")
                 visualizer.close()
                 return False
-            
+
             def quit_and_close(visualizer):
                 shared_state['quit_without_selection'] = True
                 print("\n  Selection Aborted. Closing...")
                 visualizer.close()
                 return False
-            
+
             vis.register_key_callback(ord('S'), confirm_and_close)
             vis.register_key_callback(ord('Q'), quit_and_close)
-            
+
             print("\n=== Interactive Region Selection ===")
             print(f"  Fragment: {fragment_name}")
             print("  N/P: Navigate pages | 1-9,0: Toggle selection")
             print("  S: Save selection | Q: Quit without saving")
-            
+
             vis.run()
             vis.destroy_window()
-            
+
             if shared_state['confirmed_selection']:
                 selected_regions = [info['id'] for info in drawable_segment_infos if info['selected']]
                 face_is_fracture_candidate.fill(False)
@@ -533,15 +535,15 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
             elif shared_state['quit_without_selection']:
                 print(f"\n    User quit selection. No regions selected.")
                 return None
-    
+
     # Console fallback for non-interactive mode
     elif not params['visualize_segmentation'] and len(regions) > 0 and not params['use_bumpiness_detection']:
         print("\n=== Region Selection (Console) ===")
         for i, props in enumerate(region_properties):
             print(f"  Region {i+1}: {props['num_faces']} faces ({props['area_fraction']*100:.1f}% of area)")
-        
+
         selection_str = input(f"Enter region numbers to select (1-{len(regions)}, comma-separated, 'all', or 'none'): ")
-        
+
         if selection_str.lower() == 'all':
             selected_regions = list(range(len(regions)))
         elif selection_str.lower() == 'none' or not selection_str.strip():
@@ -553,10 +555,10 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
             except ValueError:
                 print("    Invalid input. No regions selected.")
                 selected_regions = []
-        
+
         for region_idx in selected_regions:
             face_is_fracture_candidate[region_properties[region_idx]['faces']] = True
-    
+
     # Collect selected regions' face indices and normals for merging
     selected_region_faces = []
     selected_region_normals = []
@@ -564,27 +566,27 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         if face_is_fracture_candidate[region_properties[region_idx]['faces']].any():
             selected_region_faces.append(set(region_properties[region_idx]['faces']))
             selected_region_normals.append(region_properties[region_idx]['avg_normal'])
-    
+
     # Create output mesh
     if not np.any(face_is_fracture_candidate):
         print(f"\n    No regions selected for {fragment_name}")
         return None
-    
+
     fracture_faces = tri_mesh.faces[face_is_fracture_candidate]
     fracture_surface_o3d = o3d.geometry.TriangleMesh()
     fracture_surface_o3d.vertices = o3d_mesh_fragment.vertices
     fracture_surface_o3d.triangles = o3d.utility.Vector3iVector(fracture_faces)
     fracture_surface_o3d.remove_unreferenced_vertices()
     fracture_surface_o3d.remove_degenerate_triangles()
-    
+
     if not fracture_surface_o3d.has_triangles():
         print(f"    Extracted surface has no valid triangles")
         return None
-    
+
     fracture_surface_o3d.compute_vertex_normals()
     print(f"\n    Extracted surface: {len(fracture_surface_o3d.vertices)} vertices, "
           f"{len(fracture_surface_o3d.triangles)} triangles")
-    
+
     # --- IMPROVED MERGING: NORMAL + BOUNDARY DISTANCE ---
     all_triangles = np.asarray(o3d_mesh_fragment.triangles)
     all_vertices = np.asarray(o3d_mesh_fragment.vertices)
@@ -595,12 +597,11 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         edges = np.sort(edges, axis=1)
         # Count occurrences
         edges_tuple = [tuple(e) for e in edges]
-        from collections import Counter
         edge_counts = Counter(edges_tuple)
         boundary_edges = [e for e, c in edge_counts.items() if c == 1]
         boundary_verts = np.unique(np.array(boundary_edges).flatten())
         return all_vertices[boundary_verts]
-    
+
     merged_clusters = []
     used = set()
     angle_thresh_deg = 10.0

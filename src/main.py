@@ -51,7 +51,8 @@ def main(args):
     if not fragments_data_raw:
         print("No fragments loaded. Exiting.")
         return
-        print(f"  Loaded {len(fragments_data_raw)} fragments.")
+
+    print(f"  Loaded {len(fragments_data_raw)} fragments.")
     # This will store more processed data:
     # {'name', 'original_index', 'original_mesh',
     #  'fracture_surface_mesh' (optional), 'pcd_for_features', 'features'}

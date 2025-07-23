@@ -4,13 +4,11 @@ import open3d as o3d
 import copy
 from src.io_utils import combine_meshes, save_mesh # Assuming this is for if __name__ == '__main__'
 from src.utils.geometry_utils import boolean_intersection_penetration_test
+from src.utils import visualization_utils  # Import for saving
+from scipy.spatial import cKDTree
+import matplotlib.pyplot as plt
 
-# Add global colormap import for fragment coloring
-try:
-    import matplotlib.pyplot as plt
-    cmap = plt.get_cmap('tab20')
-except ImportError:
-    cmap = None
+cmap = plt.get_cmap("tab20")
 
 def check_overlap(mesh1_o3d, mesh1_name, mesh2_o3d, mesh2_name, params, viz_collector=None):
     if not mesh1_o3d.has_vertices() or not mesh2_o3d.has_vertices():
@@ -130,7 +128,7 @@ class Assembler:
         self.num_fragments = len(fragments_data)
 
         self.original_meshes = [fd['original_mesh'] for fd in self.fragments_data] 
-        
+
         self.fragment_transforms = [np.eye(4) for _ in range(self.num_fragments)]
         self.is_fragment_placed = [False] * self.num_fragments
         self.assembly_components = [] 
@@ -221,13 +219,13 @@ class Assembler:
 
         seed_idx = self.pairwise_matches[0]['target_idx'] 
         seed_name = self.fragments_data[seed_idx]['name']
-        
+
         print(f"Starting assembly with seed fragment: {seed_name} (idx in current list: {seed_idx})")
         self.is_fragment_placed[seed_idx] = True
-        
+
         # current_assembly_components stores tuples of (transformed_mesh_object, fragment_name)
         current_assembly_components = [(self._get_transformed_mesh(seed_idx), seed_name)]
-        
+
         if self.visualization_log is not None:
             seed_mesh_transformed_o3d = current_assembly_components[0][0]
             self.visualization_log.append({
@@ -255,7 +253,7 @@ class Assembler:
                 #   self.fragments_data[s_idx]['fracture_surfaces'][s_surf_idx]
                 #   self.fragments_data[t_idx]['fracture_surfaces'][t_surf_idx]
                 # For now, original_mesh is used for placement, but this is where you'd use the surface if needed.
-                
+
                 # These are potential values for the current match_info being considered
                 current_iteration_potential_world_transform = None
                 current_iteration_idx_to_place = -1
@@ -350,7 +348,7 @@ class Assembler:
                             best_candidate_world_transform = current_iteration_potential_world_transform
                             best_candidate_idx_to_place = current_iteration_idx_to_place
                             best_candidate_overlap_ratio = max_overlap_ratio
-            
+
             # After checking all pairwise_matches for the current assembly state
             if best_candidate_idx_to_place != -1 and best_candidate_match_info is not None:
                 newly_placed_idx_in_list = best_candidate_idx_to_place
@@ -358,13 +356,13 @@ class Assembler:
 
                 self.fragment_transforms[newly_placed_idx_in_list] = best_candidate_world_transform
                 self.is_fragment_placed[newly_placed_idx_in_list] = True
-                
+
                 placed_mesh_o3d_for_list = self._get_transformed_mesh(newly_placed_idx_in_list)
                 current_assembly_components.append((placed_mesh_o3d_for_list, newly_placed_name))
                 num_placed += 1
                 print(f"  Placed fragment: {newly_placed_name} "
                       f"(idx in list: {newly_placed_idx_in_list}) via match score {best_candidate_score:.3f}.")
-                
+
                 if self.visualization_log is not None:
                     log_entry = {
                         'step': 'assembly_fragment_placed', 'type': 'mesh',
@@ -390,7 +388,7 @@ class Assembler:
             else:
                 print("No more non-overlapping, valid matches found to extend the assembly.")
                 break
-        
+
         if num_placed < self.num_fragments:
             print(f"Warning: Only {num_placed}/{self.num_fragments} fragments were assembled.")
             unplaced_indices = [i for i, placed in enumerate(self.is_fragment_placed) if not placed]
@@ -398,16 +396,24 @@ class Assembler:
             for idx_unplaced in unplaced_indices:
                 print(f" - {self.fragments_data[idx_unplaced]['name']}")
                 if self.visualization_log is not None: # Log unplaced fragments
-                     self.visualization_log.append({
-                        'step': 'assembly_fragment_unplaced', 'type': 'mesh',
-                        'fragment_name': self.fragments_data[idx_unplaced]['name'],
-                        'original_index': self.fragments_data[idx_unplaced]['original_index'],
-                        'fragment_idx_in_valid_list': idx_unplaced,
-                        'transform': np.eye(4), # At origin, as it wasn't placed
-                        'vertices': np.asarray(self.original_meshes[idx_unplaced].vertices),
-                        'triangles': np.asarray(self.original_meshes[idx_unplaced].triangles)
-                    })
-
+                    self.visualization_log.append(
+                        {
+                            "step": "assembly_fragment_unplaced",
+                            "type": "mesh",
+                            "fragment_name": self.fragments_data[idx_unplaced]["name"],
+                            "original_index": self.fragments_data[idx_unplaced][
+                                "original_index"
+                            ],
+                            "fragment_idx_in_valid_list": idx_unplaced,
+                            "transform": np.eye(4),  # At origin, as it wasn't placed
+                            "vertices": np.asarray(
+                                self.original_meshes[idx_unplaced].vertices
+                            ),
+                            "triangles": np.asarray(
+                                self.original_meshes[idx_unplaced].triangles
+                            ),
+                        }
+                    )
 
         final_meshes_to_combine_o3d = []
         final_transforms_for_combine = []
@@ -430,7 +436,7 @@ class Assembler:
                 final_meshes_to_combine_o3d.append(mesh)
                 final_transforms_for_combine.append(self.fragment_transforms[i])
                 fragment_colors.append(color)
-        
+
         if not final_meshes_to_combine_o3d:
             print("Error: No meshes were placed in the assembly.")
             return None
@@ -455,7 +461,7 @@ class Assembler:
         # --- POST-PROCESSING SNAPPING STEP ---
         enable_snapping = self.params.get("enable_post_processing_snapping", False)
         snap_score_threshold = self.params.get("snap_score_threshold", 0.7)
-        
+
         if enable_snapping:
             print("[Post-Processing] Snapping adjacent fragments together...")
             snapped_transforms = list(final_transforms_for_combine)
@@ -475,7 +481,6 @@ class Assembler:
                 # Find closest points between source and target
                 src_points = np.asarray(source_mesh.vertices)
                 tgt_points = np.asarray(target_mesh.vertices)
-                from scipy.spatial import cKDTree
                 tree = cKDTree(tgt_points)
                 dists, idxs = tree.query(src_points)
                 min_dist = np.min(dists)
@@ -541,12 +546,12 @@ if __name__ == '__main__':
 
     # --- Create Dummy/Test Fragments Data ---
     # This would normally come from io_utils, preprocessing, feature_extraction
-    
+
     # Example: Two simple cubes that should fit together
     # Cube 1: origin (0,0,0) to (1,1,1)
     mesh1 = o3d.geometry.TriangleMesh.create_box(width=1, height=1, depth=1)
     mesh1.compute_vertex_normals()
-    
+
     # Cube 2: origin (1,0,0) to (2,1,1) - i.e., shifted by 1 unit in X
     mesh2 = o3d.geometry.TriangleMesh.create_box(width=1, height=1, depth=1)
     mesh2.translate([1, 0, 0]) # Position it to mate with mesh1's +X face
@@ -585,7 +590,7 @@ if __name__ == '__main__':
     # if mesh1 is the target, mesh2 needs to be transformed from its current position
     # to align with mesh1.
     # Let's simulate a scenario where mesh2 was initially at, say, [5,0,0] and needs to be moved.
-    
+
     # Assume mesh2 (idx 1) is the source and mesh1 (idx 0) is the target.
     # If mesh2 was at some arbitrary pose, and we found a transform to align it to mesh1:
     # T_mesh2_to_mesh1 would be the transformation.
@@ -595,12 +600,12 @@ if __name__ == '__main__':
     # and if mesh2 is ALREADY at [1,0,0] (as created above), then the transformation
     # to bring mesh2 (source) to align with mesh1 (target, at origin) if mesh2 started at origin
     # would be a translation by [1,0,0].
-    
+
     # Let's make a more explicit test case:
     # Fragment A (idx 0) at origin
     # Fragment B (idx 1) initially at [10,0,0], needs to be moved to [1,0,0] to connect to A's +X face.
     # So, the transformation for B is a translation by [-9,0,0] if B is the source.
-    
+
     mesh_A_orig = o3d.geometry.TriangleMesh.create_box(width=1, height=1, depth=1)
     mesh_A_orig.compute_vertex_normals()
 
@@ -612,7 +617,6 @@ if __name__ == '__main__':
     mesh_B_at_initial_pos.transform(initial_transform_B)
     mesh_B_at_initial_pos.compute_vertex_normals()
 
-
     fragments_for_assembler_test2 = [
         {'original_mesh': mesh_A_orig, 'name': 'PartA', 'original_index': 0, 'pcd_for_features': None, 'features': None},
         {'original_mesh': mesh_B_orig, 'name': 'PartB', 'original_index': 1, 'pcd_for_features': None, 'features': None},
@@ -620,8 +624,8 @@ if __name__ == '__main__':
         # captured by the transformation in pairwise_matches.
     ]
 
-    # Transformation that takes PartB (source, idx 1) from its CURRENT conceptual space 
-    # (which is effectively origin for its definition in original_meshes) and aligns it 
+    # Transformation that takes PartB (source, idx 1) from its CURRENT conceptual space
+    # (which is effectively origin for its definition in original_meshes) and aligns it
     # to PartA (target, idx 0), which is at origin.
     # To place PartB next to PartA's +X face, PartB needs to be at [1,0,0] in PartA's frame.
     # So, T_PartB_to_PartA is a translation by [1,0,0].
@@ -659,7 +663,7 @@ if __name__ == '__main__':
                                         test_pairwise_matches, 
                                         test_params, 
                                         visualization_log=test_visualization_log)
-    
+
     final_assembled_mesh = assembler_test_instance.greedy_assembly()
 
     # --- Output Results ---
@@ -670,7 +674,7 @@ if __name__ == '__main__':
         test_output_path = os.path.join(output_dir_test, "assembled_test_model.obj")
         save_mesh(final_assembled_mesh, test_output_path)
         print(f"  Test assembled model saved to: {test_output_path}")
-        
+
         # Optionally visualize
         # print("  Visualizing test assembled model...")
         # o3d.visualization.draw_geometries([final_assembled_mesh], window_name="Test Assembled Model")
@@ -684,7 +688,6 @@ if __name__ == '__main__':
 
     # To fully test the visualization replay, you'd save this log and use replay_log.py
     if test_visualization_log:
-        from src.utils import visualization_utils # Import for saving
         test_log_file = os.path.join(output_dir_test, "assembly_test_log.pkl")
         visualization_utils.save_visualization_log(test_visualization_log, test_log_file)
         print(f"  Test visualization log saved to: {test_log_file}")
