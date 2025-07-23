@@ -4,9 +4,9 @@ import open3d as o3d
 import copy
 from src.io_utils import combine_meshes, save_mesh # Assuming this is for if __name__ == '__main__'
 from src.utils.geometry_utils import boolean_intersection_penetration_test
-from src.utils import visualization_utils  # Import for saving
 from scipy.spatial import cKDTree
 import matplotlib.pyplot as plt
+import os
 
 cmap = plt.get_cmap("tab20")
 
@@ -146,7 +146,6 @@ class Assembler:
         """
         if self.num_fragments < 2:
             return
-        import open3d as o3d
         pose_graph = o3d.pipelines.registration.PoseGraph()
         # Add nodes (one per fragment)
         for i in range(self.num_fragments):
@@ -246,9 +245,7 @@ class Assembler:
             best_candidate_idx_to_place = -1 # This is an index into self.fragments_data
 
             for match_info in self.pairwise_matches:
-                s_idx, t_idx = match_info['source_idx'], match_info['target_idx']
-                s_surf_idx = match_info.get('source_surface_idx', 0)
-                t_surf_idx = match_info.get('target_surface_idx', 0)
+                s_idx, t_idx = match_info["source_idx"], match_info["target_idx"]
                 # If you need to use a specific surface for overlap or context, use:
                 #   self.fragments_data[s_idx]['fracture_surfaces'][s_surf_idx]
                 #   self.fragments_data[t_idx]['fracture_surfaces'][t_surf_idx]
@@ -512,7 +509,6 @@ class Assembler:
             final_mesh = combine_meshes(pose_graph_meshes, [np.eye(4)] * len(pose_graph_meshes))
 
         # Save the final mesh to data/output_assembly
-        import os
         output_dir = os.path.join("data", "output_assembly")
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, "reconstructed_model.obj")
@@ -520,175 +516,3 @@ class Assembler:
         print(f"Final assembled model saved to: {output_path}")
 
         return final_mesh
-
-# In src/assembly.py, at the end of the file:
-
-if __name__ == '__main__':
-    import os
-    import json
-    # To test assembly.py directly, we need to simulate the data structures
-    # that would normally be created by the preceding steps in main.py.
-
-    # --- Configuration (Simplified for this test) ---
-    # Normally loaded from config/reconstruction_params.json
-    # For this test, we'll define some crucial ones directly.
-    # Ensure these match the scale and expectations of your test fragments.
-    test_params = {
-        "voxel_downsample_size": 0.1, # Adjusted for potentially simpler test meshes
-        "max_assembly_overlap_factor_aabb": 0.9,
-        "overlap_check_sample_points": 100,
-        "overlap_penetration_allowance_ratio": 0.20, # More lenient for simple test
-        "overlap_penetration_depth_factor": 0.3,
-        "boolean_penetration_threshold": 0.1, # Added for boolean penetration test
-        # Add any other params directly used by Assembler or check_overlap if not defaulted
-    }
-    print(f"Using test parameters: {test_params}")
-
-    # --- Create Dummy/Test Fragments Data ---
-    # This would normally come from io_utils, preprocessing, feature_extraction
-
-    # Example: Two simple cubes that should fit together
-    # Cube 1: origin (0,0,0) to (1,1,1)
-    mesh1 = o3d.geometry.TriangleMesh.create_box(width=1, height=1, depth=1)
-    mesh1.compute_vertex_normals()
-
-    # Cube 2: origin (1,0,0) to (2,1,1) - i.e., shifted by 1 unit in X
-    mesh2 = o3d.geometry.TriangleMesh.create_box(width=1, height=1, depth=1)
-    mesh2.translate([1, 0, 0]) # Position it to mate with mesh1's +X face
-    mesh2.compute_vertex_normals()
-
-    # Slightly transform mesh2 away so the alignment is non-trivial for a full pipeline test
-    # For this isolated assembly test, we'll assume alignment has already happened
-    # and provide a "perfect" pairwise match.
-
-    # Structure expected by Assembler (from valid_fragments_data in main.py)
-    # Key fields for Assembler: 'original_mesh', 'name', 'original_index'
-    # 'pcd_for_features' and 'features' are not directly used by Assembler class itself,
-    # but they are part of the structure it receives.
-    fragments_for_assembler = [
-        {
-            'original_mesh': mesh1, 
-            'name': 'CubePart1', 
-            'original_index': 0,
-            'pcd_for_features': None, # Dummy for this test
-            'features': None          # Dummy for this test
-        },
-        {
-            'original_mesh': mesh2, 
-            'name': 'CubePart2', 
-            'original_index': 1,
-            'pcd_for_features': None, # Dummy
-            'features': None          # Dummy
-        },
-    ]
-    print(f"Created {len(fragments_for_assembler)} test fragments for assembler.")
-
-    # --- Create Dummy Pairwise Matches ---
-    # This list would normally come from matching.py
-    # We need to define a transformation that aligns mesh2 (source_idx=1) to mesh1 (target_idx=0)
-    # Since mesh2 is already at [1,0,0] relative to mesh1 at [0,0,0] to form a 2x1x1 block,
-    # if mesh1 is the target, mesh2 needs to be transformed from its current position
-    # to align with mesh1.
-    # Let's simulate a scenario where mesh2 was initially at, say, [5,0,0] and needs to be moved.
-
-    # Assume mesh2 (idx 1) is the source and mesh1 (idx 0) is the target.
-    # If mesh2 was at some arbitrary pose, and we found a transform to align it to mesh1:
-    # T_mesh2_to_mesh1 would be the transformation.
-    # For this simple test, let's assume mesh2 is at its final correct relative pose
-    # TO mesh1 IF mesh1 is at origin.
-    # If mesh1 is at origin, and mesh2 should be at [1,0,0] next to it,
-    # and if mesh2 is ALREADY at [1,0,0] (as created above), then the transformation
-    # to bring mesh2 (source) to align with mesh1 (target, at origin) if mesh2 started at origin
-    # would be a translation by [1,0,0].
-
-    # Let's make a more explicit test case:
-    # Fragment A (idx 0) at origin
-    # Fragment B (idx 1) initially at [10,0,0], needs to be moved to [1,0,0] to connect to A's +X face.
-    # So, the transformation for B is a translation by [-9,0,0] if B is the source.
-
-    mesh_A_orig = o3d.geometry.TriangleMesh.create_box(width=1, height=1, depth=1)
-    mesh_A_orig.compute_vertex_normals()
-
-    mesh_B_orig = o3d.geometry.TriangleMesh.create_box(width=1, height=1, depth=1)
-    # Initial position of mesh_B (e.g., as loaded from a file, already transformed away)
-    initial_transform_B = np.eye(4)
-    initial_transform_B[:3,3] = [10,0,0] 
-    mesh_B_at_initial_pos = copy.deepcopy(mesh_B_orig)
-    mesh_B_at_initial_pos.transform(initial_transform_B)
-    mesh_B_at_initial_pos.compute_vertex_normals()
-
-    fragments_for_assembler_test2 = [
-        {'original_mesh': mesh_A_orig, 'name': 'PartA', 'original_index': 0, 'pcd_for_features': None, 'features': None},
-        {'original_mesh': mesh_B_orig, 'name': 'PartB', 'original_index': 1, 'pcd_for_features': None, 'features': None},
-        # Note: Assembler uses original_meshes. The fact that PartB is "loaded" at [10,0,0] is
-        # captured by the transformation in pairwise_matches.
-    ]
-
-    # Transformation that takes PartB (source, idx 1) from its CURRENT conceptual space
-    # (which is effectively origin for its definition in original_meshes) and aligns it
-    # to PartA (target, idx 0), which is at origin.
-    # To place PartB next to PartA's +X face, PartB needs to be at [1,0,0] in PartA's frame.
-    # So, T_PartB_to_PartA is a translation by [1,0,0].
-    transform_B_to_A = np.eye(4)
-    transform_B_to_A[0,3] = 1.0 
-
-    # If PartA (source, idx 0) were to be aligned to PartB (target, idx 1)
-    # and PartB is considered fixed at origin (for this hypothetical match),
-    # PartA would need to be moved to [-1,0,0].
-    transform_A_to_B = np.eye(4)
-    transform_A_to_B[0,3] = -1.0
-
-    test_pairwise_matches = [
-        { # Best match: B aligns to A
-            'source_idx': 1, 'target_idx': 0, # PartB (source) to PartA (target)
-            'transformation': transform_B_to_A,
-            'score': 0.9, 'rmse': 0.01,
-            'source_name': 'PartB', 'target_name': 'PartA'
-        },
-        { # A weaker match for testing sorting
-            'source_idx': 0, 'target_idx': 1, # PartA (source) to PartB (target)
-            'transformation': transform_A_to_B,
-            'score': 0.8, 'rmse': 0.02,
-            'source_name': 'PartA', 'target_name': 'PartB'
-        }
-    ]
-    print(f"Created {len(test_pairwise_matches)} test pairwise matches.")
-
-    # --- Initialize Visualization Log ---
-    test_visualization_log = []
-
-    # --- Create and Run Assembler ---
-    print("\nInitializing and running Assembler for test...")
-    assembler_test_instance = Assembler(fragments_for_assembler_test2, 
-                                        test_pairwise_matches, 
-                                        test_params, 
-                                        visualization_log=test_visualization_log)
-
-    final_assembled_mesh = assembler_test_instance.greedy_assembly()
-
-    # --- Output Results ---
-    if final_assembled_mesh and final_assembled_mesh.has_vertices():
-        print("\nAssembly test successful!")
-        output_dir_test = "data/output_assembly_test" # Separate dir for this test
-        os.makedirs(output_dir_test, exist_ok=True)
-        test_output_path = os.path.join(output_dir_test, "assembled_test_model.obj")
-        save_mesh(final_assembled_mesh, test_output_path)
-        print(f"  Test assembled model saved to: {test_output_path}")
-
-        # Optionally visualize
-        # print("  Visualizing test assembled model...")
-        # o3d.visualization.draw_geometries([final_assembled_mesh], window_name="Test Assembled Model")
-    else:
-        print("\nAssembly test failed or resulted in an empty model.")
-
-    print(f"\nVisualization log for assembly test has {len(test_visualization_log)} entries.")
-    # You could print some log entries here for inspection if desired.
-    # for log_entry_test in test_visualization_log:
-    #     print(f"  Log: {log_entry_test.get('step')} - {log_entry_test.get('fragment_name', '')}")
-
-    # To fully test the visualization replay, you'd save this log and use replay_log.py
-    if test_visualization_log:
-        test_log_file = os.path.join(output_dir_test, "assembly_test_log.pkl")
-        visualization_utils.save_visualization_log(test_visualization_log, test_log_file)
-        print(f"  Test visualization log saved to: {test_log_file}")
-        print(f"  To replay, use replay_log.py with this file path.")
