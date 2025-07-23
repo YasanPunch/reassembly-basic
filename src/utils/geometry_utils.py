@@ -88,8 +88,6 @@ def boolean_intersection_penetration_test(mesh1_o3d, mesh1_name, mesh2_o3d, mesh
     Returns (is_valid, intersection_ratio, intersection_mesh).
     Logs to viz_collector if provided.
     """
-    import trimesh
-    import numpy as np
     try:
         # Convert Open3D meshes to Trimesh
         mesh1_tri = trimesh.Trimesh(

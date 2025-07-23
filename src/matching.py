@@ -37,7 +37,7 @@ def test_proposed_pairwise_match(source_fragment, target_fragment, transformatio
         params
     )
 
-    is_valid, ratio = result
+    is_valid, ratio, intersection_mesh = result
 
     if is_valid:
         if ratio > 0:
