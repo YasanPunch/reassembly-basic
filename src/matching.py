@@ -1,9 +1,53 @@
 import numpy as np
 from itertools import combinations
 from src.alignment import align_fragments_pcd
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import trimesh
+import copy
+from src.utils.geometry_utils import boolean_intersection_penetration_test
 
-print("DEBUG: matching.py top level executed") # <--- ADD THIS
+def test_proposed_pairwise_match(source_fragment, target_fragment, transformation, params):
+    """
+    Test if applying a transformation would cause penetration between two fragments.
+    
+    This function:
+    1. Takes the original meshes of two fragments
+    2. Applies the transformation to one fragment
+    3. Tests if the transformed fragment penetrates the other fragment
+    4. Returns True if NO penetration, False if penetration detected
+    
+    Args:
+        source_fragment: Fragment data dict with 'original_mesh' (the fragment to be transformed)
+        target_fragment: Fragment data dict with 'original_mesh' (the reference fragment)
+        transformation: 4x4 transformation matrix to apply to source_fragment
+        params: Configuration parameters
+        
+    Returns:
+        bool: True if transformation is valid (no penetration), False if penetration detected
+    """
+    # Get the original meshes in their initial positions
+    mesh1_original = target_fragment['original_mesh']      # Reference fragment (stays in place)
+    mesh2_original = source_fragment['original_mesh']      # Fragment to be transformed
+    
+    # Apply the transformation to see what the alignment would look like
+    mesh2_transformed = copy.deepcopy(mesh2_original)
+    mesh2_transformed.transform(transformation)
+    
+    # Test for penetration between the reference fragment and the transformed fragment
+    result = boolean_intersection_penetration_test(
+        mesh1_original, target_fragment['name'],
+        mesh2_transformed, source_fragment['name'],
+        params
+    )
+    
+    is_valid, ratio, intersection_mesh = result
+    
+    if is_valid:
+        if ratio > 0:
+            print(f"    ⚠️  Minor penetration detected (ratio: {ratio:.3f}), but within acceptable threshold")
+        return True  # Penetration is acceptable - this transformation is valid
+    else:
+        print(f"    ❌ Excessive penetration detected (ratio: {ratio:.3f}), exceeds threshold")
+        return False  # Too much penetration - this transformation would cause excessive overlap
 
 def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
     matches = []
@@ -25,6 +69,18 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                     source_pcd, target_pcd, source_fpfh, target_fpfh, params
                 )
             if transform_j_to_i is not None and fitness_ji >= params.get("min_match_score", 0.6):
+                # Step 3: Test if the transformation causes penetration
+                # This checks if applying the transformation would make the fragments penetrate each other
+                if params.get("use_boolean_intersection_test", False):
+                    is_valid = test_proposed_pairwise_match(
+                        frag_j_data, frag_i_data, transform_j_to_i, params
+                    )
+                    if not is_valid:
+                        print(f"  ❌ Excessive penetration detected: {frag_j_data['name']} -> {frag_i_data['name']}. Rejecting match.")
+                        continue
+                    else:
+                        print(f"  ✅ Penetration test passed: {frag_j_data['name']} -> {frag_i_data['name']} is a valid match.")
+                
                 confidence_ji = float(fitness_ji) / (rmse_ji + 1e-6)
                 matches.append({
                     'source_idx': j, 'target_idx': i,
@@ -45,6 +101,18 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                     target_pcd, source_pcd, target_fpfh, source_fpfh, params
                 )
             if transform_i_to_j is not None and fitness_ij >= params.get("min_match_score", 0.6):
+                # Step 3: Test if the transformation causes penetration
+                # This checks if applying the transformation would make the fragments penetrate each other
+                if params.get("use_boolean_intersection_test", False):
+                    is_valid = test_proposed_pairwise_match(
+                        frag_i_data, frag_j_data, transform_i_to_j, params
+                    )
+                    if not is_valid:
+                        print(f"  ❌ Excessive penetration detected: {frag_i_data['name']} -> {frag_j_data['name']}. Rejecting match.")
+                        continue
+                    else:
+                        print(f"  ✅ Penetration test passed: {frag_i_data['name']} -> {frag_j_data['name']} is a valid match.")
+                
                 confidence_ij = float(fitness_ij) / (rmse_ij + 1e-6)
                 matches.append({
                     'source_idx': i, 'target_idx': j,
@@ -84,18 +152,16 @@ def find_pairwise_matches(fragments_data, params, debug=False, top_n_per_pair=3)
     print(f"\nFinding pairwise matches among {num_fragments} fragments...")
     pairs = list(combinations(range(num_fragments), 2))
     results = []
-    with ThreadPoolExecutor() as executor:
-        future_to_pair = {
-            executor.submit(_match_fragment_pair, i, j, fragments_data[i], fragments_data[j], params, debug): (i, j)
-            for i, j in pairs
-        }
-        for future in as_completed(future_to_pair):
-            i, j = future_to_pair[future]
-            matches = future.result()
-            if matches:
-                # Only keep top N matches for this pair (by score)
-                matches_sorted = sorted(matches, key=lambda x: x['score'], reverse=True)
-                results.extend(matches_sorted[:top_n_per_pair])
+    
+    # Use deterministic sequential processing instead of parallel processing
+    # This ensures consistent results across runs
+    for i, j in pairs:
+        matches = _match_fragment_pair(i, j, fragments_data[i], fragments_data[j], params, debug)
+        if matches:
+            # Only keep top N matches for this pair (by score)
+            matches_sorted = sorted(matches, key=lambda x: x['score'], reverse=True)
+            results.extend(matches_sorted[:top_n_per_pair])
+    
     # Sort all results by score (descending)
     results.sort(key=lambda x: x['score'], reverse=True)
     print(f"Found {len(results)} potential pairwise matches above threshold (top {top_n_per_pair} per pair).")
