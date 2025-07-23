@@ -453,52 +453,58 @@ class Assembler:
         )
 
         # --- POST-PROCESSING SNAPPING STEP ---
-        print("[Post-Processing] Snapping adjacent fragments together...")
-        SNAP_SCORE_THRESHOLD = 0.7
-        snapped_transforms = list(final_transforms_for_combine)
-        # For each high-scoring match, snap the source to the target
-        for match in self.pairwise_matches:
-            if match['score'] < SNAP_SCORE_THRESHOLD:
-                continue
-            s_idx = match['source_idx']
-            t_idx = match['target_idx']
-            # Only snap if both fragments are placed
-            if s_idx >= len(final_meshes_to_combine_o3d) or t_idx >= len(final_meshes_to_combine_o3d):
-                continue
-            source_mesh = copy.deepcopy(final_meshes_to_combine_o3d[s_idx])
-            target_mesh = copy.deepcopy(final_meshes_to_combine_o3d[t_idx])
-            source_mesh.transform(snapped_transforms[s_idx])
-            target_mesh.transform(snapped_transforms[t_idx])
-            # Find closest points between source and target
-            src_points = np.asarray(source_mesh.vertices)
-            tgt_points = np.asarray(target_mesh.vertices)
-            from scipy.spatial import cKDTree
-            tree = cKDTree(tgt_points)
-            dists, idxs = tree.query(src_points)
-            min_dist = np.min(dists)
-            min_src_idx = np.argmin(dists)
-            min_tgt_idx = idxs[min_src_idx]
-            # Compute translation vector to bring source closer to target
-            src_pt = src_points[min_src_idx]
-            tgt_pt = tgt_points[min_tgt_idx]
-            vec = tgt_pt - src_pt
-            # Move source fragment by this vector (minus a small epsilon to avoid overlap)
-            epsilon = 1e-4
-            snap_vec = vec - epsilon * (vec / (np.linalg.norm(vec) + 1e-8))
-            snapped_transforms[s_idx][:3, 3] += snap_vec
-        # Apply snapped transforms to meshes
-        snapped_meshes = []
-        for i, mesh in enumerate(final_meshes_to_combine_o3d):
-            mesh_snapped = copy.deepcopy(mesh)
-            mesh_snapped.transform(snapped_transforms[i])
-            snapped_meshes.append(mesh_snapped)
-        print("[Post-Processing] Snapping complete. Visualizing snapped fragments...")
-        o3d.visualization.draw_geometries(
-            snapped_meshes,
-            window_name="Final Composite Assembly: Snapped Fragments"
-        )
-
-        final_mesh = combine_meshes(snapped_meshes, [np.eye(4)] * len(snapped_meshes))
+        enable_snapping = self.params.get("enable_post_processing_snapping", False)
+        snap_score_threshold = self.params.get("snap_score_threshold", 0.7)
+        
+        if enable_snapping:
+            print("[Post-Processing] Snapping adjacent fragments together...")
+            snapped_transforms = list(final_transforms_for_combine)
+            # For each high-scoring match, snap the source to the target
+            for match in self.pairwise_matches:
+                if match['score'] < snap_score_threshold:
+                    continue
+                s_idx = match['source_idx']
+                t_idx = match['target_idx']
+                # Only snap if both fragments are placed
+                if s_idx >= len(final_meshes_to_combine_o3d) or t_idx >= len(final_meshes_to_combine_o3d):
+                    continue
+                source_mesh = copy.deepcopy(final_meshes_to_combine_o3d[s_idx])
+                target_mesh = copy.deepcopy(final_meshes_to_combine_o3d[t_idx])
+                source_mesh.transform(snapped_transforms[s_idx])
+                target_mesh.transform(snapped_transforms[t_idx])
+                # Find closest points between source and target
+                src_points = np.asarray(source_mesh.vertices)
+                tgt_points = np.asarray(target_mesh.vertices)
+                from scipy.spatial import cKDTree
+                tree = cKDTree(tgt_points)
+                dists, idxs = tree.query(src_points)
+                min_dist = np.min(dists)
+                min_src_idx = np.argmin(dists)
+                min_tgt_idx = idxs[min_src_idx]
+                # Compute translation vector to bring source closer to target
+                src_pt = src_points[min_src_idx]
+                tgt_pt = tgt_points[min_tgt_idx]
+                vec = tgt_pt - src_pt
+                # Move source fragment by this vector (minus a small epsilon to avoid overlap)
+                epsilon = 1e-4
+                snap_vec = vec - epsilon * (vec / (np.linalg.norm(vec) + 1e-8))
+                snapped_transforms[s_idx][:3, 3] += snap_vec
+            # Apply snapped transforms to meshes
+            snapped_meshes = []
+            for i, mesh in enumerate(final_meshes_to_combine_o3d):
+                mesh_snapped = copy.deepcopy(mesh)
+                mesh_snapped.transform(snapped_transforms[i])
+                snapped_meshes.append(mesh_snapped)
+            print("[Post-Processing] Snapping complete. Visualizing snapped fragments...")
+            o3d.visualization.draw_geometries(
+                snapped_meshes,
+                window_name="Final Composite Assembly: Snapped Fragments"
+            )
+            final_mesh = combine_meshes(snapped_meshes, [np.eye(4)] * len(snapped_meshes))
+        else:
+            print("[Post-Processing] Snapping disabled. Using pose graph optimized fragments...")
+            # Use the pose graph optimized meshes directly without snapping
+            final_mesh = combine_meshes(pose_graph_meshes, [np.eye(4)] * len(pose_graph_meshes))
 
         # Save the final mesh to data/output_assembly
         import os

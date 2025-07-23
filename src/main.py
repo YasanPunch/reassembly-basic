@@ -46,6 +46,12 @@ def main(args):
         with open(args.config_file, 'r') as f:
             params = json.load(f)
         print(f"  Parameters loaded from: {args.config_file}")
+        
+        # Override snapping parameter if command-line argument is provided
+        if args.disable_snapping:
+            params["enable_post_processing_snapping"] = False
+            print("  Post-processing snapping disabled via command-line argument")
+            
     except FileNotFoundError:
         print(f"Error: Config file not found at {args.config_file}. Exiting.")
         return
@@ -289,6 +295,8 @@ if __name__ == "__main__":
                     help="Enable debug visualization for pairwise matching.")
     parser.add_argument("--top_n_matches_per_pair", type=int, default=3,
                         help="Number of top matches to keep per fragment pair (default: 3)")
+    parser.add_argument("--disable_snapping", action="store_true",
+                        help="Disable post-processing snapping step (useful when snapping messes up correctly aligned fragments)")
 
 
     # Ensure default config exists if not specified
@@ -329,7 +337,10 @@ if __name__ == "__main__":
             "max_assembly_overlap_factor_aabb": 0.9, # For the coarse AABB check
             "overlap_check_sample_points": 300,
             "overlap_penetration_allowance_ratio": 0.15,
-            "overlap_penetration_depth_factor": 0.25
+            "overlap_penetration_depth_factor": 0.25,
+            # Post-processing snapping configuration
+            "enable_post_processing_snapping": True,
+            "snap_score_threshold": 0.7
         }
         with open(default_config_path, 'w') as f:
             json.dump(dummy_cfg_content, f, indent=4)

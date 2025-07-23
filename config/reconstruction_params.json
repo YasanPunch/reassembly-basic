@@ -58,5 +58,12 @@
   "overlap_penetration_allowance_ratio": 0.25,
   "overlap_penetration_depth_factor": 0.25,
   "debug_assembly": true,
-  "disable_overlap_check": true
+  "disable_overlap_check": true,
+
+  "// --- VII. Post-Processing Snapping Configuration ---": null,
+  "// Post-processing step that snaps adjacent fragments together": null,
+  "enable_post_processing_snapping": false,
+  "// Set to false to disable snapping (useful when snapping messes up correctly aligned fragments)": null,
+  "snap_score_threshold": 0.7,
+  "// Minimum match score required for snapping (higher = more selective snapping)": null
 }
