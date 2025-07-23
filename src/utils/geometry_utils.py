@@ -83,7 +83,7 @@ def get_bounding_box_dimensions(mesh):
     return aabb.get_extent()
 
 
-def boolean_intersection_penetration_test(mesh1_o3d, mesh1_name, mesh2_o3d, mesh2_name, params, viz_collector=None):
+def boolean_intersection_penetration_test(mesh1_o3d, mesh1_name, mesh2_o3d, mesh2_name, params, viz_collector=None, min_volume_override=None):
     """Boolean intersection test for penetration detection between two meshes.
     Returns (is_valid, intersection_ratio, intersection_mesh).
     Logs to viz_collector if provided.
@@ -135,7 +135,10 @@ def boolean_intersection_penetration_test(mesh1_o3d, mesh1_name, mesh2_o3d, mesh
                 return True, 0.0, None
             # Calculate intersection volume and ratio
             intersection_volume = intersection_mesh.volume
-            total_volume = min(vol1, vol2)  # Use smaller volume for ratio calculation
+            if min_volume_override is not None:
+                total_volume = min_volume_override
+            else:
+                total_volume = min(vol1, vol2)  # Use smaller volume for ratio calculation
             intersection_ratio = (intersection_volume / total_volume) if total_volume > 0 else 0.0
             # Get penetration threshold from params (default to 0.1 = 10%)
             penetration_threshold = params.get("boolean_penetration_threshold", 0.1)
@@ -147,7 +150,8 @@ def boolean_intersection_penetration_test(mesh1_o3d, mesh1_name, mesh2_o3d, mesh
                     'intersection_volume': intersection_volume,
                     'vol1': vol1, 'vol2': vol2,
                     'intersection_ratio': intersection_ratio,
-                    'penetration_threshold': penetration_threshold
+                    'penetration_threshold': penetration_threshold,
+                    'min_volume_used': total_volume
                 })
             # Check if penetration ratio is acceptable
             if intersection_ratio <= penetration_threshold:

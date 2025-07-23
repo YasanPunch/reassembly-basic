@@ -306,6 +306,14 @@ class Assembler:
                                     break
                                 max_overlap_ratio = max(max_overlap_ratio, overlap_ratio)
 
+                        # Compute minimum volume among candidate and all placed fragments
+                        candidate_tri = trimesh.Trimesh(vertices=np.asarray(candidate_mesh_transformed_o3d.vertices), faces=np.asarray(candidate_mesh_transformed_o3d.triangles))
+                        candidate_vol = candidate_tri.volume
+                        placed_vols = []
+                        for placed_mesh_o3d, _ in current_assembly_components:
+                            placed_tri = trimesh.Trimesh(vertices=np.asarray(placed_mesh_o3d.vertices), faces=np.asarray(placed_mesh_o3d.triangles))
+                            placed_vols.append(placed_tri.volume)
+                        min_volume_all = min([candidate_vol] + placed_vols)
                         # Instead of check_overlap, use boolean_intersection_penetration_test for each placed fragment.
                         # Allow up to 10% penetration (set in params as 'boolean_penetration_threshold': 0.1)
                         # Log results to visualization_log if enabled.
@@ -315,12 +323,13 @@ class Assembler:
                             is_valid, penetration_ratio, intersection_mesh = boolean_intersection_penetration_test(
                                 candidate_mesh_transformed_o3d, candidate_name,
                                 placed_mesh_o3d, placed_name,
-                                self.params, viz_collector=self.visualization_log
+                                self.params, viz_collector=self.visualization_log,
+                                min_volume_override=min_volume_all
                             )
                             # Print penetration test result to command line
                             penetration_pct = penetration_ratio * 100
                             threshold_pct = self.params.get('boolean_penetration_threshold', 0.1) * 100
-                            print(f"    [Penetration Test] {candidate_name} vs {placed_name}: {penetration_pct:.2f}% (threshold: {threshold_pct:.2f}%) -> {'PASS' if is_valid else 'FAIL'}")
+                            print(f"    [Penetration Test] {candidate_name} vs {placed_name}: {penetration_pct:.2f}% (threshold: {threshold_pct:.2f}%) [min volume: {min_volume_all:.4f}] -> {'PASS' if is_valid else 'FAIL'}")
                             if not is_valid:
                                 penetration_ok = False
                                 if self.visualization_log is not None:
@@ -330,7 +339,8 @@ class Assembler:
                                         'mesh2_name': placed_name,
                                         'reason': f'Boolean penetration test failed: {penetration_ratio*100:.1f}% penetration',
                                         'penetration_ratio': penetration_ratio,
-                                        'max_penetration_allowed': self.params.get('boolean_penetration_threshold', 0.1) * 100
+                                        'max_penetration_allowed': self.params.get('boolean_penetration_threshold', 0.1) * 100,
+                                        'min_volume_used': min_volume_all
                                     })
                                 break # No need to check further placed fragments if one fails
 
