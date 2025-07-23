@@ -117,7 +117,6 @@ class Assembler:
             best_candidate_score = -1.0
             best_candidate_world_transform = None
             best_candidate_idx_to_place = -1
-            best_candidate_overlap_ratio = 0.0
 
             # Try all pairwise matches that haven't been used or rejected
             for i, match_info in enumerate(self.pairwise_matches):
@@ -168,25 +167,6 @@ class Assembler:
                             current_iteration_idx_to_place
                         ]["name"]
 
-                        # DEBUG VISUALIZATION: Show candidate placement if enabled
-                        if self.params.get("debug_assembly", False):
-                            print(
-                                f"[DEBUG] Visualizing candidate placement for {candidate_name}"
-                            )
-                            o3d.visualization.draw_geometries(
-                                [candidate_mesh_transformed_o3d]
-                                + [m for m, _ in current_assembly_components],
-                                window_name=f"Candidate: {candidate_name} (Red), Placed: Gray",
-                            )
-
-                        # OVERLAP CHECK - Using boolean intersection penetration test only
-                        if self.params.get("disable_overlap_check", False):
-                            overlap_ok = True
-                            max_overlap_ratio = 0.0
-                        else:
-                            overlap_ok = True
-                            max_overlap_ratio = 0.0
-
                         candidate_tri = trimesh.Trimesh(
                             vertices=np.asarray(
                                 candidate_mesh_transformed_o3d.vertices
@@ -215,9 +195,8 @@ class Assembler:
                                 )
                             )
                             penetration_pct = penetration_ratio * 100
-                            threshold_pct = (
-                                self.params.get("boolean_penetration_threshold", 0.1)
-                                * 100
+                            threshold_pct = self.params.get(
+                                "boolean_penetration_threshold", 0.1
                             )
                             print(
                                 f"    [Penetration Test] {candidate_name} vs {placed_name}: {penetration_pct:.2f}% (threshold: {threshold_pct:.2f}%) [min volume: {min_volume_all:.4f}] -> {'PASS' if is_valid else 'FAIL'}"
@@ -233,9 +212,8 @@ class Assembler:
                                 current_iteration_potential_world_transform
                             )
                             best_candidate_idx_to_place = current_iteration_idx_to_place
-                            best_candidate_overlap_ratio = max_overlap_ratio
 
-            # If a candidate is found, prompt the user
+            # If a candidate is found, prompt the user with interactive visualization
             if (
                 best_candidate_idx_to_place != -1
                 and best_candidate_match_info is not None
@@ -245,47 +223,105 @@ class Assembler:
                     "name"
                 ]
 
-                # Visualize candidate placement
-                placed_mesh_o3d_for_list = self._get_transformed_mesh(
-                    newly_placed_idx_in_list
-                )
+                # Create candidate mesh for visualization
                 candidate_mesh = copy.deepcopy(self.original_meshes[newly_placed_idx_in_list])
                 candidate_mesh.transform(best_candidate_world_transform)
-                print(f"\nCandidate match found: {newly_placed_name} (score: {best_candidate_score:.3f})")
-                o3d.visualization.draw_geometries(
-                    [candidate_mesh] + [m for m, _ in current_assembly_components],
-                    window_name=f"Candidate: {newly_placed_name} (Red), Placed: Gray",
+                candidate_mesh.paint_uniform_color([1.0, 0.0, 0.0])  # Red for candidate
+
+                # Create placed meshes for visualization
+                placed_meshes = []
+                for mesh, _ in current_assembly_components:
+                    placed_mesh = copy.deepcopy(mesh)
+                    placed_mesh.paint_uniform_color([0.7, 0.7, 0.7])  # Gray for placed
+                    placed_meshes.append(placed_mesh)
+
+                print(f"\n=== Interactive Candidate Selection ===")
+                print(
+                    f"Candidate: {newly_placed_name} (score: {best_candidate_score:.3f})"
                 )
-                while True:
-                    user_input = input("Accept match (a), Reject (r), or Finalize (f)? [a/r/f]: ").strip().lower()
-                    if user_input in ["a", "accept"]:
-                        # Accept the match
-                        self.fragment_transforms[newly_placed_idx_in_list] = (
-                            best_candidate_world_transform
+                print("A: Accept match | R: Reject match | F: Finalize assembly")
+                print("Q: Quit without selection")
+
+                # Create interactive visualizer
+                shared_state = {"action": None}
+
+                vis = o3d.visualization.VisualizerWithKeyCallback()
+                vis.create_window(
+                    window_name=f"Candidate: {newly_placed_name} (Red), Placed: Gray",
+                    width=1280,
+                    height=960,
+                )
+
+                # Add geometries
+                vis.add_geometry(candidate_mesh)
+                for mesh in placed_meshes:
+                    vis.add_geometry(mesh)
+
+                def accept_match(visualizer):
+                    shared_state["action"] = "accept"
+                    print("\n  Match accepted. Closing...")
+                    visualizer.close()
+                    return False
+
+                def reject_match(visualizer):
+                    shared_state["action"] = "reject"
+                    print("\n  Match rejected. Closing...")
+                    visualizer.close()
+                    return False
+
+                def finalize_assembly(visualizer):
+                    shared_state["action"] = "finalize"
+                    print("\n  Assembly finalized. Closing...")
+                    visualizer.close()
+                    return False
+
+                def quit_selection(visualizer):
+                    shared_state["action"] = "quit"
+                    print("\n  Selection aborted. Closing...")
+                    visualizer.close()
+                    return False
+
+                # Register key callbacks
+                vis.register_key_callback(ord("A"), accept_match)
+                vis.register_key_callback(ord("R"), reject_match)
+                vis.register_key_callback(ord("F"), finalize_assembly)
+                vis.register_key_callback(ord("Q"), quit_selection)
+
+                vis.run()
+                vis.destroy_window()
+
+                # Handle user action
+                action = shared_state["action"]
+                if action == "accept":
+                    # Accept the match
+                    self.fragment_transforms[newly_placed_idx_in_list] = (
+                        best_candidate_world_transform
+                    )
+                    self.is_fragment_placed[newly_placed_idx_in_list] = True
+                    current_assembly_components.append(
+                        (
+                            self._get_transformed_mesh(newly_placed_idx_in_list),
+                            newly_placed_name,
                         )
-                        self.is_fragment_placed[newly_placed_idx_in_list] = True
-                        current_assembly_components.append(
-                            (self._get_transformed_mesh(newly_placed_idx_in_list), newly_placed_name)
-                        )
-                        num_placed += 1
-                        used_matches.add(id(best_candidate_match_info))
-                        print(
-                            f"  Placed fragment: {newly_placed_name} "
-                            f"(idx in list: {newly_placed_idx_in_list}) via match score {best_candidate_score:.3f}."
-                        )
-                        break
-                    elif user_input in ["r", "reject"]:
-                        # Reject the match, add to rejected_matches
-                        rejected_matches.append(best_candidate_match_info)
-                        used_matches.add(id(best_candidate_match_info))
-                        print(f"  Rejected match for fragment: {newly_placed_name}")
-                        break
-                    elif user_input in ["f", "finalize"]:
-                        finalized = True
-                        print("  Finalizing assembly as per user request.")
-                        break
-                    else:
-                        print("Invalid input. Please enter 'a', 'r', or 'f'.")
+                    )
+                    num_placed += 1
+                    used_matches.add(id(best_candidate_match_info))
+                    print(
+                        f"  Placed fragment: {newly_placed_name} "
+                        f"(idx in list: {newly_placed_idx_in_list}) via match score {best_candidate_score:.3f}."
+                    )
+                elif action == "reject":
+                    # Reject the match, add to rejected_matches
+                    rejected_matches.append(best_candidate_match_info)
+                    used_matches.add(id(best_candidate_match_info))
+                    print(f"  Rejected match for fragment: {newly_placed_name}")
+                elif action == "finalize":
+                    finalized = True
+                    print("  Finalizing assembly as per user request.")
+                elif action == "quit":
+                    finalized = True
+                    print("  Assembly aborted by user.")
+                    break
             else:
                 # No more valid matches, cycle through rejected matches
                 if rejected_matches:
@@ -313,35 +349,107 @@ class Assembler:
                         candidate_name = self.fragments_data[idx_to_place]["name"]
                         candidate_mesh = copy.deepcopy(self.original_meshes[idx_to_place])
                         candidate_mesh.transform(world_transform)
-                        print(f"\nReconsidering rejected match: {candidate_name} (score: {match_info['score']:.3f})")
-                        o3d.visualization.draw_geometries(
-                            [candidate_mesh] + [m for m, _ in current_assembly_components],
-                            window_name=f"Reconsidered: {candidate_name} (Red), Placed: Gray",
+                        candidate_mesh.paint_uniform_color(
+                            [1.0, 0.0, 0.0]
+                        )  # Red for candidate
+
+                        # Create placed meshes for visualization
+                        placed_meshes = []
+                        for mesh, _ in current_assembly_components:
+                            placed_mesh = copy.deepcopy(mesh)
+                            placed_mesh.paint_uniform_color(
+                                [0.7, 0.7, 0.7]
+                            )  # Gray for placed
+                            placed_meshes.append(placed_mesh)
+
+                        print(f"\n=== Reconsidering Rejected Match ===")
+                        print(
+                            f"Candidate: {candidate_name} (score: {match_info['score']:.3f})"
                         )
-                        while True:
-                            user_input = input("Accept match (a), Reject (r), or Finalize (f)? [a/r/f]: ").strip().lower()
-                            if user_input in ["a", "accept"]:
-                                self.fragment_transforms[idx_to_place] = world_transform
-                                self.is_fragment_placed[idx_to_place] = True
-                                current_assembly_components.append(
-                                    (self._get_transformed_mesh(idx_to_place), candidate_name)
+                        print(
+                            "A: Accept match | R: Reject match | F: Finalize assembly"
+                        )
+                        print("Q: Quit without selection")
+
+                        # Create interactive visualizer for rejected match
+                        shared_state = {"action": None}
+
+                        vis = o3d.visualization.VisualizerWithKeyCallback()
+                        vis.create_window(
+                            window_name=f"Reconsidered: {candidate_name} (Red), Placed: Gray",
+                            width=1280,
+                            height=960,
+                        )
+
+                        # Add geometries
+                        vis.add_geometry(candidate_mesh)
+                        for mesh in placed_meshes:
+                            vis.add_geometry(mesh)
+
+                        def accept_rejected_match(visualizer):
+                            shared_state["action"] = "accept"
+                            print("\n  Rejected match accepted. Closing...")
+                            visualizer.close()
+                            return False
+
+                        def reject_again(visualizer):
+                            shared_state["action"] = "reject"
+                            print("\n  Still rejected. Closing...")
+                            visualizer.close()
+                            return False
+
+                        def finalize_from_rejected(visualizer):
+                            shared_state["action"] = "finalize"
+                            print("\n  Assembly finalized. Closing...")
+                            visualizer.close()
+                            return False
+
+                        def quit_from_rejected(visualizer):
+                            shared_state["action"] = "quit"
+                            print("\n  Selection aborted. Closing...")
+                            visualizer.close()
+                            return False
+
+                        # Register key callbacks
+                        vis.register_key_callback(ord("A"), accept_rejected_match)
+                        vis.register_key_callback(ord("R"), reject_again)
+                        vis.register_key_callback(ord("F"), finalize_from_rejected)
+                        vis.register_key_callback(ord("Q"), quit_from_rejected)
+
+                        vis.run()
+                        vis.destroy_window()
+
+                        # Handle user action for rejected match
+                        action = shared_state["action"]
+                        if action == "accept":
+                            self.fragment_transforms[idx_to_place] = world_transform
+                            self.is_fragment_placed[idx_to_place] = True
+                            current_assembly_components.append(
+                                (
+                                    self._get_transformed_mesh(idx_to_place),
+                                    candidate_name,
                                 )
-                                num_placed += 1
-                                rejected_matches.remove(match_info)
-                                print(f"  Placed fragment: {candidate_name} (from rejected list)")
-                                reconsidered = True
-                                break
-                            elif user_input in ["r", "reject"]:
-                                print(f"  Still rejected: {candidate_name}")
-                                break
-                            elif user_input in ["f", "finalize"]:
-                                finalized = True
-                                print("  Finalizing assembly as per user request.")
-                                break
-                            else:
-                                print("Invalid input. Please enter 'a', 'r', or 'f'.")
-                        if finalized or reconsidered:
+                            )
+                            num_placed += 1
+                            rejected_matches.remove(match_info)
+                            print(
+                                f"  Placed fragment: {candidate_name} (from rejected list)"
+                            )
+                            reconsidered = True
                             break
+                        elif action == "reject":
+                            print(f"  Still rejected: {candidate_name}")
+                        elif action == "finalize":
+                            finalized = True
+                            print("  Finalizing assembly as per user request.")
+                            break
+                        elif action == "quit":
+                            finalized = True
+                            print("  Assembly aborted by user.")
+                            break
+
+                    if finalized or reconsidered:
+                        break
                     if not reconsidered and not finalized:
                         print("No more matches can be placed. Ending assembly.")
                         break
