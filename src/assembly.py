@@ -162,22 +162,21 @@ class Assembler:
             )
 
         num_placed = 1
-        while num_placed < self.num_fragments:
+        rejected_matches = []
+        finalized = False
+        used_matches = set()
+        while num_placed < self.num_fragments and not finalized:
             best_candidate_match_info = None
             best_candidate_score = -1.0
             best_candidate_world_transform = None
-            best_candidate_idx_to_place = (
-                -1
-            )  # This is an index into self.fragments_data
+            best_candidate_idx_to_place = -1
+            best_candidate_overlap_ratio = 0.0
 
-            for match_info in self.pairwise_matches:
+            # Try all pairwise matches that haven't been used or rejected
+            for i, match_info in enumerate(self.pairwise_matches):
+                if id(match_info) in used_matches:
+                    continue
                 s_idx, t_idx = match_info["source_idx"], match_info["target_idx"]
-                # If you need to use a specific surface for overlap or context, use:
-                #   self.fragments_data[s_idx]['fracture_surfaces'][s_surf_idx]
-                #   self.fragments_data[t_idx]['fracture_surfaces'][t_surf_idx]
-                # For now, original_mesh is used for placement, but this is where you'd use the surface if needed.
-
-                # These are potential values for the current match_info being considered
                 current_iteration_potential_world_transform = None
                 current_iteration_idx_to_place = -1
 
@@ -200,12 +199,10 @@ class Assembler:
                         )
                         current_iteration_idx_to_place = t_idx
                     except np.linalg.LinAlgError:
-                        # print(f"Warning: Could not invert transform for match {s_idx}<->{t_idx}. Skipping this path.")
                         continue
                 else:
-                    continue  # This match doesn't connect a placed to an unplaced piece
+                    continue
 
-                # If this match is better than what we've found so far in this iteration of the while loop
                 if (
                     current_iteration_potential_world_transform is not None
                     and current_iteration_idx_to_place != -1
@@ -240,12 +237,9 @@ class Assembler:
                             overlap_ok = True
                             max_overlap_ratio = 0.0
                         else:
-                            # Note: The boolean_intersection_penetration_test below handles all overlap checking
-                            # No need for separate check_overlap function
                             overlap_ok = True
                             max_overlap_ratio = 0.0
 
-                        # Compute minimum volume among candidate and all placed fragments
                         candidate_tri = trimesh.Trimesh(
                             vertices=np.asarray(
                                 candidate_mesh_transformed_o3d.vertices
@@ -261,10 +255,6 @@ class Assembler:
                             )
                             placed_vols.append(placed_tri.volume)
                         min_volume_all = min([candidate_vol] + placed_vols)
-                        # Use boolean_intersection_penetration_test for overlap detection
-                        # Allow up to 10% penetration (set in params as 'boolean_penetration_threshold': 0.1)
-                        # Log results to visualization_log if enabled.
-                        # If any test fails (penetration > threshold), reject the candidate placement.
                         penetration_ok = True
                         for placed_mesh_o3d, placed_name in current_assembly_components:
                             is_valid, penetration_ratio, intersection_mesh = (
@@ -278,7 +268,6 @@ class Assembler:
                                     min_volume_override=min_volume_all,
                                 )
                             )
-                            # Print penetration test result to command line
                             penetration_pct = penetration_ratio * 100
                             threshold_pct = (
                                 self.params.get("boolean_penetration_threshold", 0.1)
@@ -305,11 +294,9 @@ class Assembler:
                                             "min_volume_used": min_volume_all,
                                         }
                                     )
-                                break  # No need to check further placed fragments if one fails
+                                break
 
-                        if (
-                            penetration_ok
-                        ):  # This candidate is good and has the best score so far
+                        if penetration_ok:
                             best_candidate_match_info = match_info
                             best_candidate_score = match_info["score"]
                             best_candidate_world_transform = (
@@ -318,7 +305,7 @@ class Assembler:
                             best_candidate_idx_to_place = current_iteration_idx_to_place
                             best_candidate_overlap_ratio = max_overlap_ratio
 
-            # After checking all pairwise_matches for the current assembly state
+            # If a candidate is found, prompt the user
             if (
                 best_candidate_idx_to_place != -1
                 and best_candidate_match_info is not None
@@ -328,53 +315,136 @@ class Assembler:
                     "name"
                 ]
 
-                self.fragment_transforms[newly_placed_idx_in_list] = (
-                    best_candidate_world_transform
-                )
-                self.is_fragment_placed[newly_placed_idx_in_list] = True
-
+                # Visualize candidate placement
                 placed_mesh_o3d_for_list = self._get_transformed_mesh(
                     newly_placed_idx_in_list
                 )
-                current_assembly_components.append(
-                    (placed_mesh_o3d_for_list, newly_placed_name)
+                candidate_mesh = copy.deepcopy(self.original_meshes[newly_placed_idx_in_list])
+                candidate_mesh.transform(best_candidate_world_transform)
+                print(f"\nCandidate match found: {newly_placed_name} (score: {best_candidate_score:.3f})")
+                o3d.visualization.draw_geometries(
+                    [candidate_mesh] + [m for m, _ in current_assembly_components],
+                    window_name=f"Candidate: {newly_placed_name} (Red), Placed: Gray",
                 )
-                num_placed += 1
-                print(
-                    f"  Placed fragment: {newly_placed_name} "
-                    f"(idx in list: {newly_placed_idx_in_list}) via match score {best_candidate_score:.3f}."
-                )
-
-                if self.visualization_log is not None:
-                    log_entry = {
-                        "step": "assembly_fragment_placed",
-                        "type": "mesh",
-                        "fragment_name": newly_placed_name,
-                        "original_index": self.fragments_data[newly_placed_idx_in_list][
-                            "original_index"
-                        ],
-                        "fragment_idx_in_valid_list": newly_placed_idx_in_list,
-                        "transform": self.fragment_transforms[newly_placed_idx_in_list],
-                        "vertices": np.asarray(placed_mesh_o3d_for_list.vertices),
-                        "triangles": np.asarray(placed_mesh_o3d_for_list.triangles),
-                        "matched_via_score": best_candidate_score,
-                        "overlap_ratio": best_candidate_overlap_ratio,
-                    }
-                    if best_candidate_match_info is not None:
-                        log_entry["match_details"] = {
-                            "source_idx": best_candidate_match_info["source_idx"],
-                            "target_idx": best_candidate_match_info["target_idx"],
-                            "source_name": best_candidate_match_info["source_name"],
-                            "target_name": best_candidate_match_info["target_name"],
-                            "score": best_candidate_match_info["score"],
-                            "rmse": best_candidate_match_info["rmse"],
-                        }
-                    self.visualization_log.append(log_entry)
+                while True:
+                    user_input = input("Accept match (a), Reject (r), or Finalize (f)? [a/r/f]: ").strip().lower()
+                    if user_input in ["a", "accept"]:
+                        # Accept the match
+                        self.fragment_transforms[newly_placed_idx_in_list] = (
+                            best_candidate_world_transform
+                        )
+                        self.is_fragment_placed[newly_placed_idx_in_list] = True
+                        current_assembly_components.append(
+                            (self._get_transformed_mesh(newly_placed_idx_in_list), newly_placed_name)
+                        )
+                        num_placed += 1
+                        used_matches.add(id(best_candidate_match_info))
+                        print(
+                            f"  Placed fragment: {newly_placed_name} "
+                            f"(idx in list: {newly_placed_idx_in_list}) via match score {best_candidate_score:.3f}."
+                        )
+                        if self.visualization_log is not None:
+                            log_entry = {
+                                "step": "assembly_fragment_placed",
+                                "type": "mesh",
+                                "fragment_name": newly_placed_name,
+                                "original_index": self.fragments_data[newly_placed_idx_in_list][
+                                    "original_index"
+                                ],
+                                "fragment_idx_in_valid_list": newly_placed_idx_in_list,
+                                "transform": self.fragment_transforms[newly_placed_idx_in_list],
+                                "vertices": np.asarray(self._get_transformed_mesh(newly_placed_idx_in_list).vertices),
+                                "triangles": np.asarray(self._get_transformed_mesh(newly_placed_idx_in_list).triangles),
+                                "matched_via_score": best_candidate_score,
+                                "overlap_ratio": best_candidate_overlap_ratio,
+                            }
+                            if best_candidate_match_info is not None:
+                                log_entry["match_details"] = {
+                                    "source_idx": best_candidate_match_info["source_idx"],
+                                    "target_idx": best_candidate_match_info["target_idx"],
+                                    "source_name": best_candidate_match_info["source_name"],
+                                    "target_name": best_candidate_match_info["target_name"],
+                                    "score": best_candidate_match_info["score"],
+                                    "rmse": best_candidate_match_info["rmse"],
+                                }
+                            self.visualization_log.append(log_entry)
+                        break
+                    elif user_input in ["r", "reject"]:
+                        # Reject the match, add to rejected_matches
+                        rejected_matches.append(best_candidate_match_info)
+                        used_matches.add(id(best_candidate_match_info))
+                        print(f"  Rejected match for fragment: {newly_placed_name}")
+                        break
+                    elif user_input in ["f", "finalize"]:
+                        finalized = True
+                        print("  Finalizing assembly as per user request.")
+                        break
+                    else:
+                        print("Invalid input. Please enter 'a', 'r', or 'f'.")
             else:
-                print(
-                    "No more non-overlapping, valid matches found to extend the assembly."
-                )
-                break
+                # No more valid matches, cycle through rejected matches
+                if rejected_matches:
+                    print("\nNo more new matches. Cycling through rejected matches...")
+                    # Remove already placed fragments from rejected_matches
+                    rejected_matches = [m for m in rejected_matches if not self.is_fragment_placed[m["source_idx"]] or not self.is_fragment_placed[m["target_idx"]]]
+                    if not rejected_matches:
+                        print("No rejected matches left to reconsider.")
+                        break
+                    reconsidered = False
+                    for match_info in rejected_matches[:]:
+                        s_idx, t_idx = match_info["source_idx"], match_info["target_idx"]
+                        if self.is_fragment_placed[t_idx] and not self.is_fragment_placed[s_idx]:
+                            world_transform = np.dot(self.fragment_transforms[t_idx], match_info["transformation"])
+                            idx_to_place = s_idx
+                        elif self.is_fragment_placed[s_idx] and not self.is_fragment_placed[t_idx]:
+                            try:
+                                inv_transform = np.linalg.inv(match_info["transformation"])
+                                world_transform = np.dot(self.fragment_transforms[s_idx], inv_transform)
+                                idx_to_place = t_idx
+                            except np.linalg.LinAlgError:
+                                continue
+                        else:
+                            continue
+                        candidate_name = self.fragments_data[idx_to_place]["name"]
+                        candidate_mesh = copy.deepcopy(self.original_meshes[idx_to_place])
+                        candidate_mesh.transform(world_transform)
+                        print(f"\nReconsidering rejected match: {candidate_name} (score: {match_info['score']:.3f})")
+                        o3d.visualization.draw_geometries(
+                            [candidate_mesh] + [m for m, _ in current_assembly_components],
+                            window_name=f"Reconsidered: {candidate_name} (Red), Placed: Gray",
+                        )
+                        while True:
+                            user_input = input("Accept match (a), Reject (r), or Finalize (f)? [a/r/f]: ").strip().lower()
+                            if user_input in ["a", "accept"]:
+                                self.fragment_transforms[idx_to_place] = world_transform
+                                self.is_fragment_placed[idx_to_place] = True
+                                current_assembly_components.append(
+                                    (self._get_transformed_mesh(idx_to_place), candidate_name)
+                                )
+                                num_placed += 1
+                                rejected_matches.remove(match_info)
+                                print(f"  Placed fragment: {candidate_name} (from rejected list)")
+                                reconsidered = True
+                                break
+                            elif user_input in ["r", "reject"]:
+                                print(f"  Still rejected: {candidate_name}")
+                                break
+                            elif user_input in ["f", "finalize"]:
+                                finalized = True
+                                print("  Finalizing assembly as per user request.")
+                                break
+                            else:
+                                print("Invalid input. Please enter 'a', 'r', or 'f'.")
+                        if finalized or reconsidered:
+                            break
+                    if not reconsidered and not finalized:
+                        print("No more matches can be placed. Ending assembly.")
+                        break
+                else:
+                    print(
+                        "No more non-overlapping, valid matches found to extend the assembly."
+                    )
+                    break
 
         if num_placed < self.num_fragments:
             print(
