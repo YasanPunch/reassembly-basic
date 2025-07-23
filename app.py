@@ -54,6 +54,9 @@ class App:
 
         self._scene_objects = {}  # To store {'path': {'mesh' | 'geometry', 'transform'}}
 
+        # Store additional windows
+        self._additional_windows = {}  # {window_id: window}
+
         resource_path = gui.Application.instance.resource_path
         self.settings.new_ibl_name = resource_path + "/" + App.DEFAULT_IBL
 
@@ -211,7 +214,72 @@ class App:
         """
         return {key: self.params.get(key) for key in keys}
 
+    def add_scene_widget(
+        self, scene_id, title="Additional Scene", width=800, height=600
+    ):
+        """
+        Create a new window with a scene widget.
+
+        Args:
+            scene_id (str): Unique identifier for the scene
+            title (str): Window title
+            width (int): Window width
+            height (int): Window height
+
+        Returns:
+            gui.SceneWidget: The created scene widget
+        """
+        # Create a new window
+        window = gui.Application.instance.create_window(title, width, height)
+
+        # Create a new scene widget
+        scene_widget = gui.SceneWidget()
+        scene_widget.scene = rendering.Open3DScene(window.renderer)
+        scene_widget.set_view_controls(gui.SceneWidget.Controls.ROTATE_CAMERA)
+
+        # Set up scene
+        scene_widget.scene.set_background([1, 1, 1, 1])  # White background
+        scene_widget.scene.scene.set_sun_light([0, 1, 0], [1, 1, 1], 100000)
+        scene_widget.scene.scene.enable_sun_light(True)
+
+        # Add scene widget to the new window
+        window.add_child(scene_widget)
+
+        # Store the window
+        self._additional_windows[scene_id] = window
+
+        print(f"[DEBUG] Created new window with scene widget: {scene_id}")
+
+        return scene_widget
+
+    def remove_scene_widget(self, scene_id):
+        """
+        Close the window and remove the scene widget.
+
+        Args:
+            scene_id (str): Scene identifier to remove
+
+        Returns:
+            bool: True if removed successfully, False if not found
+        """
+        if scene_id not in self._additional_windows:
+            print(f"[ERROR] Scene {scene_id} does not exist")
+            return False
+
+        window = self._additional_windows[scene_id]
+
+        # Close the window
+        window.close()
+
+        # Remove from storage
+        del self._additional_windows[scene_id]
+
+        print(f"[DEBUG] Closed window and removed scene widget: {scene_id}")
+
+        return True
+
     def _on_layout(self, layout_context):
+        """Layout method for the main window"""
         r = self.window.content_rect
         em = layout_context.theme.font_size
 

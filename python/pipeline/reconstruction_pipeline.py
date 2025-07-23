@@ -1,3 +1,5 @@
+import src.preprocessing
+
 class ReconstructionPipeline:
     def __init__(self, app):
         self.app = app
@@ -8,5 +10,8 @@ class ReconstructionPipeline:
         self.current_step = "idle"
         self.is_running = False
 
-    def get_current_loaded_objects(self):
-        return self.app.left_panel.item_tree.get_all_objects()
+    def start_segmentation(self):
+        self.current_step = "segmentation"
+        fragments_data_raw = (
+            self.app.left_panel.item_tree.get_all_visible_base_model_items()
+        )

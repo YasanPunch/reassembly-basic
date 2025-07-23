@@ -503,3 +503,24 @@ class ItemTree:
                     'visible': item.is_visible
                 })
         return result 
+
+    def get_all_visible_base_model_items(self):
+        """
+        Returns a list of dicts for all visible base model items, each with:
+            - 'mesh': the mesh object
+            - 'name': the filename
+            - 'original_index': the original index in the fragment list
+            - 'path': the file path
+        """
+        result = []
+        for item in self._items["base_model"]:
+            if isinstance(item, BaseModelItem) and item.is_visible:
+                result.append(
+                    {
+                        "mesh": item.mesh,
+                        "name": getattr(item, "_name", None),
+                        "original_index": getattr(item, "_original_index", None),
+                        "path": item.mesh_path,
+                    }
+                )
+        return result

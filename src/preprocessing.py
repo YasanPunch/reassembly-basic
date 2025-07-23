@@ -1,6 +1,5 @@
 import open3d as o3d
 import numpy as np
-import copy
 from src.segmentation import extract_fracture_surface_mesh
 from src.feature_extraction import extract_features_from_pcd
 from src.utils.visualization_utils import debug_visualize_voxel_downsampling
