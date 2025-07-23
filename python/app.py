@@ -572,6 +572,96 @@ class App:
             print(f"[DEBUG] No valid bounds, using default camera")
             self._scene_widget.setup_camera(60, o3d.geometry.AxisAlignedBoundingBox([-1,-1,-1], [1,1,1]), [0,0,0])
 
+    def show_geometry_viewer(self, geometries, window_name="Geometry Viewer"):
+        """
+        Show geometries in a separate window using the GUI framework.
+        
+        This method creates a new window with a scene widget to display geometries
+        without using draw_geometries, avoiding threading conflicts.
+        
+        Args:
+            geometries (list): List of Open3D geometry objects (meshes, point clouds, etc.)
+            window_name (str): Title for the viewer window
+            
+        Returns:
+            tuple: (window, scene_widget) for potential future use
+        """
+        try:
+            print(f"[DEBUG] Creating geometry viewer window: {window_name}")
+            
+            # Create a new window
+            viewer_window = gui.Application.instance.create_window(window_name, 800, 600)
+            
+            # Create scene widget
+            scene_widget = gui.SceneWidget()
+            scene_widget.scene = rendering.Open3DScene(viewer_window.renderer)
+            scene_widget.set_view_controls(gui.SceneWidget.Controls.ROTATE_CAMERA)
+            
+            # Set up scene
+            scene_widget.scene.set_background([1, 1, 1, 1])  # White background
+            scene_widget.scene.scene.set_sun_light([0, 1, 0], [1, 1, 1], 100000)
+            scene_widget.scene.scene.enable_sun_light(True)
+            
+            # Add geometries to the scene
+            material = rendering.MaterialRecord()
+            material.shader = "defaultLit"
+            
+            for i, geometry in enumerate(geometries):
+                geometry_name = f"geometry_{i}"
+                scene_widget.scene.add_geometry(geometry_name, geometry, material)
+            
+            # Set up layout
+            def on_layout(layout_context):
+                r = viewer_window.content_rect
+                scene_widget.frame = gui.Rect(r.x, r.y, r.width, r.height)
+            
+            viewer_window.set_on_layout(on_layout)
+            viewer_window.add_child(scene_widget)
+            
+            # Calculate bounds and set up camera
+            bounds = None
+            for geometry in geometries:
+                if hasattr(geometry, 'get_axis_aligned_bounding_box'):
+                    geom_bounds = geometry.get_axis_aligned_bounding_box()
+                    if bounds is None:
+                        bounds = geom_bounds
+                    else:
+                        # Use min/max to create union bounds
+                        min_bound = bounds.get_min_bound()
+                        max_bound = bounds.get_max_bound()
+                        geom_min = geom_bounds.get_min_bound()
+                        geom_max = geom_bounds.get_max_bound()
+                        
+                        new_min = [min(min_bound[i], geom_min[i]) for i in range(3)]
+                        new_max = [max(max_bound[i], geom_max[i]) for i in range(3)]
+                        bounds = o3d.geometry.AxisAlignedBoundingBox(new_min, new_max)
+            
+            if bounds and bounds.volume() > 0:
+                scene_widget.setup_camera(60, bounds, bounds.get_center())
+            else:
+                # Default camera setup
+                default_bounds = o3d.geometry.AxisAlignedBoundingBox([-1, -1, -1], [1, 1, 1])
+                scene_widget.setup_camera(60, default_bounds, [0, 0, 0])
+            
+            print(f"[DEBUG] Geometry viewer window created successfully: {window_name}")
+            return viewer_window, scene_widget
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to create geometry viewer: {e}")
+            return None, None
+
+    def show_debug_visualization(self, geometries, window_name="Debug Visualization"):
+        """
+        Convenience method for showing debug visualizations.
+        
+        Args:
+            geometries (list): List of Open3D geometry objects
+            window_name (str): Title for the debug window
+            
+        Returns:
+            tuple: (window, scene_widget) for potential future use
+        """
+        return self.show_geometry_viewer(geometries, window_name)
 
     def load(self, path):
         print(f"[DEBUG] Attempting to load file: {path}")
