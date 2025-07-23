@@ -29,8 +29,8 @@ class ProcessingPanel:
         self._preprocessing_button.vertical_padding_em = 0
         self._preprocessing_button.set_on_clicked(self._on_preprocessing)
 
-        # 2. Segmentation and Classification
-        self._segmentation_button = gui.Button("Segmentation and Classification")
+        # 2. Segmentation
+        self._segmentation_button = gui.Button("Segmentation")
         self._segmentation_button.horizontal_padding_em = 0.5
         self._segmentation_button.vertical_padding_em = 0
         self._segmentation_button.set_on_clicked(self._on_segmentation)
@@ -111,16 +111,34 @@ class ProcessingPanel:
         self.app.window.show_dialog(dialog)
 
     def _on_segmentation(self):
-        """Handle segmentation and classification step"""
-        print("Segmentation and Classification step initiated")
-        selected_objects = self.app._left_panel.get_selected_objects()
-        for i, obj in enumerate(self.app._loaded_objects):
-            if obj in selected_objects:
-                # TODO: Implement actual segmentation
-                # For now, just create a copy of the mesh as a demo
-                result_mesh = o3d.io.read_triangle_mesh(obj['path'])
-                # Add result to DB Tree
-                self.app._left_panel.add_processing_result(i, 'segmentation', result_mesh)
+        """Handle segmentation step - shows dialog with parameters"""
+        # Get selected preprocessed items
+        selected_items = self._get_selected_preprocessed_items()
+        if not selected_items:
+            # Show error dialog
+            self._show_error_dialog("No preprocessed items selected", "Please select preprocessed items in the item tree before segmentation.")
+            return
+        
+        # Show segmentation dialog
+        from panels.segmentation_dialog import SegmentationDialog
+        segmentation_dialog = SegmentationDialog(self.app)
+        segmentation_dialog.show_dialog(selected_items)
+    
+    def _get_selected_preprocessed_items(self) -> List:
+        """Get the currently selected preprocessed items."""
+        selected_items = []
+        
+        # Get all preprocessing batches
+        preprocessing_batches = self.app._left_panel.item_tree.get_items_by_type('preprocessing_results')
+        
+        for batch in preprocessing_batches:
+            if batch.is_visible:  # Checked batches are visible
+                # Get all preprocessed items from this batch
+                for preprocessed_item in batch.preprocessed_items:
+                    if preprocessed_item.is_visible:  # Checked items are visible
+                        selected_items.append(preprocessed_item)
+        
+        return selected_items
 
     def _on_pairwise_matching(self):
         """Handle pairwise matching step"""

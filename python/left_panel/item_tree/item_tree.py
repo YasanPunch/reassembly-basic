@@ -3,7 +3,8 @@ import os
 from typing import List, Dict, Any, Optional
 from .items import (
     BaseItem, BaseModelItem, SegmentationResultItem, 
-    ClassificationResultItem, PairwiseResultItem, AssemblyResultItem, PreprocessedItem, PreprocessedResultItem
+    ClassificationResultItem, PairwiseResultItem, AssemblyResultItem, PreprocessedItem, PreprocessedResultItem,
+    SegmentedItem, SegmentationResultItem, SegmentationBatchItem
 )
 
 
@@ -25,6 +26,7 @@ class ItemTree:
         self.base_model_dropdown = gui.CollapsableVert("Base Model", 0.25 * em)
         self.preprocessing_results_dropdown = gui.CollapsableVert("Preprocessing Results", 0.25 * em)
         self.segmentation_results_dropdown = gui.CollapsableVert("Segmentation Results", 0.25 * em)
+        self.segmentation_batches_dropdown = gui.CollapsableVert("Segmentation Batches", 0.25 * em)
         self.pairwise_results_dropdown = gui.CollapsableVert("Pairwise Results", 0.25 * em)
         self.global_reassembly_results_dropdown = gui.CollapsableVert("Global Reassembly Results", 0.25 * em)
         self.classification_results_dropdown = gui.CollapsableVert("Classification Results", 0.25 * em)
@@ -32,6 +34,7 @@ class ItemTree:
         self.section.add_child(self.base_model_dropdown)
         self.section.add_child(self.preprocessing_results_dropdown)
         self.section.add_child(self.segmentation_results_dropdown)
+        self.section.add_child(self.segmentation_batches_dropdown)
         self.section.add_child(self.pairwise_results_dropdown)
         self.section.add_child(self.global_reassembly_results_dropdown)
         self.section.add_child(self.classification_results_dropdown)
@@ -42,6 +45,8 @@ class ItemTree:
             'preprocessing': [],
             'preprocessing_results': [],  # Container for PreprocessedResultItem
             'segmentation': [],
+            'segmentation_results': [],  # Container for SegmentationResultItem
+            'segmentation_batches': [],  # Container for SegmentationBatchItem
             'pairwise': [],
             'assembly': [],
             'classification': []
@@ -173,6 +178,99 @@ class ItemTree:
         # Add the batch container to the main dropdown
         self.preprocessing_results_dropdown.add_child(batch_container)
         self._items['preprocessing_results'].append(item)
+        self._item_widgets[item.id] = batch_container
+        
+        # Store reference to the batch container in the item
+        item.batch_container = batch_container
+        
+        # Trigger layout update
+        self.app.window.set_needs_layout()
+        
+        return item
+
+    def add_segmentation_batch_item(self, label: str, segmentation_results: List[SegmentationResultItem] = None,
+                                  batch_parameters: Dict[str, Any] = None, is_visible: bool = True) -> SegmentationBatchItem:
+        """Add a segmentation batch item (batch container) to the tree."""
+        item = SegmentationBatchItem(
+            label=label,
+            segmentation_results=segmentation_results or [],
+            batch_parameters=batch_parameters or {},
+            is_visible=is_visible
+        )
+        
+        # Create a collapsible container for the batch
+        batch_container = gui.CollapsableVert(label, 0.25 * self.app.window.theme.font_size)
+        batch_container.set_is_open(True)  # Start expanded
+        
+        # Create UI widget for the batch (checkbox inside the container)
+        cb = gui.Checkbox(label)
+        cb.checked = is_visible
+        
+        def on_checked(checked, item_id=item.id):
+            item.is_visible = checked
+            # Show/hide all segmentation results in this batch
+            for segmentation_result in item.segmentation_results:
+                for segmented_item in segmentation_result.segmented_items:
+                    if segmented_item.segment_mesh and segmented_item.scene_path:
+                        self.app._scene_widget.scene.show_geometry(segmented_item.scene_path, checked)
+        
+        cb.set_on_checked(on_checked)
+        item.set_ui_widget(cb)
+        
+        # Add batch checkbox to the container
+        batch_container.add_child(cb)
+        
+        # Add child items (individual segmentation results) inside the container
+        for segmentation_result in item.segmentation_results:
+            # Create container for this segmentation result
+            result_container = gui.CollapsableVert(segmentation_result.label, 0.25 * self.app.window.theme.font_size)
+            result_container.set_is_open(True)
+            
+            # Create checkbox for the segmentation result
+            result_cb = gui.Checkbox(segmentation_result.label)
+            result_cb.checked = segmentation_result.is_visible
+            
+            def on_result_checked(checked, result_item=segmentation_result):
+                result_item.is_visible = checked
+                # Show/hide all segments in this result
+                for segmented_item in result_item.segmented_items:
+                    if segmented_item.segment_mesh and segmented_item.scene_path:
+                        self.app._scene_widget.scene.show_geometry(segmented_item.scene_path, checked)
+            
+            result_cb.set_on_checked(on_result_checked)
+            segmentation_result.set_ui_widget(result_cb)
+            
+            # Add result checkbox to result container
+            result_container.add_child(result_cb)
+            
+            # Add individual segments
+            for segmented_item in segmentation_result.segmented_items:
+                segment_cb = gui.Checkbox(segmented_item.label)
+                segment_cb.checked = segmented_item.is_visible
+                
+                def on_segment_checked(checked, segment_item=segmented_item):
+                    segment_item.is_visible = checked
+                    # Show/hide individual segment in scene
+                    if segment_item.segment_mesh and segment_item.scene_path:
+                        self.app._scene_widget.scene.show_geometry(segment_item.scene_path, checked)
+                
+                segment_cb.set_on_checked(on_segment_checked)
+                segmented_item.set_ui_widget(segment_cb)
+                
+                # Add segment to result container
+                result_container.add_child(segment_cb)
+                self._item_widgets[segmented_item.id] = segment_cb
+            
+            # Add result container to batch container
+            batch_container.add_child(result_container)
+            self._item_widgets[segmentation_result.id] = result_container
+            
+            # Store reference to the result container in the item
+            segmentation_result.segmentation_container = result_container
+        
+        # Add the batch container to the main dropdown
+        self.segmentation_batches_dropdown.add_child(batch_container)
+        self._items['segmentation_batches'].append(item)
         self._item_widgets[item.id] = batch_container
         
         # Store reference to the batch container in the item
