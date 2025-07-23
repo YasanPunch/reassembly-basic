@@ -6,13 +6,13 @@ import open3d as o3d
 import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 
-from configuration.configuration_panel import ConfigurationPanel
-from left_panel.left_panel import LeftPanel
-from models.models_panel import ModelsPanel
-from panels.processing_panel import ProcessingPanel
-from settings.settings import Settings
-from settings.settings_panel import SettingsPanel
-from left_panel.item_tree.items.base_model_item import BaseModelItem
+from python.configuration.configuration_panel import ConfigurationPanel
+from python.left_panel.left_panel import LeftPanel
+from python.models.models_panel import ModelsPanel
+from python.panels.processing_panel import ProcessingPanel
+from python.settings.settings import Settings
+from python.settings.settings_panel import SettingsPanel
+from python.left_panel.item_tree.items.base_model_item import BaseModelItem
 
 
 class App:

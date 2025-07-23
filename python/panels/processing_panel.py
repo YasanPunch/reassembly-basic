@@ -2,8 +2,9 @@ import open3d as o3d
 import open3d.visualization.gui as gui  # type: ignore
 import open3d.visualization.rendering as rendering
 from typing import List
-from panels.preprocessing_dialog import PreprocessingDialog
-from panels.segmentation_dialog import SegmentationDialog
+
+from python.panels.preprocessing_dialog import PreprocessingDialog
+from python.panels.segmentation_dialog import SegmentationDialog
 
 class ProcessingPanel:
     def __init__(self, app):

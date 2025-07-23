@@ -1,9 +1,9 @@
-import os
-import sys
 import time
 import numpy as np
 from typing import List, Dict, Any, Optional, Callable
-import segmentation
+
+from src import segmentation
+
 
 class SegmentationEngine:
     """

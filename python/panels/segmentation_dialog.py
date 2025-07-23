@@ -1,9 +1,13 @@
-import open3d.visualization.gui as gui  # type: ignore
+import open3d.visualization.gui as gui
 import threading
 import time
-from typing import List, Dict, Any, Optional
-from left_panel.item_tree.items import SegmentedItem, SegmentationResultItem, SegmentationBatchItem
-from pipeline.segmentation_engine import SegmentationEngine
+from typing import List, Dict, Any
+
+from python.left_panel.item_tree.items import (
+    SegmentedItem,
+    SegmentationResultItem,
+)
+from python.pipeline.segmentation_engine import SegmentationEngine
 
 
 class SegmentationDialog:

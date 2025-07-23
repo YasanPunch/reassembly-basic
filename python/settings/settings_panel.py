@@ -3,7 +3,7 @@ import open3d.visualization.gui as gui  # type: ignore
 import glob
 import os
 
-from settings.settings import Settings
+from python.settings.settings import Settings
 
 
 class SettingsPanel:

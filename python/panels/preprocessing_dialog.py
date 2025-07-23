@@ -2,8 +2,8 @@ import open3d.visualization.gui as gui  # type: ignore
 import threading
 import time
 from typing import List, Dict, Any, Optional
-from left_panel.item_tree.items import PreprocessedItem
-from pipeline.preprocessing_engine import PreprocessingEngine
+from python.left_panel.item_tree.items import PreprocessedItem
+from python.pipeline.preprocessing_engine import PreprocessingEngine
 
 class PreprocessingDialog:
     """
