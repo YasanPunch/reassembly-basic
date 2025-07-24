@@ -539,7 +539,12 @@ def main(args):
     w.params["output_dir"] = args.output_dir
     w.params["visualize_final"] = args.visualize_final
     w.params["num_viz_pairwise"] = args.num_viz_pairwise
-    w.params["visualize_segmentation"] = args.visualize_segmentation
+    # Only override visualize_segmentation if explicitly set via command line
+    if args.visualize_segmentation:
+        w.params["visualize_segmentation"] = True
+    elif args.no_visualize_segmentation:
+        w.params["visualize_segmentation"] = False
+    # Otherwise keep the value from config file
     w.params["debug_pairwise_matching"] = args.debug_pairwise_matching
     w.params["top_n_matches_per_pair"] = args.top_n_matches_per_pair
     w.params["disable_snapping"] = args.disable_snapping
@@ -592,6 +597,11 @@ if __name__ == "__main__":
         "--visualize_segmentation",
         action="store_true",
         help="Enable visualization of segmentation results for each fragment.",
+    )
+    parser.add_argument(
+        "--no_visualize_segmentation",
+        action="store_true",
+        help="Disable visualization of segmentation results for each fragment.",
     )
     parser.add_argument(
         "--debug_pairwise_matching",
