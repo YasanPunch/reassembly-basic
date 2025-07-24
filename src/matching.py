@@ -2,6 +2,9 @@ from itertools import combinations
 from src.alignment import align_fragments_pcd
 import copy
 from src.utils.geometry_utils import boolean_intersection_penetration_test
+import multiprocessing as mp
+from functools import partial
+import os
 
 def test_proposed_pairwise_match(source_fragment, target_fragment, transformation, params):
     """
@@ -78,7 +81,7 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         continue
                     else:
                         print(f"  ✅ Penetration test passed: {frag_j_data['name']} -> {frag_i_data['name']} is a valid match.")
-                
+
                 confidence_ji = float(fitness_ji) / (rmse_ji + 1e-6)
                 matches.append({
                     'source_idx': j, 'target_idx': i,
@@ -110,7 +113,7 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         continue
                     else:
                         print(f"  ✅ Penetration test passed: {frag_i_data['name']} -> {frag_j_data['name']} is a valid match.")
-                
+
                 confidence_ij = float(fitness_ij) / (rmse_ij + 1e-6)
                 matches.append({
                     'source_idx': i, 'target_idx': j,
@@ -122,7 +125,33 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                 })
     return matches
 
-def find_pairwise_matches(fragments_data, params, debug=False, top_n_per_pair=3):
+
+def _match_fragment_pair_wrapper(args):
+    """
+    Wrapper function for parallel processing of fragment pair matching.
+
+    Args:
+        args: Tuple containing (i, j, frag_i_data, frag_j_data, params, debug, top_n_per_pair)
+
+    Returns:
+        list: Matches for this fragment pair
+    """
+    i, j, frag_i_data, frag_j_data, params, debug, top_n_per_pair = args
+
+    # Set process name for debugging
+    process_name = f"Worker-{os.getpid()}"
+
+    matches = _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug)
+    if matches:
+        # Only keep top N matches for this pair (by score)
+        matches_sorted = sorted(matches, key=lambda x: x["score"], reverse=True)
+        return matches_sorted[:top_n_per_pair]
+    return []
+
+
+def find_pairwise_matches(
+    fragments_data, params, debug=False, top_n_per_pair=3, n_jobs=None
+):
     """
     Finds potential pairwise alignments between all unique pairs of fragments.
     Each item in fragments_data is a dict:
@@ -133,7 +162,9 @@ def find_pairwise_matches(fragments_data, params, debug=False, top_n_per_pair=3)
     Args:
         fragments_data (list of dict): List of fragment data, including precomputed PCDs and features.
         params (dict): Configuration parameters.
+        debug (bool): Whether to enable debug mode.
         top_n_per_pair (int): Number of top matches to keep per fragment pair.
+        n_jobs (int): Number of parallel jobs. If None, uses all available CPU cores.
 
     Returns:
         list of dict: Each dict represents a potential match:
@@ -147,6 +178,7 @@ def find_pairwise_matches(fragments_data, params, debug=False, top_n_per_pair=3)
         return []
 
     print(f"\nFinding pairwise matches among {num_fragments} fragments...")
+
     # Generate all unique pairs (i,j) where i < j to avoid redundancy
     # This produces pairs like: (0,1), (0,2), (1,2) for 3 fragments
     pairs = []
@@ -154,16 +186,58 @@ def find_pairwise_matches(fragments_data, params, debug=False, top_n_per_pair=3)
         for j in range(i + 1, num_fragments):
             pairs.append((i, j))
 
+    # Determine number of jobs
+    if n_jobs is None:
+        n_jobs = min(mp.cpu_count(), len(pairs))
+    else:
+        n_jobs = min(n_jobs, len(pairs))
+
+    print(f"Processing {len(pairs)} fragment pairs using {n_jobs} parallel workers...")
+
+    # Prepare arguments for parallel processing
+    args_list = []
+    for i, j in pairs:
+        args_list.append(
+            (i, j, fragments_data[i], fragments_data[j], params, debug, top_n_per_pair)
+        )
+
     results = []
 
-    # Use deterministic sequential processing instead of parallel processing
-    # This ensures consistent results across runs
-    for i, j in pairs:
-        matches = _match_fragment_pair(i, j, fragments_data[i], fragments_data[j], params, debug)
-        if matches:
-            # Only keep top N matches for this pair (by score)
-            matches_sorted = sorted(matches, key=lambda x: x['score'], reverse=True)
-            results.extend(matches_sorted[:top_n_per_pair])
+    # Use parallel processing for better performance
+    if n_jobs > 1 and len(pairs) > 1:
+        try:
+            with mp.Pool(processes=n_jobs) as pool:
+                # Use map to maintain deterministic order
+                parallel_results = pool.map(_match_fragment_pair_wrapper, args_list)
+
+                # Flatten results
+                for result in parallel_results:
+                    if result:
+                        results.extend(result)
+
+        except Exception as e:
+            print(
+                f"Parallel processing failed: {e}. Falling back to sequential processing."
+            )
+            # Fallback to sequential processing
+            for i, j in pairs:
+                matches = _match_fragment_pair(
+                    i, j, fragments_data[i], fragments_data[j], params, debug
+                )
+                if matches:
+                    matches_sorted = sorted(
+                        matches, key=lambda x: x["score"], reverse=True
+                    )
+                    results.extend(matches_sorted[:top_n_per_pair])
+    else:
+        # Sequential processing for small numbers of pairs or single job
+        for i, j in pairs:
+            matches = _match_fragment_pair(
+                i, j, fragments_data[i], fragments_data[j], params, debug
+            )
+            if matches:
+                matches_sorted = sorted(matches, key=lambda x: x["score"], reverse=True)
+                results.extend(matches_sorted[:top_n_per_pair])
 
     # Sort all results by score (descending)
     results.sort(key=lambda x: x['score'], reverse=True)
