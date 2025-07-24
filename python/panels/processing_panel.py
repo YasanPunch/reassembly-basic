@@ -260,43 +260,62 @@ class ProcessingPanel:
 
     def show_debug_visualization(self, geometries, window_name="Debug Visualization"):
         """Show debug visualization using the GUI system instead of o3d.visualization.draw_geometries."""
-        # Create a unique scene ID for this debug visualization
-        scene_id = f"debug_{window_name.replace(' ', '_').replace('[', '').replace(']', '').replace('(', '').replace(')', '')}"
+        try:
+            # Create a unique scene ID for this debug visualization
+            # Clean the window name to create a safe scene ID
+            safe_name = (
+                window_name.replace(" ", "_")
+                .replace("[", "")
+                .replace("]", "")
+                .replace("(", "")
+                .replace(")", "")
+                .replace("→", "_to_")
+                .replace(":", "_")
+                .replace(".", "_")
+            )
+            scene_id = f"debug_{safe_name}"
 
-        # Create scene widget
-        scene_widget = self.app.add_scene_widget(scene_id, window_name)
+            # Create scene widget
+            scene_widget = self.app.add_scene_widget(scene_id, window_name)
 
-        # Add all geometries to the scene
-        for i, geom in enumerate(geometries):
-            material = rendering.MaterialRecord()
-            material.shader = "defaultLit"
+            # Add all geometries to the scene
+            for i, geom in enumerate(geometries):
+                material = rendering.MaterialRecord()
+                material.shader = "defaultLit"
 
-            # If geometry has uniform color, use it
-            if hasattr(geom, "paint_uniform_color") and hasattr(geom, "get_color"):
-                # For geometries that have been painted, we need to create a material with that color
-                # This is a simplified approach - in practice, you might need to extract the color differently
-                material.base_color = [0.8, 0.8, 0.8, 1.0]  # Default gray
+                # If geometry has uniform color, use it
+                if hasattr(geom, "paint_uniform_color") and hasattr(geom, "get_color"):
+                    # For geometries that have been painted, we need to create a material with that color
+                    # This is a simplified approach - in practice, you might need to extract the color differently
+                    material.base_color = [0.8, 0.8, 0.8, 1.0]  # Default gray
 
-            scene_widget.scene.add_geometry(f"debug_geom_{i}", geom, material)
+                scene_widget.scene.add_geometry(f"debug_geom_{i}", geom, material)
 
-        # Create a modal dialog to close the visualization
-        dlg = gui.Dialog(window_name)
-        dlg_layout = gui.Vert()
+            # Create a modal dialog to close the visualization
+            dlg = gui.Dialog(window_name)
+            dlg_layout = gui.Vert()
 
-        info_label = gui.Label("Debug visualization - click Close to continue")
-        close_btn = gui.Button("Close")
+            info_label = gui.Label("Debug visualization - click Close to continue")
+            close_btn = gui.Button("Close")
 
-        def on_close():
-            self.app.remove_scene_widget(scene_id)
-            self.app.window.close_dialog()
+            def on_close():
+                try:
+                    self.app.remove_scene_widget(scene_id)
+                    self.app.window.close_dialog()
+                except Exception as e:
+                    print(f"Error closing visualization: {e}")
 
-        close_btn.set_on_clicked(on_close)
-        dlg_layout.add_child(info_label)
-        dlg_layout.add_child(close_btn)
-        dlg.add_child(dlg_layout)
+            close_btn.set_on_clicked(on_close)
+            dlg_layout.add_child(info_label)
+            dlg_layout.add_child(close_btn)
+            dlg.add_child(dlg_layout)
 
-        # Show modal dialog (this will block until user closes it)
-        self.app.window.show_dialog(dlg)
+            # Show modal dialog (this will block until user closes it)
+            self.app.window.show_dialog(dlg)
+        except Exception as e:
+            print(f"Error creating debug visualization: {e}")
+            # Fallback: just print the window name
+            print(f"Debug visualization failed for: {window_name}")
 
     def _finish_segmentation_pipeline(self):
         """Called when all fragments have been processed."""
@@ -421,7 +440,7 @@ class ProcessingPanel:
         def on_visualize():
             if sorted_matches:
                 self._visualize_pairwise_match(sorted_matches[0], valid_fragments_data)
-            dlg.close()
+            # Don't close the dialog immediately - let user close it manually after viewing
 
         visualize_btn.set_on_clicked(on_visualize)
 
@@ -476,7 +495,8 @@ class ProcessingPanel:
         target_mesh.paint_uniform_color([0, 1, 0])  # Green for target
 
         # Show visualization
+        window_name = f"Pairwise Match {source_data['name']} to {target_data['name']} Score {match_data['score']:.3f}"
         self.show_debug_visualization(
             [source_mesh, target_mesh],
-            f"Pairwise Match: {source_data['name']} → {target_data['name']} (Score: {match_data['score']:.3f})",
+            window_name,
         )
