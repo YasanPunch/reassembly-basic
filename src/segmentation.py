@@ -302,12 +302,17 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
 
     # Parameter setup with paper's recommendations
     default_params = {
-        'max_curvature_deg': params.get('max_curvature_deg', 30.0),  # Paper suggests this range
-        'area_limit_fraction': params.get('area_limit_fraction', 0.02),  # 2% as paper suggests
-        'visualize_segmentation': params.get('visualize_segmentation', False),
-        'elevation_map_resolution': params.get('elevation_map_resolution', 64),
-        'bumpiness_threshold': params.get('bumpiness_threshold', 0.2),
-        'use_bumpiness_detection': params.get('use_bumpiness_detection', False)
+        "max_curvature_deg": params.get(
+            "max_curvature_deg", 30.0
+        ),  # Paper suggests this range
+        "area_limit_fraction": params.get(
+            "area_limit_fraction", 0.02
+        ),  # 2% as paper suggests
+        "visualize_segmentation": params.get("visualize_segmentation", False),
+        "elevation_map_resolution": params.get("elevation_map_resolution", 64),
+        "bumpiness_threshold": params.get("bumpiness_threshold", 0.2),
+        "use_bumpiness_detection": params.get("use_bumpiness_detection", False),
+        "visualize_merged_regions": params.get("visualize_merged_regions", False),
     }
 
     # Update params with defaults
@@ -630,23 +635,30 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
                         merged_idxs.append(j)
                         used.add(j)
         merged_clusters.append((cluster, merged_idxs))
-    # DEBUG: Visualize each merged face in its own window, with base mesh as wireframe
-    for idx, (cluster_faces, merged_idxs) in enumerate(merged_clusters):
-        if not cluster_faces:
-            continue
-        cluster_faces_arr = np.array(sorted(cluster_faces), dtype=np.int32)
-        cluster_triangles = all_triangles[cluster_faces_arr]
-        cluster_mesh = o3d.geometry.TriangleMesh()
-        cluster_mesh.vertices = mesh_vis.vertices  # Use full vertex set
-        cluster_mesh.triangles = o3d.utility.Vector3iVector(cluster_triangles)
-        cluster_mesh.compute_vertex_normals()
-        color = get_color(idx, len(merged_clusters))
-        cluster_mesh.paint_uniform_color(color)
-        print(f"[DEBUG] Merged regions {merged_idxs} into face {idx} (color {idx}), triangles: {len(cluster_triangles)}, vertices: {len(cluster_mesh.vertices)}, color: {color}")
-        # Create wireframe for base mesh
-        wireframe = o3d.geometry.LineSet.create_from_triangle_mesh(mesh_vis)
-        wireframe.paint_uniform_color([0.5, 0.5, 0.5])
-        o3d.visualization.draw_geometries([wireframe, cluster_mesh], window_name=f"[DEBUG] Merged Face {idx} (Color {idx})")
+    # Visualize merged regions conditionally
+    if params.get("visualize_merged_regions", False):
+        print(f"\n    Visualizing {len(merged_clusters)} merged regions...")
+        for idx, (cluster_faces, merged_idxs) in enumerate(merged_clusters):
+            if not cluster_faces:
+                continue
+            cluster_faces_arr = np.array(sorted(cluster_faces), dtype=np.int32)
+            cluster_triangles = all_triangles[cluster_faces_arr]
+            cluster_mesh = o3d.geometry.TriangleMesh()
+            cluster_mesh.vertices = mesh_vis.vertices  # Use full vertex set
+            cluster_mesh.triangles = o3d.utility.Vector3iVector(cluster_triangles)
+            cluster_mesh.compute_vertex_normals()
+            color = get_color(idx, len(merged_clusters))
+            cluster_mesh.paint_uniform_color(color)
+            print(
+                f"    [DEBUG] Merged regions {merged_idxs} into face {idx} (color {idx}), triangles: {len(cluster_triangles)}, vertices: {len(cluster_mesh.vertices)}, color: {color}"
+            )
+            # Create wireframe for base mesh
+            wireframe = o3d.geometry.LineSet.create_from_triangle_mesh(mesh_vis)
+            wireframe.paint_uniform_color([0.5, 0.5, 0.5])
+            o3d.visualization.draw_geometries(
+                [wireframe, cluster_mesh],
+                window_name=f"[DEBUG] Merged Face {idx} (Color {idx})",
+            )
     # Store merged faces as separate fracture surfaces for downstream processing
     merged_fracture_surfaces = []
     for cluster_faces, merged_idxs in merged_clusters:

@@ -1,7 +1,7 @@
 
 {
   "// --- I. Preprocessing, Point Cloud Generation ---": null,
-  "voxel_downsample_size": 3.0,
+  "voxel_downsample_size": 1.0,
   "fracture_surface_dense_sample_points": 10000,
   "add_preprocessing_noise": true,
   "preprocessing_noise_factor": 0.01,
@@ -14,7 +14,9 @@
   "// --- II. Segmentation (New Parameters based on Region Growing) ---": null,
   "visualize_segmentation": true,
   "// Enables interactive selection of segments from extract_fracture_surface_mesh": null,
-  "debug_voxel_downsampling": true,
+  "visualize_merged_regions": false,
+  "// Enables visualization of merged regions after clustering (debug feature)": null,
+  "debug_voxel_downsampling": false,
   "// Enables visualization of voxel downsampled point clouds before FPFH feature extraction": null,
   "max_angle_deviation_deg": 30.0,
   "// Max angle (degrees) for region growing normal similarity (e.g., 20-45)": null,
