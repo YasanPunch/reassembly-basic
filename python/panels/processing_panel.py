@@ -283,6 +283,9 @@ class ProcessingPanel:
     def show_debug_visualization(self, geometries, window_name="Debug Visualization"):
         """Show debug visualization using the GUI system instead of o3d.visualization.draw_geometries."""
         try:
+            print(f"[DEBUG] Creating debug visualization: {window_name}")
+            print(f"[DEBUG] Number of geometries: {len(geometries)}")
+
             # Create a unique scene ID for this debug visualization
             # Clean the window name to create a safe scene ID
             safe_name = (
@@ -296,20 +299,58 @@ class ProcessingPanel:
                 .replace(".", "_")
             )
             scene_id = f"debug_{safe_name}"
+            print(f"[DEBUG] Scene ID: {scene_id}")
 
             # Create scene widget
             scene_widget = self.app.add_scene_widget(scene_id, window_name)
 
             # Add all geometries to the scene
             for i, geom in enumerate(geometries):
+                print(
+                    f"[DEBUG] Adding geometry {i}: type={type(geom)}, vertices={len(geom.vertices) if hasattr(geom, 'vertices') else 'N/A'}"
+                )
+
                 material = rendering.MaterialRecord()
                 material.shader = "defaultLit"
 
-                # If geometry has uniform color, use it
+                # Check if geometry has been painted with a uniform color
                 if hasattr(geom, "paint_uniform_color") and hasattr(geom, "get_color"):
-                    # For geometries that have been painted, we need to create a material with that color
-                    # This is a simplified approach - in practice, you might need to extract the color differently
-                    material.base_color = [0.8, 0.8, 0.8, 1.0]  # Default gray
+                    # Try to get the color from the geometry
+                    try:
+                        # For meshes that have been painted, we need to extract the color
+                        # Open3D stores colors in vertex colors, so we need to check if they exist
+                        if (
+                            hasattr(geom, "vertex_colors")
+                            and len(geom.vertex_colors) > 0
+                        ):
+                            # Get the first vertex color as the uniform color
+                            color = geom.vertex_colors[0]
+                            material.base_color = [color[0], color[1], color[2], 1.0]
+                            print(
+                                f"[DEBUG] Geometry {i} color from vertex_colors: {color}"
+                            )
+                        else:
+                            # Fallback to default color
+                            material.base_color = [0.8, 0.8, 0.8, 1.0]
+                            print(
+                                f"[DEBUG] Geometry {i} using default color - no vertex_colors found"
+                            )
+                            print(
+                                f"[DEBUG] Geometry {i} has vertex_colors: {hasattr(geom, 'vertex_colors')}"
+                            )
+                            if hasattr(geom, "vertex_colors"):
+                                print(
+                                    f"[DEBUG] Geometry {i} vertex_colors length: {len(geom.vertex_colors)}"
+                                )
+                    except Exception as e:
+                        print(
+                            f"Warning: Could not extract color from geometry {i}: {e}"
+                        )
+                        material.base_color = [0.8, 0.8, 0.8, 1.0]
+                else:
+                    # Default color for geometries without color information
+                    material.base_color = [0.8, 0.8, 0.8, 1.0]
+                    print(f"[DEBUG] Geometry {i} using default color (no color info)")
 
                 scene_widget.scene.add_geometry(f"debug_geom_{i}", geom, material)
 
@@ -334,6 +375,28 @@ class ProcessingPanel:
 
             # Show modal dialog (this will block until user closes it)
             self.app.window.show_dialog(dlg)
+
+            # Try to set a good camera view
+            try:
+                # Calculate the center of all geometries
+                all_vertices = []
+                for geom in geometries:
+                    if hasattr(geom, "vertices") and len(geom.vertices) > 0:
+                        all_vertices.extend(geom.vertices)
+
+                if all_vertices:
+                    import numpy as np
+
+                    vertices_array = np.array(all_vertices)
+                    center = np.mean(vertices_array, axis=0)
+                    print(f"[DEBUG] Calculated center: {center}")
+
+                    # Set camera to look at the center
+                    scene_widget.setup_camera(
+                        60, scene_widget.scene.bounding_box, center
+                    )
+            except Exception as e:
+                print(f"[DEBUG] Could not set camera: {e}")
         except Exception as e:
             print(f"Error creating debug visualization: {e}")
             # Fallback: just print the window name
@@ -499,9 +562,27 @@ class ProcessingPanel:
         source_data = valid_fragments_data[source_idx]
         target_data = valid_fragments_data[target_idx]
 
+        print(
+            f"[DEBUG] Visualizing match: {source_data['name']} -> {target_data['name']}"
+        )
+        print(
+            f"[DEBUG] Source mesh vertices: {len(source_data['original_mesh'].vertices)}"
+        )
+        print(
+            f"[DEBUG] Target mesh vertices: {len(target_data['original_mesh'].vertices)}"
+        )
+        print(f"[DEBUG] Transformation matrix:\n{transformation}")
+
         # Create copies for visualization
         source_mesh = copy.deepcopy(source_data["original_mesh"])
         target_mesh = copy.deepcopy(target_data["original_mesh"])
+
+        # Validate meshes
+        if len(source_mesh.vertices) == 0 or len(target_mesh.vertices) == 0:
+            print(
+                f"[ERROR] Invalid mesh: source vertices={len(source_mesh.vertices)}, target vertices={len(target_mesh.vertices)}"
+            )
+            return
 
         # Ensure normals for display
         if not source_mesh.has_vertex_normals():
@@ -509,15 +590,31 @@ class ProcessingPanel:
         if not target_mesh.has_vertex_normals():
             target_mesh.compute_vertex_normals()
 
+        # Validate transformation matrix
+        if transformation is None or transformation.shape != (4, 4):
+            print(f"[ERROR] Invalid transformation matrix: {transformation}")
+            return
+
         # Apply transformation to source mesh
         source_mesh.transform(transformation)
+
+        # Debug bounding boxes
+        source_bbox = source_mesh.get_axis_aligned_bounding_box()
+        target_bbox = target_mesh.get_axis_aligned_bounding_box()
+        print(
+            f"[DEBUG] Source bbox: min={source_bbox.min_bound}, max={source_bbox.max_bound}"
+        )
+        print(
+            f"[DEBUG] Target bbox: min={target_bbox.min_bound}, max={target_bbox.max_bound}"
+        )
 
         # Color the meshes
         source_mesh.paint_uniform_color([1, 0, 0])  # Red for source
         target_mesh.paint_uniform_color([0, 1, 0])  # Green for target
 
         # Show visualization
-        window_name = f"Pairwise Match {source_data['name']} to {target_data['name']} Score {match_data['score']:.3f}"
+        window_name = f"Pairwise_Match_{source_data['name']}_to_{target_data['name']}_Score_{match_data['score']:.3f}"
+        print(f"[DEBUG] Showing visualization: {window_name}")
         self.show_debug_visualization(
             [source_mesh, target_mesh],
             window_name,
