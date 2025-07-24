@@ -1,5 +1,6 @@
 import os
 import copy
+import numpy as np
 
 import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
@@ -7,6 +8,7 @@ import open3d.visualization.rendering as rendering
 import src.io_utils
 import src.preprocessing
 import src.matching
+import src.assembly
 
 class ProcessingPanel:
     def __init__(self, app):
@@ -40,11 +42,6 @@ class ProcessingPanel:
         self._segmentation_button.vertical_padding_em = 0
         self._segmentation_button.set_on_clicked(self._on_segmentation)
 
-        self._classification_button = gui.Button("Classification")
-        self._classification_button.horizontal_padding_em = 0.5
-        self._classification_button.vertical_padding_em = 0
-        self._classification_button.set_on_clicked(self._on_classification)
-
         self._pairwise_matching_button = gui.Button("Pairwise Matching")
         self._pairwise_matching_button.horizontal_padding_em = 0.5
         self._pairwise_matching_button.vertical_padding_em = 0
@@ -56,7 +53,6 @@ class ProcessingPanel:
         self._multipiece_matching_button.set_on_clicked(self._on_multipiece_matching)
 
         process_ctrls.add_child(self._segmentation_button)
-        process_ctrls.add_child(self._classification_button)
         process_ctrls.add_child(self._pairwise_matching_button)
         process_ctrls.add_child(self._multipiece_matching_button)
 
@@ -143,7 +139,33 @@ class ProcessingPanel:
         self._handle_pairwise_matching_results(valid_fragments_data, pairwise_matches)
 
     def _on_multipiece_matching(self):
-        pass
+        """Execute global assembly using the pairwise matches data."""
+        print("\n[5. Performing Global Assembly]")
+
+        # Check if we have pairwise matches data
+        if not hasattr(self, "pairwise_matches") or not hasattr(
+            self, "valid_fragments_data"
+        ):
+            print(
+                "No pairwise matches data available. Please run pairwise matching first."
+            )
+            return
+
+        if not self.pairwise_matches:
+            print("No pairwise matches found. Cannot perform global assembly.")
+            return
+
+        print(
+            f"  Starting global assembly with {len(self.valid_fragments_data)} fragments and {len(self.pairwise_matches)} matches..."
+        )
+
+        # Create the assembler
+        assembler = src.assembly.Assembler(
+            self.valid_fragments_data, self.pairwise_matches, self.app.params
+        )
+
+        # Start the greedy assembly with GUI support
+        self._start_greedy_assembly(assembler)
 
     def _process_next_fragment_in_queue(self):
         """Process the next fragment in the segmentation queue."""
@@ -447,16 +469,16 @@ class ProcessingPanel:
         proceed_btn = gui.Button("Proceed to Assembly")
 
         def on_proceed():
-            dlg.close()
-            # TODO: Start global assembly pipeline
-            print("Proceeding to global assembly...")
+            self.app.window.close_dialog()
+            # Start global assembly pipeline
+            self._on_multipiece_matching()
 
         proceed_btn.set_on_clicked(on_proceed)
 
         close_btn = gui.Button("Close")
 
         def on_close():
-            dlg.close()
+            self.app.window.close_dialog()
 
         close_btn.set_on_clicked(on_close)
 
@@ -499,4 +521,336 @@ class ProcessingPanel:
         self.show_debug_visualization(
             [source_mesh, target_mesh],
             window_name,
+        )
+
+    def _start_greedy_assembly(self, assembler):
+        """Start the greedy assembly process with GUI support."""
+        # Store the assembler for the assembly process
+        self.current_assembler = assembler
+        self.assembly_state = {
+            "current_assembly_components": [],
+            "used_matches": set(),
+            "rejected_matches": [],
+            "finalized": False,
+            "num_placed": 0,
+        }
+
+        # Start the assembly process
+        self._continue_assembly_process()
+
+    def _continue_assembly_process(self):
+        """Continue the assembly process, handling one candidate at a time."""
+        if self.assembly_state["finalized"]:
+            self._finish_assembly()
+            return
+
+        # Find the next best candidate
+        best_candidate = self._find_next_assembly_candidate()
+
+        if best_candidate is None:
+            print("No more valid candidates for assembly.")
+            self._finish_assembly()
+            return
+
+        # Debug information
+        candidate_name = self.current_assembler.fragments_data[best_candidate["idx"]][
+            "name"
+        ]
+        print(
+            f"  Found candidate: {candidate_name} (score: {best_candidate['score']:.3f})"
+        )
+        if best_candidate["match_info"]:
+            match_info = best_candidate["match_info"]
+            source_name = self.current_assembler.fragments_data[
+                match_info["source_idx"]
+            ]["name"]
+            target_name = self.current_assembler.fragments_data[
+                match_info["target_idx"]
+            ]["name"]
+            print(f"    Match: {source_name} -> {target_name}")
+
+        # Show the candidate for user interaction
+        self._show_assembly_candidate_dialog(best_candidate)
+
+    def _find_next_assembly_candidate(self):
+        """Find the next best candidate for assembly."""
+        assembler = self.current_assembler
+        current_components = self.assembly_state["current_assembly_components"]
+        used_matches = self.assembly_state["used_matches"]
+
+        best_candidate_idx = -1
+        best_candidate_match_info = None
+        best_candidate_world_transform = None
+        best_candidate_score = 0.0
+
+        # If no fragments placed yet, start with the first fragment
+        if not current_components:
+            best_candidate_idx = 0
+            best_candidate_world_transform = np.eye(4)
+            best_candidate_score = 1.0
+            return {
+                "idx": best_candidate_idx,
+                "match_info": None,
+                "world_transform": best_candidate_world_transform,
+                "score": best_candidate_score,
+            }
+
+        # Find the best candidate from available matches
+        for match_info in assembler.pairwise_matches:
+            if id(match_info) in used_matches:
+                continue
+
+            s_idx, t_idx = match_info["source_idx"], match_info["target_idx"]
+
+            # Check if one fragment is placed and the other isn't
+            if (
+                assembler.is_fragment_placed[t_idx]
+                and not assembler.is_fragment_placed[s_idx]
+            ):
+                world_transform = np.dot(
+                    assembler.fragment_transforms[t_idx], match_info["transformation"]
+                )
+                idx_to_place = s_idx
+                match_score = match_info["score"]
+            elif (
+                assembler.is_fragment_placed[s_idx]
+                and not assembler.is_fragment_placed[t_idx]
+            ):
+                try:
+                    inv_transform = np.linalg.inv(match_info["transformation"])
+                    world_transform = np.dot(
+                        assembler.fragment_transforms[s_idx], inv_transform
+                    )
+                    idx_to_place = t_idx
+                    match_score = match_info["score"]
+                except np.linalg.LinAlgError:
+                    continue
+            else:
+                continue
+
+            # Check if this candidate has a better score
+            if match_score > best_candidate_score:
+                best_candidate_idx = idx_to_place
+                best_candidate_match_info = match_info
+                best_candidate_world_transform = world_transform
+                best_candidate_score = match_score
+
+        if best_candidate_idx != -1:
+            return {
+                "idx": best_candidate_idx,
+                "match_info": best_candidate_match_info,
+                "world_transform": best_candidate_world_transform,
+                "score": best_candidate_score,
+            }
+
+        return None
+
+    def _show_assembly_candidate_dialog(self, candidate):
+        """Show a dialog for the user to accept/reject an assembly candidate."""
+        candidate_idx = candidate["idx"]
+        candidate_name = self.current_assembler.fragments_data[candidate_idx]["name"]
+        candidate_score = candidate["score"]
+        match_info = candidate["match_info"]
+
+        # Create candidate mesh for visualization
+        candidate_mesh = copy.deepcopy(
+            self.current_assembler.original_meshes[candidate_idx]
+        )
+        candidate_mesh.transform(candidate["world_transform"])
+        candidate_mesh.paint_uniform_color([1.0, 0.0, 0.0])  # Red for candidate
+
+        # Create placed meshes for visualization
+        placed_meshes = []
+        for mesh, _ in self.assembly_state["current_assembly_components"]:
+            placed_mesh = copy.deepcopy(mesh)
+            placed_mesh.paint_uniform_color([0.7, 0.7, 0.7])  # Gray for placed
+            placed_meshes.append(placed_mesh)
+
+        # Create visualization
+        all_geometries = [candidate_mesh] + placed_meshes
+
+        # Create window name with more context
+        if match_info:
+            source_name = self.current_assembler.fragments_data[
+                match_info["source_idx"]
+            ]["name"]
+            target_name = self.current_assembler.fragments_data[
+                match_info["target_idx"]
+            ]["name"]
+            window_name = f"Assembly Candidate {candidate_name} matched to {target_name if candidate_idx == match_info['source_idx'] else source_name} Score {candidate_score:.3f}"
+        else:
+            window_name = f"Assembly Candidate {candidate_name} (first fragment) Score {candidate_score:.3f}"
+
+        # Show visualization
+        self.show_debug_visualization(all_geometries, window_name)
+
+        # Create dialog for user decision
+        dlg = gui.Dialog(f"Assembly Candidate: {candidate_name}")
+        dlg_layout = gui.Vert()
+
+        # Info
+        info_label = gui.Label(f"Candidate: {candidate_name}")
+        score_label = gui.Label(f"Score: {candidate_score:.3f}")
+        dlg_layout.add_child(info_label)
+        dlg_layout.add_child(score_label)
+
+        # Show match information if available
+        if match_info:
+            source_name = self.current_assembler.fragments_data[
+                match_info["source_idx"]
+            ]["name"]
+            target_name = self.current_assembler.fragments_data[
+                match_info["target_idx"]
+            ]["name"]
+            if candidate_idx == match_info["source_idx"]:
+                match_label = gui.Label(f"Matched to: {target_name}")
+            else:
+                match_label = gui.Label(f"Matched to: {source_name}")
+            dlg_layout.add_child(match_label)
+
+        # Instructions
+        instructions = gui.Label("Red mesh = candidate, Gray meshes = already placed")
+        dlg_layout.add_child(instructions)
+
+        # Buttons
+        buttons_layout = gui.Horiz()
+
+        accept_btn = gui.Button("Accept")
+
+        def on_accept():
+            self._handle_assembly_decision(candidate, "accept")
+            self.app.window.close_dialog()
+
+        accept_btn.set_on_clicked(on_accept)
+
+        reject_btn = gui.Button("Reject")
+
+        def on_reject():
+            self._handle_assembly_decision(candidate, "reject")
+            self.app.window.close_dialog()
+
+        reject_btn.set_on_clicked(on_reject)
+
+        finalize_btn = gui.Button("Finalize Assembly")
+
+        def on_finalize():
+            self._handle_assembly_decision(candidate, "finalize")
+            self.app.window.close_dialog()
+
+        finalize_btn.set_on_clicked(on_finalize)
+
+        quit_btn = gui.Button("Quit")
+
+        def on_quit():
+            self._handle_assembly_decision(candidate, "quit")
+            self.app.window.close_dialog()
+
+        quit_btn.set_on_clicked(on_quit)
+
+        buttons_layout.add_child(accept_btn)
+        buttons_layout.add_child(reject_btn)
+        buttons_layout.add_child(finalize_btn)
+        buttons_layout.add_child(quit_btn)
+        dlg_layout.add_child(buttons_layout)
+
+        dlg.add_child(dlg_layout)
+        self.app.window.show_dialog(dlg)
+
+    def _handle_assembly_decision(self, candidate, decision):
+        """Handle the user's decision for an assembly candidate."""
+        assembler = self.current_assembler
+        candidate_idx = candidate["idx"]
+        candidate_name = assembler.fragments_data[candidate_idx]["name"]
+        match_info = candidate["match_info"]
+
+        if decision == "accept":
+            # Accept the match
+            assembler.fragment_transforms[candidate_idx] = candidate["world_transform"]
+            assembler.is_fragment_placed[candidate_idx] = True
+            self.assembly_state["current_assembly_components"].append(
+                (assembler._get_transformed_mesh(candidate_idx), candidate_name)
+            )
+            self.assembly_state["num_placed"] += 1
+            if match_info:
+                self.assembly_state["used_matches"].add(id(match_info))
+            print(
+                f"  Placed fragment: {candidate_name} via match score {candidate['score']:.3f}"
+            )
+
+            # Continue with next candidate
+            self._continue_assembly_process()
+
+        elif decision == "reject":
+            # Reject the match, add to rejected_matches
+            if match_info:
+                self.assembly_state["rejected_matches"].append(match_info)
+                self.assembly_state["used_matches"].add(id(match_info))
+            print(f"  Rejected match for fragment: {candidate_name}")
+
+            # Continue with next candidate
+            self._continue_assembly_process()
+
+        elif decision == "finalize":
+            # Finalize assembly
+            self.assembly_state["finalized"] = True
+            print("  Finalizing assembly as per user request.")
+            self._finish_assembly()
+
+        elif decision == "quit":
+            # Quit assembly
+            self.assembly_state["finalized"] = True
+            print("  Assembly aborted by user.")
+            self._finish_assembly()
+
+    def _finish_assembly(self):
+        """Finish the assembly process and save results."""
+        assembler = self.current_assembler
+        num_placed = self.assembly_state["num_placed"]
+
+        print(f"\n=== Assembly Complete ===")
+        print(
+            f"Placed {num_placed} fragments out of {len(assembler.fragments_data)} total fragments."
+        )
+
+        if num_placed > 0:
+            # Combine all placed fragments
+            placed_meshes = []
+            for i in range(len(assembler.fragments_data)):
+                if assembler.is_fragment_placed[i]:
+                    placed_meshes.append(assembler._get_transformed_mesh(i))
+
+            if placed_meshes:
+                reconstructed_model = src.io_utils.combine_meshes(placed_meshes)
+
+                # Save the reconstructed model
+                try:
+                    os.makedirs(self.app.params["output_dir"], exist_ok=True)
+                    output_path = os.path.join(
+                        self.app.params["output_dir"],
+                        "reconstructed_model_assembly.obj",
+                    )
+                    src.io_utils.save_mesh(reconstructed_model, output_path)
+                    print(f"  Saved reconstructed model to {output_path}")
+
+                    # Show final result
+                    self._show_final_assembly_result(reconstructed_model, num_placed)
+
+                except Exception as e:
+                    print(f"  Error saving reconstructed model: {e}")
+        else:
+            print("  No fragments were placed. Assembly failed.")
+
+        # Clean up
+        self.current_assembler = None
+        self.assembly_state = None
+
+    def _show_final_assembly_result(self, reconstructed_model, num_placed):
+        """Show the final assembly result."""
+        # Color the reconstructed model
+        reconstructed_model.paint_uniform_color([0.8, 0.8, 0.8])  # Light gray
+
+        # Show visualization
+        self.show_debug_visualization(
+            [reconstructed_model],
+            f"Final Assembly Result - {num_placed} fragments combined",
         )
