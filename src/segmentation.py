@@ -452,6 +452,11 @@ def extract_fracture_surface_mesh(
         _show_segmentation_dialog_async(
             drawable_segment_infos, fragment_name, params, processing_panel
         )
+        # Store the segmented regions for later visualization
+        if processing_panel:
+            processing_panel._store_segmented_regions(
+                fragment_name, drawable_segment_infos
+            )
         # Return None for now - the result will be handled by the callback
         return None
 

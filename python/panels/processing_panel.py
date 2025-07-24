@@ -9,6 +9,7 @@ import src.io_utils
 import src.preprocessing
 import src.matching
 import src.assembly
+from python.left_panel.item_tree.items import SegmentationResultItem, SegmentedItem
 
 class ProcessingPanel:
     def __init__(self, app):
@@ -254,8 +255,18 @@ class ProcessingPanel:
                 }
             )
 
+        # Add segmentation results to item tree for visualization
+        self._add_segmentation_to_item_tree(frag_info_raw, fracture_surfaces)
+
         # Process next fragment
         self._process_next_fragment_in_queue()
+
+    def _store_segmented_regions(self, fragment_name, drawable_segment_infos):
+        """Store segmented regions for later visualization in the item tree."""
+        if not hasattr(self, "stored_segmented_regions"):
+            self.stored_segmented_regions = {}
+
+        self.stored_segmented_regions[fragment_name] = drawable_segment_infos
 
     def _reconstruct_fracture_surfaces_from_selection(
         self, frag_info_raw, selected_regions
@@ -279,6 +290,117 @@ class ProcessingPanel:
         )
 
         return fracture_surfaces
+
+    def _add_segmentation_to_item_tree(self, frag_info_raw, fracture_surfaces):
+        """Add segmented and selected fracture surfaces to the item tree for visualization."""
+        if not fracture_surfaces:
+            return
+
+        fragment_name = frag_info_raw["name"]
+
+        # Create a batch container for this fragment's segmentation results
+        batch_label = f"Segmentation: {fragment_name}"
+
+        # fracture_surfaces is a list of Open3D TriangleMesh objects (the fracture surfaces)
+        segmented_items = []
+
+        # Add stored segmented regions (colored)
+        if (
+            hasattr(self, "stored_segmented_regions")
+            and fragment_name in self.stored_segmented_regions
+        ):
+            drawable_segment_infos = self.stored_segmented_regions[fragment_name]
+            for i, segment_info in enumerate(drawable_segment_infos):
+                region_mesh = segment_info["mesh"]
+                if region_mesh and len(region_mesh.vertices) > 0:
+                    # The mesh already has the correct color from segmentation
+                    # Add to main scene
+                    scene_path = f"segmented_region_{fragment_name}_{i}"
+
+                    # Create material for the geometry
+                    material = rendering.MaterialRecord()
+                    material.shader = "defaultLit"
+
+                    # Extract color from vertex colors if available
+                    if (
+                        hasattr(region_mesh, "vertex_colors")
+                        and len(region_mesh.vertex_colors) > 0
+                    ):
+                        color = region_mesh.vertex_colors[0]
+                        material.base_color = [color[0], color[1], color[2], 1.0]
+                    else:
+                        # Use default color
+                        material.base_color = [0.8, 0.8, 0.8, 1.0]
+
+                    self.app._scene_widget.scene.add_geometry(
+                        scene_path, region_mesh, material
+                    )
+
+                    # Create item for the tree
+                    segmented_items.append(
+                        {
+                            "mesh": region_mesh,
+                            "label": f"Region {segment_info['id']+1}",
+                            "scene_path": scene_path,
+                            "is_visible": True,
+                        }
+                    )
+
+        # Add fracture surfaces (in black)
+        for i, fracture_mesh in enumerate(fracture_surfaces):
+            if fracture_mesh and len(fracture_mesh.vertices) > 0:
+                # Color fracture surfaces black
+                fracture_mesh.paint_uniform_color([0.0, 0.0, 0.0])  # Black
+
+                # Add to main scene
+                scene_path = f"fracture_surface_{fragment_name}_{i}"
+
+                # Create material for the geometry
+                material = rendering.MaterialRecord()
+                material.shader = "defaultLit"
+                material.base_color = [0.0, 0.0, 0.0, 1.0]  # Black
+
+                self.app._scene_widget.scene.add_geometry(
+                    scene_path, fracture_mesh, material
+                )
+
+                # Create item for the tree
+                segmented_items.append(
+                    {
+                        "mesh": fracture_mesh,
+                        "label": f"Fracture Surface {i+1}",
+                        "scene_path": scene_path,
+                        "is_visible": True,
+                    }
+                )
+
+        # Add to item tree using the existing batch method
+        if segmented_items:
+            # Create segmentation result items for the tree
+            segmentation_result_items = []
+            for item_data in segmented_items:
+                segmented_item = SegmentedItem(
+                    label=item_data["label"],
+                    segment_mesh=item_data["mesh"],
+                    scene_path=item_data["scene_path"],
+                    is_visible=item_data["is_visible"],
+                )
+                segmentation_result_items.append(segmented_item)
+
+            # Create the main segmentation result item
+            segmentation_result = SegmentationResultItem(
+                label=fragment_name,
+                segmented_items=segmentation_result_items,
+                is_visible=True,
+            )
+
+            # Add to item tree
+            self.app._left_panel.item_tree.add_segmentation_batch_item(
+                label=batch_label,
+                segmentation_results=[segmentation_result],
+                batch_parameters={"fragment_name": fragment_name},
+                is_visible=True,
+            )
 
     def show_debug_visualization(self, geometries, window_name="Debug Visualization"):
         """Show debug visualization using the GUI system instead of o3d.visualization.draw_geometries."""
