@@ -9,6 +9,7 @@ from scipy.spatial import cKDTree
 from collections import Counter
 import json
 import os
+import hashlib
 
 
 def get_color(index, total_items=20, cmap_name='tab10', num_variations=3):
@@ -66,13 +67,14 @@ def get_selection_filename(fragment_name, params):
     Generate a filename for saving/loading selection data.
     """
     # Create a hash of the parameters to ensure consistency
-    param_hash = hash(str(sorted(params.items())))
+    param_str = str(sorted(params.items()))
+    param_hash = hashlib.md5(param_str.encode()).hexdigest()[:8]
     safe_fragment_name = "".join(
         c for c in fragment_name if c.isalnum() or c in (" ", "-", "_")
     ).rstrip()
     safe_fragment_name = safe_fragment_name.replace(" ", "_")
 
-    return f"selection_{safe_fragment_name}_{abs(param_hash) % 10000}.json"
+    return f"selection_{safe_fragment_name}_{param_hash}.json"
 
 
 def save_selection_data(fragment_name, region_properties, selected_regions, params):
@@ -518,6 +520,15 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
     if params['visualize_segmentation'] and len(regions) > 0:
         print(f"\n    Visualizing {len(regions)} regions for interactive selection...")
 
+        # Initialize variables for interactive mode
+        drawable_segment_infos = []
+        shared_state = None
+        PAGE_SIZE = 10
+        highlight_color = np.array([0.0, 0.0, 0.0])  # Black highlight
+        mesh_vis = copy.deepcopy(
+            o3d_mesh_fragment
+        )  # Always create mesh_vis for later use
+
         # Try to load saved selection data (unless forced interactive)
         should_use_saved = (
             not params["force_interactive"] and params["use_saved_selections"]
@@ -559,12 +570,6 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
                 "quit_without_selection": False,
                 "current_page": 0,
             }
-            PAGE_SIZE = 10
-
-            drawable_segment_infos = []
-            highlight_color = np.array([0.0, 0.0, 0.0])  # Black highlight
-
-            mesh_vis = copy.deepcopy(o3d_mesh_fragment)
 
             for i, props in enumerate(region_properties):
                 seg_mesh = o3d.geometry.TriangleMesh()
@@ -591,7 +596,7 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
                     }
                 )
 
-        if drawable_segment_infos:
+        if drawable_segment_infos and shared_state is not None:
             num_total_segments = len(drawable_segment_infos)
             num_pages = (num_total_segments + PAGE_SIZE - 1) // PAGE_SIZE
 
