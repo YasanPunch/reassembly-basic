@@ -473,6 +473,177 @@ class Assembler:
             for idx_unplaced in unplaced_indices:
                 print(f" - {self.fragments_data[idx_unplaced]['name']}")
 
+            # --- MANUAL REVIEW OF UNPLACED FRAGMENTS ---
+            print(f"\n=== Manual Review of Unplaced Fragments ===")
+            print(
+                f"Found {len(unplaced_indices)} unplaced fragments. Reviewing each one..."
+            )
+
+            # Create placed meshes for visualization
+            placed_meshes = []
+            for mesh, _ in current_assembly_components:
+                placed_mesh = copy.deepcopy(mesh)
+                placed_mesh.paint_uniform_color([0.7, 0.7, 0.7])  # Gray for placed
+                placed_meshes.append(placed_mesh)
+
+            for unplaced_idx in unplaced_indices[
+                :
+            ]:  # Copy list to allow modification during iteration
+                unplaced_name = self.fragments_data[unplaced_idx]["name"]
+                print(f"\n--- Reviewing: {unplaced_name} ---")
+
+                # Find all possible matches for this unplaced fragment
+                possible_matches = []
+                for match in self.pairwise_matches:
+                    s_idx, t_idx = match["source_idx"], match["target_idx"]
+                    if s_idx == unplaced_idx and self.is_fragment_placed[t_idx]:
+                        # Unplaced fragment is source, can connect to placed target
+                        world_transform = np.dot(
+                            self.fragment_transforms[t_idx], match["transformation"]
+                        )
+                        possible_matches.append(
+                            {
+                                "match": match,
+                                "transform": world_transform,
+                                "target_name": self.fragments_data[t_idx]["name"],
+                                "score": match["score"],
+                            }
+                        )
+                    elif t_idx == unplaced_idx and self.is_fragment_placed[s_idx]:
+                        # Unplaced fragment is target, can connect to placed source
+                        try:
+                            inv_transform = np.linalg.inv(match["transformation"])
+                            world_transform = np.dot(
+                                self.fragment_transforms[s_idx], inv_transform
+                            )
+                            possible_matches.append(
+                                {
+                                    "match": match,
+                                    "transform": world_transform,
+                                    "target_name": self.fragments_data[s_idx]["name"],
+                                    "score": match["score"],
+                                }
+                            )
+                        except np.linalg.LinAlgError:
+                            continue
+
+                if not possible_matches:
+                    print(f"  No possible matches found for {unplaced_name}")
+                    continue
+
+                # Sort matches by score
+                possible_matches.sort(key=lambda x: x["score"], reverse=True)
+
+                print(f"  Found {len(possible_matches)} possible matches:")
+                for i, pm in enumerate(possible_matches):
+                    print(
+                        f"    {i+1}. Connect to {pm['target_name']} (score: {pm['score']:.3f})"
+                    )
+
+                # Show each match option to user
+                for i, pm in enumerate(possible_matches):
+                    match_info = pm["match"]
+                    world_transform = pm["transform"]
+                    target_name = pm["target_name"]
+                    score = pm["score"]
+
+                    # Create candidate mesh for visualization
+                    candidate_mesh = copy.deepcopy(self.original_meshes[unplaced_idx])
+                    candidate_mesh.transform(world_transform)
+                    candidate_mesh.paint_uniform_color(
+                        [1.0, 0.0, 0.0]
+                    )  # Red for candidate
+
+                    print(f"\n  === Match Option {i+1}/{len(possible_matches)} ===")
+                    print(
+                        f"  Connecting {unplaced_name} to {target_name} (score: {score:.3f})"
+                    )
+                    print(
+                        "  A: Accept this match | N: Next option | S: Skip this fragment | F: Finalize assembly"
+                    )
+
+                    # Create interactive visualizer
+                    shared_state = {"action": None}
+
+                    vis = o3d.visualization.VisualizerWithKeyCallback()
+                    vis.create_window(
+                        window_name=f"Manual Review: {unplaced_name} -> {target_name} (Red), Placed: Gray",
+                        width=1280,
+                        height=960,
+                    )
+
+                    # Add geometries
+                    vis.add_geometry(candidate_mesh)
+                    for mesh in placed_meshes:
+                        vis.add_geometry(mesh)
+
+                    def accept_manual_match(visualizer):
+                        shared_state["action"] = "accept"
+                        print("\n    Match accepted. Closing...")
+                        visualizer.close()
+                        return False
+
+                    def next_option(visualizer):
+                        shared_state["action"] = "next"
+                        print("\n    Next option. Closing...")
+                        visualizer.close()
+                        return False
+
+                    def skip_fragment(visualizer):
+                        shared_state["action"] = "skip"
+                        print("\n    Skipping fragment. Closing...")
+                        visualizer.close()
+                        return False
+
+                    def finalize_manual(visualizer):
+                        shared_state["action"] = "finalize"
+                        print("\n    Finalizing assembly. Closing...")
+                        visualizer.close()
+                        return False
+
+                    # Register key callbacks
+                    vis.register_key_callback(ord("A"), accept_manual_match)
+                    vis.register_key_callback(ord("N"), next_option)
+                    vis.register_key_callback(ord("S"), skip_fragment)
+                    vis.register_key_callback(ord("F"), finalize_manual)
+
+                    vis.run()
+                    vis.destroy_window()
+
+                    # Handle user action
+                    action = shared_state["action"]
+                    if action == "accept":
+                        # Accept the match
+                        self.fragment_transforms[unplaced_idx] = world_transform
+                        self.is_fragment_placed[unplaced_idx] = True
+                        current_assembly_components.append(
+                            (self._get_transformed_mesh(unplaced_idx), unplaced_name)
+                        )
+                        num_placed += 1
+                        unplaced_indices.remove(unplaced_idx)
+                        print(f"    Placed fragment: {unplaced_name} via manual review")
+                        break  # Move to next unplaced fragment
+                    elif action == "next":
+                        # Continue to next option
+                        continue
+                    elif action == "skip":
+                        # Skip this fragment entirely
+                        print(f"    Skipped fragment: {unplaced_name}")
+                        break  # Move to next unplaced fragment
+                    elif action == "finalize":
+                        # Finalize assembly
+                        print("    Finalizing assembly as per user request.")
+                        break  # Exit manual review loop
+
+            # Update final count after manual review
+            print(
+                f"\nAfter manual review: {num_placed}/{self.num_fragments} fragments assembled."
+            )
+            if unplaced_indices:
+                print("Remaining unplaced fragments:")
+                for idx_unplaced in unplaced_indices:
+                    print(f" - {self.fragments_data[idx_unplaced]['name']}")
+
         final_meshes_to_combine_o3d = []
         final_transforms_for_combine = []
         fragment_colors = []
