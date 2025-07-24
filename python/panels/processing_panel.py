@@ -250,7 +250,9 @@ class ProcessingPanel:
         """Continue processing a fragment after segmentation."""
         # Preprocessing now returns lists: (pcds_for_features_list, features_list, fracture_surfaces)
         pcds_for_features_list, features_list, _ = (
-            src.preprocessing.preprocess_fragment(frag_info_raw, self.app.params, self)
+            src.preprocessing.preprocess_fragment(
+                frag_info_raw, self.app.params, self, fracture_surfaces
+            )
         )
 
         # If no valid surfaces, store empty lists and continue
@@ -375,7 +377,7 @@ class ProcessingPanel:
             if self.processed_fragments_pipeline_data:
                 os.makedirs(self.app.params["output_dir"], exist_ok=True)
                 all_original_meshes = [
-                    fd["mesh"] for fd in self.processed_fragments_pipeline_data
+                    fd["original_mesh"] for fd in self.processed_fragments_pipeline_data
                 ]
                 combined_unaligned = src.io_utils.combine_meshes(all_original_meshes)
                 output_path = os.path.join(

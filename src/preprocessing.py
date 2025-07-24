@@ -9,10 +9,12 @@ print("\nDEBUG: preprocessing.py top level executed")
 np.random.seed(42)
 
 
-def preprocess_fragment(fragment_info, params, processing_panel=None):
+def preprocess_fragment(
+    fragment_info, params, processing_panel=None, fracture_surfaces=None
+):
     """
     Preprocesses a single fragment:
-    1. Identifies fracture surfaces using normal-based segmentation.
+    1. Identifies fracture surfaces using normal-based segmentation (or uses provided surfaces).
     2. Samples points densely from these fracture surfaces.
     3. Downsamples this point cloud.
     4. Estimates normals.
@@ -21,6 +23,8 @@ def preprocess_fragment(fragment_info, params, processing_panel=None):
         fragment_info (dict): Dict containing 'mesh' (original o3d.geometry.TriangleMesh)
                               and 'name'.
         params (dict): Dictionary of parameters from config.
+        processing_panel: Optional processing panel for interactive visualization.
+        fracture_surfaces: Optional list of already extracted fracture surfaces.
 
     Returns:
         tuple: (o3d.geometry.PointCloud, o3d.geometry.TriangleMesh or None)
@@ -35,11 +39,17 @@ def preprocess_fragment(fragment_info, params, processing_panel=None):
         print(f"    Preprocessing: Original mesh {fragment_name} has no vertices.")
         return [], [], []
 
-    # --- Step 1: Identify and Extract Fracture Surface Meshes (now a list) ---
-    print(f"    Preprocessing: Segmenting fracture surfaces for {fragment_name}...")
-    fracture_surfaces = extract_fracture_surface_mesh(
-        original_mesh, fragment_name, params, processing_panel
-    )
+    # --- Step 1: Use provided fracture surfaces or extract them ---
+    if fracture_surfaces is None:
+        print(f"    Preprocessing: Segmenting fracture surfaces for {fragment_name}...")
+        fracture_surfaces = extract_fracture_surface_mesh(
+            original_mesh, fragment_name, params, processing_panel
+        )
+    else:
+        print(
+            f"    Preprocessing: Using provided fracture surfaces for {fragment_name}..."
+        )
+
     if not isinstance(fracture_surfaces, list):
         fracture_surfaces = [fracture_surfaces] if fracture_surfaces is not None else []
 
