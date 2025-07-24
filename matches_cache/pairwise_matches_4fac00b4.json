@@ -1,0 +1,3053 @@
+{
+  "metadata": {
+    "num_fragments": 8,
+    "num_matches": 80,
+    "top_n_per_pair": 3,
+    "fragment_names": [
+      "head_part02.obj",
+      "head_part03.obj",
+      "head_part04.obj",
+      "head_part05.obj",
+      "head_part06.obj",
+      "head_part07.obj",
+      "head_part08.obj",
+      "head_part09.obj"
+    ],
+    "params_hash": "2897cd23"
+  },
+  "params": {
+    "// --- I. Preprocessing, Point Cloud Generation ---": null,
+    "voxel_downsample_size": 1.0,
+    "fracture_surface_dense_sample_points": 10000,
+    "add_preprocessing_noise": true,
+    "preprocessing_noise_factor": 0.01,
+    "// --- Normal Estimation (for features PCD & fallbacks in alignment) ---": null,
+    "normal_estimation_radius": 14.0,
+    "normal_estimation_max_nn": 30,
+    "orient_normals_k": 15,
+    "// --- II. Segmentation (New Parameters based on Region Growing) ---": null,
+    "visualize_segmentation": true,
+    "// Enables interactive selection of segments from extract_fracture_surface_mesh": null,
+    "visualize_merged_regions": false,
+    "// Enables visualization of merged regions after clustering (debug feature)": null,
+    "debug_voxel_downsampling": false,
+    "// Enables visualization of voxel downsampled point clouds before FPFH feature extraction": null,
+    "max_angle_deviation_deg": 30.0,
+    "// Max angle (degrees) for region growing normal similarity (e.g., 20-45)": null,
+    "min_region_area_percentage": 2.0,
+    "// Min area percentage for a region to survive cleanup (e.g., 1-5%)": null,
+    "fracture_roughness_threshold": 0.1,
+    "// Threshold for `calculate_region_roughness` if automatic selection is used (e.g., 0.05-0.25 radians). Higher = only very rough regions selected.": null,
+    "min_final_segment_size_after_cleanup": 50,
+    "// Optional: Min number of faces for a segment after cleanup to be considered for selection (e.g., 20-100)": null,
+    "// --- III. Feature Extraction (FPFH) ---": null,
+    "fpfh_feature_radius": 10.0,
+    "fpfh_feature_max_nn": 100,
+    "// --- IV. Alignment: RANSAC (Global Registration) ---": null,
+    "ransac_distance_threshold_factor": 1.5,
+    "ransac_edge_length_factor": 0.9,
+    "ransac_iterations": 4000000,
+    "ransac_n_points": 4,
+    "ransac_confidence": 0.999,
+    "// --- V. Alignment: ICP (Local Refinement) ---": null,
+    "icp_max_correspondence_distance_factor": 2.0,
+    "icp_relative_fitness": 1e-06,
+    "icp_relative_rmse": 1e-06,
+    "icp_max_iteration": 50,
+    "// --- VI. Matching and Assembly ---": null,
+    "min_match_score": 0.3,
+    "// Minimum ICP fitness for a pairwise alignment to be considered valid": null,
+    "// --- Boolean Penetration Test Configuration ---": null,
+    "// Penetration test performed during PAIRWISE MATCHING to reject bad matches early": null,
+    "// - use_boolean_intersection_test: Mathematically precise geometric intersection test": null,
+    "// - Set to false to disable penetration tests (not recommended)": null,
+    "use_boolean_intersection_test": true,
+    "// Boolean penetration test parameters:": null,
+    "boolean_penetration_threshold": 0.05,
+    "// Maximum allowed penetration ratio (0.1 = 10% of smaller fragment volume)": null,
+    "debug_assembly": true,
+    "disable_overlap_check": true,
+    "// --- VII. Post-Processing Snapping Configuration ---": null,
+    "// Post-processing step that snaps adjacent fragments together": null,
+    "enable_post_processing_snapping": false,
+    "// Set to false to disable snapping (useful when snapping messes up correctly aligned fragments)": null,
+    "snap_score_threshold": 0.7,
+    "// Minimum match score required for snapping (higher = more selective snapping)": null,
+    "// --- VIII. Match Caching Configuration ---": null,
+    "// Cache pairwise matches to avoid recomputation on subsequent runs": null,
+    "use_match_caching": true,
+    "// Enable/disable loading and saving of cached pairwise matches": null,
+    "matches_cache_dir": "matches_cache",
+    "// Directory to store/load cached pairwise matches": null,
+    "max_curvature_deg": 30.0,
+    "area_limit_fraction": 0.02,
+    "elevation_map_resolution": 64,
+    "bumpiness_threshold": 0.2,
+    "use_bumpiness_detection": false,
+    "use_saved_selections": true,
+    "force_interactive": false,
+    "skip_interactive_if_saved": true
+  },
+  "matches": [
+    {
+      "source_idx": 2,
+      "target_idx": 0,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.999910694973182,
+          0.00015808009848647248,
+          -0.013363273885204734,
+          -0.14464221778834566
+        ],
+        [
+          -0.0002727009010604205,
+          0.999963189001631,
+          -0.00857591254082343,
+          -0.07425347211233833
+        ],
+        [
+          0.013361426288652396,
+          0.008578790845553432,
+          0.9998739303708047,
+          -0.905011731498484
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 0.4655715678248215,
+      "confidence": 2.1478928723658495,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 0,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.5941381995070961,
+          0.7340743257413964,
+          0.32883838610140925,
+          49.91000180600971
+        ],
+        [
+          0.6711219664380199,
+          -0.2270486042492468,
+          -0.7057224932456342,
+          78.16977234367234
+        ],
+        [
+          -0.4433904668019266,
+          0.6399873558093027,
+          -0.6275516539324764,
+          -40.87087220462848
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 0.5289563151095041,
+      "confidence": 1.8905117132050269,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 0,
+      "source_surface_idx": 3,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          -0.11311046862725138,
+          0.494368274134741,
+          -0.8618619561252033,
+          7.331931312278663
+        ],
+        [
+          -0.991416546782803,
+          -0.11340025244903636,
+          0.06506622403181399,
+          35.87355251894625
+        ],
+        [
+          -0.06556868652174586,
+          0.8618238754371648,
+          0.5029516428785988,
+          -21.526882779924534
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 0.4102424667040944,
+      "confidence": 2.437576905328983,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 1,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.99993941797949,
+          -0.004611610909257094,
+          -0.00999466936194883,
+          -0.08021458871177199
+        ],
+        [
+          0.004643691507157303,
+          0.9999841332555104,
+          0.003188944404622385,
+          0.19038609873437232
+        ],
+        [
+          0.009979804608278221,
+          -0.0032351633731601275,
+          0.9999449670946523,
+          0.10411947754793528
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 0.46436671758542,
+      "confidence": 2.153465803350232,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 1,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.6086404268248421,
+          -0.38824687209830255,
+          0.6919690723871678,
+          -26.06363187962586
+        ],
+        [
+          -0.2360511902370566,
+          -0.7440168993037254,
+          -0.6250749468168911,
+          33.220725928265914
+        ],
+        [
+          0.7575200765802461,
+          -0.5437860055723717,
+          0.36119262689249626,
+          -6.623907167275615
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 0.6035467331366824,
+      "confidence": 1.6568697802954635,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 1,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.836968824411311,
+          0.05926065245382945,
+          0.5440325008988839,
+          -19.730932058962864
+        ],
+        [
+          0.16054675193365178,
+          -0.9237882017849142,
+          0.3476206246564615,
+          32.90206815599996
+        ],
+        [
+          0.5231710307414799,
+          0.3782902765255019,
+          0.7636678199840277,
+          -6.534545899832974
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 0.4369944680459802,
+      "confidence": 2.288353251056556,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 3,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9998125703300456,
+          0.0012422099898018611,
+          -0.019320484579013034,
+          -0.6880720514505615
+        ],
+        [
+          -0.000988842161025009,
+          0.9999134666897641,
+          0.01311797711686086,
+          0.6868556253513773
+        ],
+        [
+          0.019335107995747204,
+          -0.01309641350901618,
+          0.9997272815883307,
+          0.6336114578657897
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 0.45236448865595574,
+      "confidence": 2.210601880729555,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 2,
+      "source_surface_idx": 3,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.6949411494364209,
+          0.49204692279660894,
+          -0.5243535301553474,
+          -20.054348352643444
+        ],
+        [
+          -0.5881256264539454,
+          0.03061603432685242,
+          0.8081898947340603,
+          21.130101133033712
+        ],
+        [
+          0.4137209764178515,
+          0.8700301628153393,
+          0.26810906262820455,
+          -18.613063858784965
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 0.4563372435634713,
+      "confidence": 2.191356990356895,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part04.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 4,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.7905103382265293,
+          -0.13990585942784778,
+          -0.5962547741148356,
+          -55.28707984051837
+        ],
+        [
+          -0.4786609320296877,
+          -0.46621000445371474,
+          0.7439972741184857,
+          9.811380834658905
+        ],
+        [
+          -0.3820695189431489,
+          0.873541402707978,
+          0.30157635923514947,
+          -53.21470500454994
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 0.540283239395801,
+      "confidence": 1.8508776067913777,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part06.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 4,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.9998190930298676,
+          0.018654643452272093,
+          -0.0037128817107110984,
+          -0.8610687524691953
+        ],
+        [
+          -0.018688686973966227,
+          0.9997815765306072,
+          -0.00935586496089821,
+          -1.085161760949858
+        ],
+        [
+          0.003537540405173288,
+          0.00942356130377805,
+          0.9999493398668954,
+          -0.48686266676282747
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9985549132947977,
+      "rmse": 0.4799479574005073,
+      "confidence": 2.080543978474621,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part06.obj"
+    },
+    {
+      "source_idx": 0,
+      "target_idx": 3,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.999837381409962,
+          -0.01604358665150282,
+          -0.008234929424481485,
+          0.996425280139343
+        ],
+        [
+          0.015914696833996118,
+          0.9997534304887672,
+          -0.01548549807463996,
+          -0.32747188652560727
+        ],
+        [
+          0.008481341872160264,
+          0.015351923439537065,
+          0.9998461808132059,
+          -1.284907658538969
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9982142857142857,
+      "rmse": 0.4665969663902287,
+      "confidence": 2.1393455557400602,
+      "source_name": "head_part02.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 3,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.27205009096568644,
+          -0.9571420885133941,
+          -0.09933665185509345,
+          63.90901341406533
+        ],
+        [
+          -0.35508538270999923,
+          0.003905955313270807,
+          0.9348257134347471,
+          110.51875024648555
+        ],
+        [
+          -0.8943730312298427,
+          0.28959241341808156,
+          -0.34092978030590987,
+          -20.565487571442844
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9968895800933126,
+      "rmse": 0.6604332563145591,
+      "confidence": 1.509445596684044,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 3,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.45761231578723355,
+          -0.4684152350588949,
+          -0.7557632804023764,
+          2.2748758792202612
+        ],
+        [
+          0.8083977619618594,
+          0.13475761240630724,
+          -0.5730038781313859,
+          126.44280475187824
+        ],
+        [
+          0.3702486014759546,
+          -0.8731709760770058,
+          0.3169990846072414,
+          3.734754769567701
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9951573849878934,
+      "rmse": 0.6038075313247834,
+      "confidence": 1.6481340248778413,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 0,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9999328087024517,
+          0.006068398116106186,
+          0.00987687322656885,
+          0.15343432107322663
+        ],
+        [
+          -0.006320288383467577,
+          0.9996503667007894,
+          0.025674857540563506,
+          1.0191232461575355
+        ],
+        [
+          -0.009717614685666598,
+          -0.025735557100689734,
+          0.9996215529216746,
+          1.2401229246467476
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9898648648648649,
+      "rmse": 0.4972628407531834,
+      "confidence": 1.9906230530769355,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 3,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.5149651372421237,
+          0.4656804453835625,
+          0.7196892594811795,
+          -24.332421686648473
+        ],
+        [
+          -0.8287538764952307,
+          -0.05593691203417119,
+          -0.5568106267540239,
+          31.723340036561233
+        ],
+        [
+          -0.21903862586157752,
+          -0.883183324491268,
+          0.4147400339022306,
+          38.48956571505511
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.97352587244284,
+      "rmse": 0.8104649129192796,
+      "confidence": 1.201192865639743,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 1,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.31650798098439653,
+          0.8674009141396377,
+          0.3839770203057771,
+          -3.082258790233682
+        ],
+        [
+          0.35601800841710274,
+          -0.48381895131174635,
+          0.7994813318860685,
+          -1.1291863126059443
+        ],
+        [
+          0.8792461974077006,
+          -0.1163394881427796,
+          -0.461942905392837,
+          21.573065523373153
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9443099273607748,
+      "rmse": 0.885093705176367,
+      "confidence": 1.0669026962178114,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 5,
+      "source_surface_idx": 2,
+      "target_surface_idx": 3,
+      "transformation": [
+        [
+          0.9987845702927152,
+          -0.03987426778410804,
+          0.028972830615596724,
+          -0.9323178895790638
+        ],
+        [
+          0.03934432856074323,
+          0.9990519012291741,
+          0.01863658929294524,
+          1.3778127805984168
+        ],
+        [
+          -0.029688481862552213,
+          -0.017474021261601615,
+          0.9994064501621188,
+          -1.546112569944001
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9418886198547215,
+      "rmse": 0.5197658329624251,
+      "confidence": 1.8121368277510166,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part07.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 7,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9976613887730926,
+          -0.053903705901417534,
+          -0.042025514172204605,
+          7.026751173552642
+        ],
+        [
+          0.06574222539568998,
+          0.5885496931120191,
+          0.8057836052798368,
+          -51.09308590852618
+        ],
+        [
+          -0.018700619010262327,
+          -0.8066620415191493,
+          0.590717053775148,
+          80.52084874781724
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9399744572158365,
+      "rmse": 0.7019468176750095,
+      "confidence": 1.3390944932761788,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part09.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 0,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.7960370639112236,
+          -0.03378989473442927,
+          0.6043039267565911,
+          -12.103007820515042
+        ],
+        [
+          -0.5628783511660477,
+          -0.3256650875684452,
+          -0.759677703060732,
+          20.624935158663106
+        ],
+        [
+          0.2224701208436562,
+          -0.944881206159205,
+          0.24022187989218646,
+          -11.685225860203008
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9376114081996435,
+      "rmse": 0.7748645364853293,
+      "confidence": 1.2100311138529976,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 2,
+      "source_surface_idx": 3,
+      "target_surface_idx": 3,
+      "transformation": [
+        [
+          -0.9451328333276878,
+          -0.2798630609863017,
+          0.1685247591938797,
+          -11.97821741037461
+        ],
+        [
+          0.15223980093775813,
+          -0.8337384032639164,
+          -0.5307573060574539,
+          41.42553437680968
+        ],
+        [
+          0.2890449279548242,
+          -0.47597998069069297,
+          0.8305998360253147,
+          -10.166674819469367
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9155555555555556,
+      "rmse": 0.5739017646029576,
+      "confidence": 1.595314767631348,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part04.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 1,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.495671485961534,
+          0.5725125416733363,
+          0.6530996613315776,
+          -30.740546829732143
+        ],
+        [
+          0.7750152030995483,
+          -0.6309677190669981,
+          -0.03508806720177517,
+          21.02481815567052
+        ],
+        [
+          0.39199644509772075,
+          0.5235543210805608,
+          -0.7564586306656979,
+          -84.01216979781118
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9051321928460342,
+      "rmse": 0.7271908061541509,
+      "confidence": 1.2446952580955832,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 1,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.998832734433198,
+          0.03356724583358247,
+          0.0347333936125938,
+          0.8707097406747931
+        ],
+        [
+          -0.03374884399617095,
+          0.9994195039593088,
+          0.004655172891511759,
+          -0.4390145470872963
+        ],
+        [
+          -0.03455696968227491,
+          -0.005821950950977447,
+          0.9993857717285664,
+          -0.1145969153513163
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9016553067185978,
+      "rmse": 0.5222129934071902,
+      "confidence": 1.7266011981711542,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 4,
+      "source_surface_idx": 3,
+      "target_surface_idx": 3,
+      "transformation": [
+        [
+          0.5238939909501833,
+          0.6296216942103036,
+          0.5736824979254955,
+          -5.746512826828426
+        ],
+        [
+          0.4102894598623018,
+          -0.7767580222300209,
+          0.47781746936168856,
+          -29.363124379962947
+        ],
+        [
+          0.7464567270593713,
+          -0.014949818763304782,
+          -0.6652660051037885,
+          31.374754498844514
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9001782531194296,
+      "rmse": 0.8158771356423395,
+      "confidence": 1.1033243983315237,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part06.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 4,
+      "source_surface_idx": 1,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.4960010793495949,
+          -0.33396948936458154,
+          0.8015281089628734,
+          33.36285949459253
+        ],
+        [
+          0.0370402896220226,
+          -0.9140992193374262,
+          -0.40379528743092374,
+          42.79206930554387
+        ],
+        [
+          0.8675315246310964,
+          0.22997173169819457,
+          -0.4410238728130033,
+          -63.8227978051387
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8965102286401926,
+      "rmse": 0.7961698587881666,
+      "confidence": 1.1260274333636755,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part06.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 3,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.9980876589977254,
+          -0.03757977770419039,
+          0.04907937717762565,
+          1.4228991260884984
+        ],
+        [
+          0.03871842957634717,
+          0.9989977359248273,
+          -0.02245900327731,
+          1.0362675326765145
+        ],
+        [
+          -0.048186182330429546,
+          0.0243163304133761,
+          0.9985423415697736,
+          -4.596733532666322
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.89272030651341,
+      "rmse": 0.6273177723653091,
+      "confidence": 1.4230728392638448,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 2,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.38774992589282575,
+          0.8179336979803947,
+          -0.42501113006393865,
+          6.659660003127849
+        ],
+        [
+          0.6201245271046645,
+          0.5726164196091104,
+          0.536242488877243,
+          40.663178885492954
+        ],
+        [
+          0.6819791535328077,
+          -0.05563184072238354,
+          -0.7292527219315093,
+          17.87388863478887
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8813559322033898,
+      "rmse": 0.8228533363285478,
+      "confidence": 1.071095931918968,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part04.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 3,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.8590495933299305,
+          0.49778352726477876,
+          0.11935391147138202,
+          -70.2160666858778
+        ],
+        [
+          0.4995198613077872,
+          0.8661345989064141,
+          -0.017051825012950574,
+          66.1657529732989
+        ],
+        [
+          -0.1118646698414253,
+          0.044971285961818326,
+          -0.9927053334601407,
+          8.843682861765142
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8547215496368039,
+      "rmse": 0.7072598008185612,
+      "confidence": 1.208495577087796,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 0,
+      "target_idx": 7,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.5797291643445027,
+          -0.7604088661136639,
+          -0.2927327319316297,
+          26.059331667762414
+        ],
+        [
+          0.4299683500107917,
+          0.019678884603567107,
+          -0.9026294696550498,
+          -37.189062028587784
+        ],
+        [
+          0.6921281051925438,
+          -0.6491464378986372,
+          0.31554332217001146,
+          87.31897700848212
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8544642857142857,
+      "rmse": 1.009054380976771,
+      "confidence": 0.84679622330259,
+      "source_name": "head_part02.obj",
+      "target_name": "head_part09.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 4,
+      "source_surface_idx": 1,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.9994094246342776,
+          -0.015681856821741676,
+          -0.03057582899611266,
+          -1.0521456692047013
+        ],
+        [
+          0.01776491809880484,
+          0.9974521520241926,
+          0.0690913316361347,
+          2.05180656346156
+        ],
+        [
+          0.02941444606175471,
+          -0.06959370509560422,
+          0.997141668256792,
+          1.4442874772274772
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8401453224341507,
+      "rmse": 0.6727859550623522,
+      "confidence": 1.248753882804235,
+      "source_name": "head_part03.obj",
+      "target_name": "head_part06.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 1,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.2659639211978085,
+          -0.8646962944453621,
+          -0.42610270005427486,
+          65.04982213560606
+        ],
+        [
+          -0.5256010631548573,
+          -0.5006173754758939,
+          0.6878413812661399,
+          37.05853548128308
+        ],
+        [
+          -0.8080883089313742,
+          0.04101904123802283,
+          -0.5876314518678721,
+          -63.596152528508334
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8058748403575989,
+      "rmse": 0.7101587136158536,
+      "confidence": 1.1347797191344489,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 0,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.19806530861106827,
+          0.188158032619986,
+          -0.9619598163568878,
+          -16.563453640195345
+        ],
+        [
+          -0.694094094037795,
+          -0.6660343958692184,
+          -0.2731877964715437,
+          69.2524500761462
+        ],
+        [
+          -0.6921008034575977,
+          0.7217996524519126,
+          -0.0013189289761199935,
+          -52.037528949616004
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7870036101083032,
+      "rmse": 0.8511496480899632,
+      "confidence": 0.9246349184769934,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 7,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.5580563937620314,
+          -0.8046564843985322,
+          -0.20273382425414357,
+          -69.30246173301619
+        ],
+        [
+          0.6785503875355858,
+          -0.5831379456935122,
+          0.44667606592211495,
+          -14.805422298118678
+        ],
+        [
+          -0.47764257866800697,
+          0.11170531951408597,
+          0.8714238283611667,
+          18.708991108381415
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7791970802919708,
+      "rmse": 0.7383483046947809,
+      "confidence": 1.055323104305049,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part09.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 3,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.6168548577263233,
+          -0.7840006648584005,
+          -0.06952008343653701,
+          -12.888800978007653
+        ],
+        [
+          -0.4170635713651648,
+          -0.25068005860872633,
+          -0.8736231943212472,
+          50.011539614472916
+        ],
+        [
+          0.6674938665932223,
+          0.5678930055190963,
+          -0.4816113291264201,
+          6.046683552252276
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7784810126582279,
+      "rmse": 0.6614475712102243,
+      "confidence": 1.1769335463736421,
+      "source_name": "head_part03.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 1,
+      "source_surface_idx": 3,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.5812689665651068,
+          0.3304714112311212,
+          0.7435825676192543,
+          -18.89452611287959
+        ],
+        [
+          0.5164484437673624,
+          0.5563429053423199,
+          -0.6509712563589384,
+          -45.371581370299495
+        ],
+        [
+          -0.6288142757910328,
+          0.7624114493068535,
+          0.15271341960424328,
+          -30.514407044537116
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7652027027027027,
+      "rmse": 0.8767156666695634,
+      "confidence": 0.87280501420091,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 0,
+      "target_idx": 1,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.25119725968297696,
+          -0.12892256807722338,
+          0.9593116845781341,
+          46.2517235386672
+        ],
+        [
+          0.9615512942443492,
+          -0.146883331983987,
+          0.23204395127280922,
+          33.497316567020825
+        ],
+        [
+          0.11099119453713115,
+          0.9807161965755724,
+          0.16086235267944088,
+          -96.96939823235542
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7633928571428571,
+      "rmse": 0.9093626347811643,
+      "confidence": 0.8394803002283738,
+      "source_name": "head_part02.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 4,
+      "source_surface_idx": 0,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.12353514897208139,
+          0.8156476122576786,
+          0.565206192098771,
+          -10.911207790840052
+        ],
+        [
+          0.9910933720093378,
+          -0.12995419024285668,
+          -0.029083266623302465,
+          1.5052050729766142
+        ],
+        [
+          0.04972921603649418,
+          0.5637649164826334,
+          -0.8244368526550259,
+          -77.54690400949207
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7567849686847599,
+      "rmse": 0.9730969936642159,
+      "confidence": 0.777706843105363,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part06.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 5,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.04265392936728021,
+          0.2473528253524228,
+          -0.9679861683411118,
+          5.424707295802448
+        ],
+        [
+          0.23524199382589084,
+          -0.9391416890157057,
+          -0.2503479424591865,
+          8.915812301213503
+        ],
+        [
+          -0.9710004359681572,
+          -0.23838931969134516,
+          -0.018129688545227073,
+          -8.160549294985897
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7523277467411545,
+      "rmse": 0.8829081404651415,
+      "confidence": 0.8521009832844261,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part07.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 1,
+      "source_surface_idx": 1,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          -0.5140644841689632,
+          -0.5447236856637758,
+          -0.6625811741914877,
+          22.18238676530583
+        ],
+        [
+          0.7793692553393132,
+          0.025971425334121622,
+          -0.6260263963268302,
+          -4.567067557143336
+        ],
+        [
+          0.35821958342327165,
+          -0.8382133328353738,
+          0.4111899058939446,
+          34.982107735723275
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7458492975734355,
+      "rmse": 0.7258391615389939,
+      "confidence": 1.0275668626437209,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 2,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.4630076877500517,
+          0.10070425268897346,
+          0.8806148616590037,
+          36.15714188188338
+        ],
+        [
+          -0.40274376356529556,
+          -0.8611356311432313,
+          0.3102303751807845,
+          61.78955406701895
+        ],
+        [
+          0.7895703527828358,
+          -0.4983011923183657,
+          -0.35815440767982115,
+          -36.54412479977337
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6991236611489776,
+      "rmse": 0.82586429419578,
+      "confidence": 0.8465347388520277,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part04.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 4,
+      "source_surface_idx": 3,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.6247904119128845,
+          0.7644109065029063,
+          0.15910030547152568,
+          15.794657329254374
+        ],
+        [
+          -0.5367833188948391,
+          0.5684980181247077,
+          -0.6234369831382482,
+          -4.026989975585629
+        ],
+        [
+          -0.5670102377717432,
+          0.3041150594884837,
+          0.7655151343078376,
+          -71.02952578032594
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.696969696969697,
+      "rmse": 0.742977928864889,
+      "confidence": 0.9380746477353211,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part06.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 0,
+      "source_surface_idx": 2,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.20915206300315625,
+          -0.9414425281626733,
+          0.2644643278557581,
+          -11.887901495221946
+        ],
+        [
+          0.7055175782898732,
+          -0.04199309823989321,
+          -0.7074471898482657,
+          53.71106004191365
+        ],
+        [
+          0.6771265474529239,
+          0.33454827135540316,
+          0.6554213094396573,
+          -7.222067435066758
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.696604600219058,
+      "rmse": 0.8354420379308459,
+      "confidence": 0.8338145972756549,
+      "source_name": "head_part03.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 0,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9584138517259922,
+          0.28225428057271246,
+          -0.042135613418203904,
+          53.76208555547109
+        ],
+        [
+          0.2797193476388868,
+          -0.9583674713362688,
+          -0.057348726585701934,
+          73.94831892008524
+        ],
+        [
+          -0.05656832484901518,
+          0.04317766764087898,
+          -0.9974646428023756,
+          -33.240741114709486
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6965317919075145,
+      "rmse": 0.8869584748662174,
+      "confidence": 0.7853028369899023,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 6,
+      "source_surface_idx": 3,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.9995396143866107,
+          0.029902764873140825,
+          -0.005136528478393316,
+          0.1380234721564278
+        ],
+        [
+          -0.0300177084420977,
+          0.9992615246755233,
+          -0.023986297818439375,
+          -0.6847370665010782
+        ],
+        [
+          0.0044154786550166455,
+          0.024129441686274143,
+          0.9996990915231232,
+          0.2561588497617218
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6951871657754011,
+      "rmse": 0.5441149596125328,
+      "confidence": 1.2776452399419542,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part08.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 3,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9409179667292404,
+          0.28179448007786884,
+          -0.18779044406933165,
+          2.4484676536239505
+        ],
+        [
+          -0.33427096463739553,
+          0.8616329489620885,
+          -0.3819052021945756,
+          25.472470693826505
+        ],
+        [
+          0.054187656218903764,
+          0.4221143592209796,
+          0.9049216350894499,
+          -6.0740180181755585
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6902815622161671,
+      "rmse": 0.8875073450266797,
+      "confidence": 0.7777747286369643,
+      "source_name": "head_part03.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 5,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.8146641714767722,
+          0.5631399751673739,
+          0.1385483889496894,
+          -7.143661136342899
+        ],
+        [
+          -0.2244207724702015,
+          -0.08583657316382719,
+          -0.9707045892501838,
+          35.563859276302495
+        ],
+        [
+          -0.5347500393603952,
+          -0.8218913864227934,
+          0.19630828899482666,
+          -9.820681069498292
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6725082146768894,
+      "rmse": 0.6529431366767275,
+      "confidence": 1.029962866501469,
+      "source_name": "head_part03.obj",
+      "target_name": "head_part07.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 2,
+      "source_surface_idx": 3,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.41349320614987645,
+          -0.9030773917475383,
+          -0.1160801145001071,
+          28.292808900791023
+        ],
+        [
+          0.22368190519442255,
+          -0.02282961711342194,
+          0.9743947936391318,
+          29.050364914448355
+        ],
+        [
+          -0.8826039733405284,
+          -0.4288706484441628,
+          0.1925621799486964,
+          -78.48879066535261
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6684491978609626,
+      "rmse": 0.5889890502087451,
+      "confidence": 1.1349074532312662,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part04.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 7,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.9688518664615853,
+          0.212453559259564,
+          0.1272381468422353,
+          -60.01062680905227
+        ],
+        [
+          0.14309900991789945,
+          0.8996358419619583,
+          -0.4125263933591607,
+          14.915955168995486
+        ],
+        [
+          -0.20211069792175845,
+          -0.3814693133337767,
+          -0.9020157586041608,
+          31.31006756828008
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6599839615076183,
+      "rmse": 0.8365774399254261,
+      "confidence": 0.7889086426449745,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part09.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 5,
+      "source_surface_idx": 3,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.30008349270636175,
+          0.3426191666737424,
+          -0.8902595149915236,
+          -71.13082906535475
+        ],
+        [
+          -0.9241844147777237,
+          -0.12675443491228588,
+          -0.36030054220334495,
+          70.59062478447363
+        ],
+        [
+          -0.23629021326984376,
+          0.9308842139911156,
+          0.2786063804995038,
+          -25.041840283398816
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6587837837837838,
+      "rmse": 0.8056923447497335,
+      "confidence": 0.8176606994171174,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part07.obj"
+    },
+    {
+      "source_idx": 0,
+      "target_idx": 1,
+      "source_surface_idx": 2,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.1261608256099735,
+          0.6225867372851226,
+          0.7723141851850676,
+          -21.709102918290597
+        ],
+        [
+          -0.9375257025153085,
+          -0.17963226494077858,
+          0.29795604795912867,
+          1.9272199879962946
+        ],
+        [
+          0.3242360300839298,
+          -0.7616547800341776,
+          0.5610285133988313,
+          46.85970824042363
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6508928571428572,
+      "rmse": 0.919785589281356,
+      "confidence": 0.7076563897842979,
+      "source_name": "head_part02.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 3,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.6274299043977093,
+          0.4086087652302794,
+          0.6628503541859729,
+          -13.455618472039367
+        ],
+        [
+          -0.7578741300166598,
+          -0.515882849225821,
+          -0.39936410570573255,
+          30.84746249348443
+        ],
+        [
+          0.17876945521808976,
+          -0.752930118172753,
+          0.633354339236254,
+          13.962676003596739
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6330608537693007,
+      "rmse": 0.8580036836222763,
+      "confidence": 0.7378291352637839,
+      "source_name": "head_part03.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 3,
+      "source_surface_idx": 0,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.8367027771891277,
+          0.5191317397878387,
+          -0.17444397206223541,
+          21.543856335947357
+        ],
+        [
+          0.500682165704303,
+          -0.5960228801988022,
+          0.6277532120389134,
+          28.931603417441167
+        ],
+        [
+          0.22191401846131234,
+          -0.6125838416285355,
+          -0.7586140028934183,
+          6.556982080240813
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6089385474860335,
+      "rmse": 0.9448481992814352,
+      "confidence": 0.6444822601840968,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 4,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.7984889550179773,
+          -0.3934171207950596,
+          -0.45567352104289044,
+          -42.64734445013079
+        ],
+        [
+          -0.5695540880049434,
+          -0.7388590745458731,
+          -0.360132487840343,
+          57.02858144013478
+        ],
+        [
+          -0.19499622958189908,
+          0.5470925305892441,
+          -0.8140431397796439,
+          -61.57526649968569
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5930485155684286,
+      "rmse": 0.8967138732022509,
+      "confidence": 0.6613568407208392,
+      "source_name": "head_part03.obj",
+      "target_name": "head_part06.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 3,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.9584438792842539,
+          0.0018353200350763078,
+          0.2852752387833891,
+          -0.8374114201059655
+        ],
+        [
+          0.24608953941192915,
+          0.5111590465363471,
+          0.8235025001395415,
+          109.59072053541986
+        ],
+        [
+          -0.14430962841950493,
+          0.8594841829518571,
+          -0.4903689125556431,
+          5.464976831479197
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5799522673031027,
+      "rmse": 0.6925150354908655,
+      "confidence": 0.8374568061691511,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 0,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.10140679113889069,
+          0.4701824949569264,
+          -0.8767240638576056,
+          5.148593113895873
+        ],
+        [
+          0.6692005383643419,
+          -0.6198496843824846,
+          -0.40982558268586844,
+          17.385511909919046
+        ],
+        [
+          -0.7361299492370827,
+          -0.6282633127972816,
+          -0.25178941127298293,
+          17.760965830060293
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.578383641674781,
+      "rmse": 1.0188242489385757,
+      "confidence": 0.5676966116390892,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 2,
+      "source_surface_idx": 2,
+      "target_surface_idx": 3,
+      "transformation": [
+        [
+          -0.9050161350066825,
+          0.2045144042337354,
+          -0.3729874714229529,
+          -17.40309774676254
+        ],
+        [
+          -0.3655632694940261,
+          -0.8222852727860678,
+          0.4361312029148813,
+          58.470356156963355
+        ],
+        [
+          -0.21750699155292919,
+          0.5310562951515244,
+          0.818944393720069,
+          -38.42882998987932
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5780346820809249,
+      "rmse": 0.8068637092239904,
+      "confidence": 0.7163960394758807,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part04.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 3,
+      "source_surface_idx": 0,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.999394129196231,
+          0.013446245291851925,
+          0.0321025390843605,
+          0.5754369790060955
+        ],
+        [
+          -0.013183897954598754,
+          0.9998780572748471,
+          -0.008369911289683665,
+          -0.39096162598623685
+        ],
+        [
+          -0.03221116829353223,
+          0.007941603605431374,
+          0.9994495342784129,
+          -1.0285349900104677
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5673352435530086,
+      "rmse": 0.5569507852974573,
+      "confidence": 1.0186433700899362,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 3,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.2699052574441871,
+          0.8285949595240141,
+          0.4904911263778233,
+          -30.737428959228694
+        ],
+        [
+          -0.6874773790647315,
+          -0.1908351893271369,
+          0.7006830837038687,
+          22.50675279897201
+        ],
+        [
+          0.6741854383463609,
+          -0.5263196021106143,
+          0.5181328701750647,
+          16.805533003859633
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5525260625501203,
+      "rmse": 0.7800422503464229,
+      "confidence": 0.7083274706943998,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 6,
+      "target_idx": 0,
+      "source_surface_idx": 0,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.10850454720002803,
+          -0.7463097783111499,
+          0.6566951180221168,
+          -18.49938889552845
+        ],
+        [
+          0.6478021707111813,
+          0.5541575566341734,
+          0.5227444404746223,
+          53.876248527237095
+        ],
+        [
+          -0.7540418495407267,
+          0.3686883741351306,
+          0.5435897091730076,
+          -6.365806374706961
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5493482309124768,
+      "rmse": 0.8160429466373639,
+      "confidence": 0.673184616068965,
+      "source_name": "head_part08.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 7,
+      "target_idx": 0,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.9997461041359251,
+          0.0010334534104844242,
+          -0.022509092364854284,
+          1.1903197726263253
+        ],
+        [
+          -0.0019528556923590697,
+          0.9991628821045273,
+          -0.04086222435478092,
+          1.2493540604163378
+        ],
+        [
+          0.02244802039570572,
+          0.04089580661417482,
+          0.9989112169665985,
+          -2.3700586473573884
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5367965367965368,
+      "rmse": 0.5194102566847568,
+      "confidence": 1.033471126950049,
+      "source_name": "head_part09.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 7,
+      "target_idx": 3,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9163033904638564,
+          -0.25708145308076036,
+          -0.30707852921740497,
+          45.44242936609091
+        ],
+        [
+          -0.17704333283848306,
+          -0.9478005186205216,
+          0.2651977284972712,
+          30.858258714831226
+        ],
+        [
+          -0.3592266066452795,
+          -0.18863537150957388,
+          -0.9139873859597651,
+          -4.236032487428455
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5340435386753126,
+      "rmse": 0.98881376572549,
+      "confidence": 0.5400845104527608,
+      "source_name": "head_part09.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 3,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.7764866676311217,
+          -0.6297731769526929,
+          -0.021311982123376802,
+          9.902833438705617
+        ],
+        [
+          0.5532551652678538,
+          -0.665173367231854,
+          -0.5014510082050664,
+          140.44802824918273
+        ],
+        [
+          0.3016242316120444,
+          -0.40116098653327287,
+          0.864923514415058,
+          24.268783662304855
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5325670498084292,
+      "rmse": 0.7297716311670099,
+      "confidence": 0.7297712014175962,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 0,
+      "target_idx": 4,
+      "source_surface_idx": 1,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.011283511708733434,
+          0.7101444492694491,
+          -0.7039655840560036,
+          -4.305645054599093
+        ],
+        [
+          0.4426050652865747,
+          -0.634835071421304,
+          -0.6333128676066644,
+          23.83944841241775
+        ],
+        [
+          -0.8966456594141234,
+          -0.30443274013367766,
+          -0.3214766992932996,
+          15.629222032825318
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.524232633279483,
+      "rmse": 1.0794658207013748,
+      "confidence": 0.48564033949544383,
+      "source_name": "head_part02.obj",
+      "target_name": "head_part06.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 7,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.5921929831919485,
+          0.06186393465587873,
+          -0.8034179013733231,
+          -71.88383938986847
+        ],
+        [
+          0.7661323569514141,
+          -0.2657348589272147,
+          -0.5851719374534331,
+          -19.958158497729464
+        ],
+        [
+          -0.2496971811821123,
+          -0.9620591657168633,
+          0.10997035677800213,
+          69.89840150278496
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5186246418338109,
+      "rmse": 0.9188334407537078,
+      "confidence": 0.5644375295819233,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part09.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 0,
+      "source_surface_idx": 0,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.999981278131221,
+          0.0037311053202512792,
+          0.0048499732096983356,
+          -0.017780923551192
+        ],
+        [
+          -0.003756952300264328,
+          0.9999787317800728,
+          0.005331162811821611,
+          -0.11335121553288648
+        ],
+        [
+          -0.004829978929471091,
+          -0.005349284120497486,
+          0.9999740278941941,
+          0.3072490065554868
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5181943804698296,
+      "rmse": 0.5942330472071625,
+      "confidence": 0.872037512669105,
+      "source_name": "head_part05.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 0,
+      "source_surface_idx": 3,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.9676213244411261,
+          -0.1165440845918926,
+          -0.22388936739702256,
+          -28.162822400043634
+        ],
+        [
+          -0.016977954170788196,
+          -0.854958083236889,
+          0.518419159541851,
+          31.396030900431867
+        ],
+        [
+          -0.2518347107905813,
+          0.5054346171905346,
+          0.8252969927162477,
+          5.995894129184221
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5115864527629234,
+      "rmse": 0.8331953222565636,
+      "confidence": 0.6140046938486031,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 0,
+      "source_surface_idx": 3,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.5287833183436632,
+          -0.6011908498031676,
+          -0.5991308407638597,
+          9.92467664119679
+        ],
+        [
+          0.1494801454755882,
+          -0.6288946117126097,
+          0.7629857491902741,
+          5.73787112911156
+        ],
+        [
+          -0.8354902084106446,
+          -0.4930123015420515,
+          -0.24268288398267307,
+          -10.828492594973984
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5095465393794749,
+      "rmse": 0.922879572177127,
+      "confidence": 0.5521261956760299,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part02.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 3,
+      "source_surface_idx": 3,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.5400087260167289,
+          -0.42609256004918067,
+          -0.7258344894647293,
+          -51.90824364329015
+        ],
+        [
+          -0.33036519368227446,
+          -0.6858677503364313,
+          0.6484167393364509,
+          26.67950838847708
+        ],
+        [
+          -0.7741120168483759,
+          0.5899411490302888,
+          0.22960841894791217,
+          -52.78884022439102
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.48663101604278075,
+      "rmse": 0.6466902150730603,
+      "confidence": 0.7524936240053969,
+      "source_name": "head_part07.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 7,
+      "target_idx": 4,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.2452956645165923,
+          0.25962183870363875,
+          -0.934037760391679,
+          -14.536240911411832
+        ],
+        [
+          0.32174656637405175,
+          -0.8870612882155963,
+          -0.33106104871427916,
+          37.353232099258356
+        ],
+        [
+          -0.9144994171654082,
+          -0.3817312822096612,
+          0.13405985300117537,
+          17.900829160935228
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.48484848484848486,
+      "rmse": 0.8961839384283233,
+      "confidence": 0.5410138734297228,
+      "source_name": "head_part09.obj",
+      "target_name": "head_part06.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 7,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9155064179266227,
+          -0.17704590743122903,
+          -0.36125163722399556,
+          -36.770752285170566
+        ],
+        [
+          -0.25713508338363955,
+          -0.9481125443707602,
+          -0.18698703725149463,
+          31.641636537032344
+        ],
+        [
+          -0.3094019192384773,
+          0.2640783025328965,
+          -0.9135278334582319,
+          1.923419333538377
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.4818056195301704,
+      "rmse": 0.995620966296942,
+      "confidence": 0.4839242562336888,
+      "source_name": "head_part05.obj",
+      "target_name": "head_part09.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 6,
+      "source_surface_idx": 2,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.06182985541010319,
+          -0.48503877033201903,
+          -0.8723041099609511,
+          -64.5551522188292
+        ],
+        [
+          -0.9328669518984447,
+          -0.33883087892346575,
+          0.1222819919025552,
+          3.68921200062816
+        ],
+        [
+          -0.3548750752527859,
+          0.8061829983091636,
+          -0.47342650348451676,
+          -1.6345278961051977
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.4790652385589094,
+      "rmse": 0.9899330605312174,
+      "confidence": 0.483936514217759,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part08.obj"
+    },
+    {
+      "source_idx": 0,
+      "target_idx": 7,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.31330691637628433,
+          0.4912266471809436,
+          0.8127331402435561,
+          -15.201182658342333
+        ],
+        [
+          0.9429287579605931,
+          -0.26257301790781434,
+          -0.20479445226293722,
+          44.55224268119739
+        ],
+        [
+          0.11280130124106474,
+          0.8305129688127401,
+          -0.5454576748677861,
+          -40.84417283944334
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.4669642857142857,
+      "rmse": 0.8299202170943882,
+      "confidence": 0.5626609804592779,
+      "source_name": "head_part02.obj",
+      "target_name": "head_part09.obj"
+    },
+    {
+      "source_idx": 7,
+      "target_idx": 1,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.7361832308157681,
+          0.6644494023594176,
+          0.12861276130256974,
+          33.720576286001794
+        ],
+        [
+          0.4006989766090569,
+          -0.2747775509572834,
+          -0.8740352553726707,
+          75.00378719557183
+        ],
+        [
+          -0.5454123035008585,
+          0.6949850999799431,
+          -0.4685308207532946,
+          -22.324008045488014
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.4585456229735989,
+      "rmse": 0.9064578455949082,
+      "confidence": 0.505864800373431,
+      "source_name": "head_part09.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 0,
+      "target_idx": 3,
+      "source_surface_idx": 0,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.417285620626835,
+          -0.8878265838900341,
+          -0.1940017210135756,
+          -8.148790319488521
+        ],
+        [
+          -0.4641272888110209,
+          -0.024666609103721565,
+          -0.8854249929701868,
+          36.065292420564475
+        ],
+        [
+          0.781318482181888,
+          0.45951661050877834,
+          -0.422357566603838,
+          -67.14827009622458
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.4402560455192034,
+      "rmse": 0.8280875808584502,
+      "confidence": 0.5316533227191775,
+      "source_name": "head_part02.obj",
+      "target_name": "head_part05.obj"
+    },
+    {
+      "source_idx": 7,
+      "target_idx": 1,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.5964681068123888,
+          -0.7939089587157043,
+          0.1180439021152348,
+          20.494093144749648
+        ],
+        [
+          -0.7874174262639325,
+          -0.5502908502846121,
+          0.27776568706181204,
+          52.30539956924986
+        ],
+        [
+          -0.15556218811628933,
+          -0.25862819908893114,
+          -0.9533686906252411,
+          12.55891937862431
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.42164502164502166,
+      "rmse": 0.8150157217732228,
+      "confidence": 0.5173452401413965,
+      "source_name": "head_part09.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 7,
+      "target_idx": 1,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.0871609694194186,
+          0.7261968880122739,
+          -0.681939180023525,
+          -3.451641315308703
+        ],
+        [
+          -0.4291955594676046,
+          0.6451281535669039,
+          0.6321398873735523,
+          -18.44311307955008
+        ],
+        [
+          0.8989961830526076,
+          0.23758734250091532,
+          0.36791047489871165,
+          -76.15992077847756
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.3887445887445887,
+      "rmse": 0.9722176039034888,
+      "confidence": 0.3998530651272942,
+      "source_name": "head_part09.obj",
+      "target_name": "head_part03.obj"
+    },
+    {
+      "source_idx": 7,
+      "target_idx": 5,
+      "source_surface_idx": 0,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.9675869575209768,
+          -0.2421304769188966,
+          -0.07175173713804242,
+          -6.977423791766709
+        ],
+        [
+          0.12598126273522495,
+          0.709042130890826,
+          -0.6938212868321605,
+          97.35228446259961
+        ],
+        [
+          0.21887028367262965,
+          0.6622930535411223,
+          0.7165638214117694,
+          -8.412999824075143
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.3659101435849931,
+      "rmse": 0.9729690602849546,
+      "confidence": 0.3760754400580719,
+      "source_name": "head_part09.obj",
+      "target_name": "head_part07.obj"
+    },
+    {
+      "source_idx": 7,
+      "target_idx": 5,
+      "source_surface_idx": 1,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          -0.7300703317032398,
+          -0.4895880118796706,
+          -0.47676083038608846,
+          3.5716895025741904
+        ],
+        [
+          -0.5177045701216456,
+          0.8516413183770166,
+          -0.08178656924104916,
+          -6.002615413944171
+        ],
+        [
+          0.44607094597371283,
+          0.18711131301118544,
+          -0.8752200110265675,
+          6.557010046373777
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.3645021645021645,
+      "rmse": 0.796258140775812,
+      "confidence": 0.4577682639184806,
+      "source_name": "head_part09.obj",
+      "target_name": "head_part07.obj"
+    },
+    {
+      "source_idx": 7,
+      "target_idx": 2,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.3169902156892979,
+          0.9183483129184308,
+          0.23696746468054394,
+          -21.107738495112628
+        ],
+        [
+          0.6453566401699627,
+          0.3919454732159583,
+          -0.655662682340588,
+          27.192266642751623
+        ],
+        [
+          -0.6950050432520534,
+          -0.05491012825873605,
+          -0.7169050618239639,
+          9.299642605589025
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.36363636363636365,
+      "rmse": 0.6719764573838202,
+      "confidence": 0.5411436940936871,
+      "source_name": "head_part09.obj",
+      "target_name": "head_part04.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 7,
+      "source_surface_idx": 3,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.8047945011776956,
+          -0.41136664406244444,
+          -0.4278823378300922,
+          63.400622101033875
+        ],
+        [
+          -0.15634337828248812,
+          -0.5485076887764538,
+          0.8213988455192345,
+          48.13055471374773
+        ],
+        [
+          -0.5725928387094645,
+          0.7279538443513526,
+          0.37712152093552515,
+          30.04328534189719
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.3614864864864865,
+      "rmse": 0.8737720869009118,
+      "confidence": 0.4137075081685138,
+      "source_name": "head_part04.obj",
+      "target_name": "head_part09.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 6,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.6925245141105161,
+          0.038328106540309395,
+          -0.7203754254588569,
+          -60.28816706932987
+        ],
+        [
+          -0.16635142054428986,
+          -0.9801596081029552,
+          0.1077698822786736,
+          -58.196622950180775
+        ],
+        [
+          -0.7019522791749386,
+          0.19446876071106411,
+          0.6851604913220048,
+          44.66923922593989
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.3532219570405728,
+      "rmse": 0.8488551933611436,
+      "confidence": 0.4161151910100931,
+      "source_name": "head_part06.obj",
+      "target_name": "head_part08.obj"
+    }
+  ]
+}

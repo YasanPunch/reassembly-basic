@@ -132,6 +132,7 @@ def main(args):
         params,
         debug=args.debug_pairwise_matching,
         top_n_per_pair=args.top_n_matches_per_pair,
+        n_jobs=args.n_jobs,
         use_cached_matches=use_cached_matches,
         save_matches=use_cached_matches,
         matches_cache_dir=matches_cache_dir,
@@ -259,6 +260,12 @@ if __name__ == "__main__":
         "--disable_snapping",
         action="store_true",
         help="Disable post-processing snapping step (useful when snapping messes up correctly aligned fragments)",
+    )
+    parser.add_argument(
+        "--n_jobs",
+        type=int,
+        default=None,
+        help="Number of parallel jobs for pairwise matching (default: use all CPU cores)",
     )
 
     parsed_args = parser.parse_args()

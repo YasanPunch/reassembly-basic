@@ -9,6 +9,23 @@ import json
 import numpy as np
 import hashlib
 
+# Global variable to store fragments data for parallel processing
+_global_fragments_data = None
+_global_params = None
+_global_top_n_per_pair = 3
+
+
+def _init_worker(fragments_data, params, top_n_per_pair=3):
+    """
+    Initialize worker process with fragments data and parameters.
+    This avoids the need to pickle Open3D objects.
+    """
+    global _global_fragments_data, _global_params, _global_top_n_per_pair
+    _global_fragments_data = fragments_data
+    _global_params = params
+    _global_top_n_per_pair = top_n_per_pair
+
+
 def test_proposed_pairwise_match(source_fragment, target_fragment, transformation, params):
     """
     Test if applying a transformation would cause penetration between two fragments.
@@ -129,22 +146,29 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
     return matches
 
 
-def _match_fragment_pair_wrapper(args):
+def _match_fragment_pair_wrapper(pair_indices):
     """
     Wrapper function for parallel processing of fragment pair matching.
+    Uses global variables to access fragments data, avoiding pickling issues.
 
     Args:
-        args: Tuple containing (i, j, frag_i_data, frag_j_data, params, debug, top_n_per_pair)
+        pair_indices: Tuple containing (i, j) indices of fragments to match
 
     Returns:
         list: Matches for this fragment pair
     """
-    i, j, frag_i_data, frag_j_data, params, debug, top_n_per_pair = args
+    global _global_fragments_data, _global_params, _global_top_n_per_pair
+
+    i, j = pair_indices
+    frag_i_data = _global_fragments_data[i]
+    frag_j_data = _global_fragments_data[j]
+    params = _global_params
+    top_n_per_pair = _global_top_n_per_pair
 
     # Set process name for debugging
     process_name = f"Worker-{os.getpid()}"
 
-    matches = _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug)
+    matches = _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False)
     if matches:
         # Only keep top N matches for this pair (by score)
         matches_sorted = sorted(matches, key=lambda x: x["score"], reverse=True)
@@ -218,21 +242,19 @@ def find_pairwise_matches(
 
     print(f"Processing {len(pairs)} fragment pairs using {n_jobs} parallel workers...")
 
-    # Prepare arguments for parallel processing
-    args_list = []
-    for i, j in pairs:
-        args_list.append(
-            (i, j, fragments_data[i], fragments_data[j], params, debug, top_n_per_pair)
-        )
-
     results = []
 
     # Use parallel processing for better performance
-    if n_jobs > 1 and len(pairs) > 1:
+    if n_jobs > 1 and len(pairs) > 1 and not debug:
         try:
-            with mp.Pool(processes=n_jobs) as pool:
-                # Use map to maintain deterministic order
-                parallel_results = pool.map(_match_fragment_pair_wrapper, args_list)
+            # Use global variable approach to avoid pickling Open3D objects
+            with mp.Pool(
+                processes=n_jobs,
+                initializer=_init_worker,
+                initargs=(fragments_data, params, top_n_per_pair),
+            ) as pool:
+                # Pass only the pair indices to avoid pickling issues
+                parallel_results = pool.map(_match_fragment_pair_wrapper, pairs)
 
                 # Flatten results
                 for result in parallel_results:
@@ -254,7 +276,7 @@ def find_pairwise_matches(
                     )
                     results.extend(matches_sorted[:top_n_per_pair])
     else:
-        # Sequential processing for small numbers of pairs or single job
+        # Sequential processing for small numbers of pairs, single job, or debug mode
         for i, j in pairs:
             matches = _match_fragment_pair(
                 i, j, fragments_data[i], fragments_data[j], params, debug
