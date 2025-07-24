@@ -1,5 +1,5 @@
 {
-  "fragment_name": "head_part09.obj",
+  "fragment_name": "head_part04.obj",
   "params": {
     "// --- I. Preprocessing, Point Cloud Generation ---": null,
     "voxel_downsample_size": 1.0,
@@ -58,6 +58,12 @@
     "// Set to false to disable snapping (useful when snapping messes up correctly aligned fragments)": null,
     "snap_score_threshold": 0.7,
     "// Minimum match score required for snapping (higher = more selective snapping)": null,
+    "// --- VIII. Match Caching Configuration ---": null,
+    "// Cache pairwise matches to avoid recomputation on subsequent runs": null,
+    "use_match_caching": true,
+    "// Enable/disable loading and saving of cached pairwise matches": null,
+    "matches_cache_dir": "matches_cache",
+    "// Directory to store/load cached pairwise matches": null,
     "max_curvature_deg": 30.0,
     "area_limit_fraction": 0.02,
     "elevation_map_resolution": 64,
@@ -67,70 +73,82 @@
     "force_interactive": false,
     "skip_interactive_if_saved": true
   },
-  "total_regions": 6,
+  "total_regions": 7,
   "selected_regions": [
+    1,
     2,
-    5
+    3,
+    4
   ],
   "region_info": [
     {
       "index": 1,
-      "num_faces": 5366,
-      "area_fraction": 0.32034562472001155,
+      "num_faces": 6721,
+      "area_fraction": 0.1829278242259173,
       "avg_normal": [
-        0.3364160208414903,
-        -0.06296911319676292,
-        0.939605849122062
+        -0.29407424240700447,
+        -0.9553453211676736,
+        -0.028907737299569223
       ]
     },
     {
       "index": 0,
-      "num_faces": 4754,
-      "area_fraction": 0.3014883309378287,
+      "num_faces": 3535,
+      "area_fraction": 0.17538878682915063,
       "avg_normal": [
-        -0.2939512529263358,
-        0.10531516511890136,
-        -0.9500007246834162
-      ]
-    },
-    {
-      "index": 2,
-      "num_faces": 2848,
-      "area_fraction": 0.14320210481290394,
-      "avg_normal": [
-        0.10909760231065219,
-        0.11051324404649024,
-        -0.9878686836115352
-      ]
-    },
-    {
-      "index": 3,
-      "num_faces": 2609,
-      "area_fraction": 0.12913888455303646,
-      "avg_normal": [
-        -0.5048945599927215,
-        -0.009670555632686064,
-        0.8631268525793363
+        -0.5361166766372555,
+        -0.05619506994546587,
+        0.8422713476933954
       ]
     },
     {
       "index": 5,
-      "num_faces": 1570,
-      "area_fraction": 0.057265370575816536,
+      "num_faces": 5428,
+      "area_fraction": 0.15374310664688093,
       "avg_normal": [
-        0.773338847342763,
-        0.18446748264495294,
-        -0.6065630841365148
+        0.4266639604859593,
+        0.08546775677364564,
+        -0.9003627754269481
+      ]
+    },
+    {
+      "index": 2,
+      "num_faces": 5019,
+      "area_fraction": 0.1494607524196943,
+      "avg_normal": [
+        -0.7688426506073185,
+        0.4200550395959839,
+        -0.48211486423582633
+      ]
+    },
+    {
+      "index": 6,
+      "num_faces": 4877,
+      "area_fraction": 0.13705579979563082,
+      "avg_normal": [
+        0.7895278430105265,
+        0.01790191214927821,
+        -0.6134535896484307
+      ]
+    },
+    {
+      "index": 3,
+      "num_faces": 3322,
+      "area_fraction": 0.10271817547240517,
+      "avg_normal": [
+        0.5860824287712469,
+        0.6476479447285337,
+        0.48688759110753943
       ]
     },
     {
       "index": 4,
-      "num_faces": 599,
-      "area_fraction": 0.04855968440040289,
+      "num_faces": 3604,
+      "area_fraction": 0.0987055546103209,
       "avg_normal": [
-        -0.1174583674074174,
-        -0.6821857678851483,
-        0.7216828320120514
+        0.3918833477593065,
+        0.388787654890862,
+        0.8338294796620126
       ]
     }
   ]

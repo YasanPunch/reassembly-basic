@@ -63,5 +63,12 @@
   "enable_post_processing_snapping": false,
   "// Set to false to disable snapping (useful when snapping messes up correctly aligned fragments)": null,
   "snap_score_threshold": 0.7,
-  "// Minimum match score required for snapping (higher = more selective snapping)": null
+  "// Minimum match score required for snapping (higher = more selective snapping)": null,
+
+  "// --- VIII. Match Caching Configuration ---": null,
+  "// Cache pairwise matches to avoid recomputation on subsequent runs": null,
+  "use_match_caching": true,
+  "// Enable/disable loading and saving of cached pairwise matches": null,
+  "matches_cache_dir": "matches_cache",
+  "// Directory to store/load cached pairwise matches": null
 }

@@ -1,5 +1,5 @@
 {
-  "fragment_name": "head_part08.obj",
+  "fragment_name": "head_part07.obj",
   "params": {
     "// --- I. Preprocessing, Point Cloud Generation ---": null,
     "voxel_downsample_size": 1.0,
@@ -58,6 +58,12 @@
     "// Set to false to disable snapping (useful when snapping messes up correctly aligned fragments)": null,
     "snap_score_threshold": 0.7,
     "// Minimum match score required for snapping (higher = more selective snapping)": null,
+    "// --- VIII. Match Caching Configuration ---": null,
+    "// Cache pairwise matches to avoid recomputation on subsequent runs": null,
+    "use_match_caching": true,
+    "// Enable/disable loading and saving of cached pairwise matches": null,
+    "matches_cache_dir": "matches_cache",
+    "// Directory to store/load cached pairwise matches": null,
     "max_curvature_deg": 30.0,
     "area_limit_fraction": 0.02,
     "elevation_map_resolution": 64,
@@ -67,82 +73,152 @@
     "force_interactive": false,
     "skip_interactive_if_saved": true
   },
-  "total_regions": 7,
+  "total_regions": 14,
   "selected_regions": [
-    3,
-    2,
+    6,
     4,
-    5
+    7,
+    11
   ],
   "region_info": [
     {
       "index": 0,
-      "num_faces": 6392,
-      "area_fraction": 0.40770356900773064,
+      "num_faces": 3080,
+      "area_fraction": 0.15275304286539515,
       "avg_normal": [
-        -0.987162886683306,
-        -0.09578760235763029,
-        0.12780520486137792
+        -0.8360246919637262,
+        0.14471676663560545,
+        0.5292634239029678
       ]
     },
     {
       "index": 1,
-      "num_faces": 5931,
-      "area_fraction": 0.28729276749580535,
+      "num_faces": 1280,
+      "area_fraction": 0.10851284506120162,
       "avg_normal": [
-        0.9781629848633969,
-        0.1151916780671021,
-        -0.17299726109743765
+        -0.9845955215964115,
+        0.09096739917686134,
+        -0.14932043108459028
       ]
     },
     {
-      "index": 3,
-      "num_faces": 2835,
-      "area_fraction": 0.09181543018835324,
+      "index": 8,
+      "num_faces": 4228,
+      "area_fraction": 0.10370965834641406,
       "avg_normal": [
-        0.7389618244407336,
-        -0.24009178752105792,
-        0.6295167635449953
+        -0.8462039072127282,
+        0.47285511143104625,
+        0.24565624561863947
       ]
     },
     {
       "index": 2,
-      "num_faces": 2492,
-      "area_fraction": 0.08840552360866584,
+      "num_faces": 1503,
+      "area_fraction": 0.09665262955793048,
       "avg_normal": [
-        0.24125427004962777,
-        -0.4241226033001165,
-        -0.8728782243547798
+        0.8132391382794132,
+        -0.14548510269745923,
+        -0.5634502541162505
       ]
     },
     {
-      "index": 4,
-      "num_faces": 1957,
-      "area_fraction": 0.06637490846383462,
+      "index": 3,
+      "num_faces": 1781,
+      "area_fraction": 0.09058796030116696,
       "avg_normal": [
-        0.3570041306326895,
-        0.8256973831802865,
-        0.43677440643932497
-      ]
-    },
-    {
-      "index": 5,
-      "num_faces": 1015,
-      "area_fraction": 0.0338573236111001,
-      "avg_normal": [
-        0.14306999333545722,
-        0.8853442946850045,
-        -0.44237592257683295
+        0.8897665970936267,
+        -0.3917091597927442,
+        0.2342633919990276
       ]
     },
     {
       "index": 6,
-      "num_faces": 470,
-      "area_fraction": 0.02455047762451023,
+      "num_faces": 2714,
+      "area_fraction": 0.07472781802354915,
       "avg_normal": [
-        -0.40289104773798096,
-        -0.8676731150919498,
-        0.291242457411731
+        0.9054958354452014,
+        -0.06530654513514403,
+        0.419299829661196
+      ]
+    },
+    {
+      "index": 10,
+      "num_faces": 2719,
+      "area_fraction": 0.07152657599805953,
+      "avg_normal": [
+        -0.9690423682351615,
+        -0.13239038452204524,
+        -0.20839787583201172
+      ]
+    },
+    {
+      "index": 4,
+      "num_faces": 1823,
+      "area_fraction": 0.06270920252273013,
+      "avg_normal": [
+        0.4780045836601977,
+        0.7418844404126391,
+        -0.4702330221001779
+      ]
+    },
+    {
+      "index": 7,
+      "num_faces": 1670,
+      "area_fraction": 0.051353437043017584,
+      "avg_normal": [
+        0.5790021040871273,
+        -0.34766273523295765,
+        -0.7374870751362479
+      ]
+    },
+    {
+      "index": 5,
+      "num_faces": 1322,
+      "area_fraction": 0.050637556471018856,
+      "avg_normal": [
+        0.9844000071852164,
+        0.03766563376073521,
+        0.17186601143666552
+      ]
+    },
+    {
+      "index": 11,
+      "num_faces": 1527,
+      "area_fraction": 0.044944333844996555,
+      "avg_normal": [
+        -0.31992453236359314,
+        -0.9445034658730974,
+        -0.0745754419741715
+      ]
+    },
+    {
+      "index": 9,
+      "num_faces": 1219,
+      "area_fraction": 0.044549534333987506,
+      "avg_normal": [
+        0.7712447128911221,
+        -0.3490780028808141,
+        -0.5322838911166042
+      ]
+    },
+    {
+      "index": 12,
+      "num_faces": 613,
+      "area_fraction": 0.0230214183533255,
+      "avg_normal": [
+        -0.012446371441035104,
+        0.11555840051375153,
+        0.9932227060980106
+      ]
+    },
+    {
+      "index": 13,
+      "num_faces": 534,
+      "area_fraction": 0.02245165373318387,
+      "avg_normal": [
+        0.9032181420756412,
+        0.3796132436479337,
+        -0.20022680408107538
       ]
     }
   ]

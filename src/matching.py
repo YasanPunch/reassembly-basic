@@ -5,6 +5,9 @@ from src.utils.geometry_utils import boolean_intersection_penetration_test
 import multiprocessing as mp
 from functools import partial
 import os
+import json
+import numpy as np
+import hashlib
 
 def test_proposed_pairwise_match(source_fragment, target_fragment, transformation, params):
     """
@@ -150,7 +153,14 @@ def _match_fragment_pair_wrapper(args):
 
 
 def find_pairwise_matches(
-    fragments_data, params, debug=False, top_n_per_pair=3, n_jobs=None
+    fragments_data,
+    params,
+    debug=False,
+    top_n_per_pair=3,
+    n_jobs=None,
+    use_cached_matches=True,
+    save_matches=True,
+    matches_cache_dir="matches_cache",
 ):
     """
     Finds potential pairwise alignments between all unique pairs of fragments.
@@ -165,6 +175,9 @@ def find_pairwise_matches(
         debug (bool): Whether to enable debug mode.
         top_n_per_pair (int): Number of top matches to keep per fragment pair.
         n_jobs (int): Number of parallel jobs. If None, uses all available CPU cores.
+        use_cached_matches (bool): Whether to try loading cached matches first.
+        save_matches (bool): Whether to save computed matches for future use.
+        matches_cache_dir (str): Directory to store/load cached matches.
 
     Returns:
         list of dict: Each dict represents a potential match:
@@ -178,6 +191,17 @@ def find_pairwise_matches(
         return []
 
     print(f"\nFinding pairwise matches among {num_fragments} fragments...")
+
+    # Try to load cached matches first
+    if use_cached_matches:
+        cached_matches = load_pairwise_matches(
+            fragments_data, params, top_n_per_pair, matches_cache_dir
+        )
+        if cached_matches is not None:
+            print(f"  ✅ Using cached pairwise matches ({len(cached_matches)} matches)")
+            return cached_matches
+        else:
+            print(f"  ℹ️  No compatible cached matches found, computing new matches...")
 
     # Generate all unique pairs (i,j) where i < j to avoid redundancy
     # This produces pairs like: (0,1), (0,2), (1,2) for 3 fragments
@@ -242,4 +266,174 @@ def find_pairwise_matches(
     # Sort all results by score (descending)
     results.sort(key=lambda x: x['score'], reverse=True)
     print(f"Found {len(results)} potential pairwise matches above threshold (top {top_n_per_pair} per pair).")
+
+    # Save matches for future use if requested
+    if save_matches and results:
+        save_pairwise_matches(
+            results, fragments_data, params, top_n_per_pair, matches_cache_dir
+        )
+
     return results
+
+
+def get_matches_filename(fragments_data, params, top_n_per_pair=3):
+    """
+    Generate a filename for saving/loading pairwise matches data.
+
+    Args:
+        fragments_data (list): List of fragment data
+        params (dict): Configuration parameters
+        top_n_per_pair (int): Number of top matches per pair
+
+    Returns:
+        str: Filename for the matches cache
+    """
+    # Create a hash of the parameters and fragment names to ensure consistency
+    param_str = str(sorted(params.items()))
+    fragment_names = [frag["name"] for frag in fragments_data]
+    fragment_str = str(sorted(fragment_names))
+
+    # Create a hash from parameters, fragment names, and top_n_per_pair
+    hash_input = f"{param_str}_{fragment_str}_{top_n_per_pair}"
+    param_hash = hashlib.md5(hash_input.encode()).hexdigest()[:8]
+
+    return f"pairwise_matches_{param_hash}.json"
+
+
+def save_pairwise_matches(
+    matches, fragments_data, params, top_n_per_pair=3, output_dir="matches_cache"
+):
+    """
+    Save pairwise matches to a JSON file for subsequent runs.
+
+    Args:
+        matches (list): List of pairwise match dictionaries
+        fragments_data (list): List of fragment data used for matching
+        params (dict): Configuration parameters used for matching
+        top_n_per_pair (int): Number of top matches per pair
+        output_dir (str): Directory to save the matches file
+
+    Returns:
+        str: Path to the saved file, or None if saving failed
+    """
+    try:
+        # Create matches directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+
+        filename = get_matches_filename(fragments_data, params, top_n_per_pair)
+        filepath = os.path.join(output_dir, filename)
+
+        # Prepare data for saving
+        matches_data = {
+            "metadata": {
+                "num_fragments": len(fragments_data),
+                "num_matches": len(matches),
+                "top_n_per_pair": top_n_per_pair,
+                "fragment_names": [frag["name"] for frag in fragments_data],
+                "params_hash": hashlib.md5(
+                    str(sorted(params.items())).encode()
+                ).hexdigest()[:8],
+            },
+            "params": params,
+            "matches": [],
+        }
+
+        # Convert matches to JSON-serializable format
+        for match in matches:
+            serializable_match = {
+                "source_idx": match["source_idx"],
+                "target_idx": match["target_idx"],
+                "source_surface_idx": match["source_surface_idx"],
+                "target_surface_idx": match["target_surface_idx"],
+                "transformation": match[
+                    "transformation"
+                ].tolist(),  # Convert numpy array to list
+                "score": float(match["score"]),
+                "rmse": float(match["rmse"]),
+                "confidence": float(match["confidence"]),
+                "source_name": match["source_name"],
+                "target_name": match["target_name"],
+            }
+            matches_data["matches"].append(serializable_match)
+
+        with open(filepath, "w") as f:
+            json.dump(matches_data, f, indent=2)
+
+        print(f"  ✅ Pairwise matches saved to: {filepath}")
+        print(f"     - {len(matches)} matches for {len(fragments_data)} fragments")
+        return filepath
+
+    except Exception as e:
+        print(f"  ❌ Could not save pairwise matches: {e}")
+        return None
+
+
+def load_pairwise_matches(
+    fragments_data, params, top_n_per_pair=3, matches_dir="matches_cache"
+):
+    """
+    Load pairwise matches from a JSON file if available and compatible.
+
+    Args:
+        fragments_data (list): List of fragment data
+        params (dict): Configuration parameters
+        top_n_per_pair (int): Number of top matches per pair
+        matches_dir (str): Directory containing matches files
+
+    Returns:
+        list: Loaded matches, or None if loading failed or data incompatible
+    """
+    try:
+        filename = get_matches_filename(fragments_data, params, top_n_per_pair)
+        filepath = os.path.join(matches_dir, filename)
+
+        if not os.path.exists(filepath):
+            print(f"  ℹ️  No cached matches found at: {filepath}")
+            return None
+
+        with open(filepath, "r") as f:
+            matches_data = json.load(f)
+
+        # Validate that the loaded data is compatible
+        current_fragment_names = [frag["name"] for frag in fragments_data]
+        saved_fragment_names = matches_data["metadata"]["fragment_names"]
+
+        if (
+            matches_data["metadata"]["num_fragments"] != len(fragments_data)
+            or current_fragment_names != saved_fragment_names
+            or matches_data["metadata"]["top_n_per_pair"] != top_n_per_pair
+        ):
+            print(f"  ⚠️  Cached matches incompatible with current fragments/parameters")
+            print(
+                f"     Current: {len(fragments_data)} fragments, {top_n_per_pair} top matches"
+            )
+            print(
+                f"     Cached: {matches_data['metadata']['num_fragments']} fragments, {matches_data['metadata']['top_n_per_pair']} top matches"
+            )
+            return None
+
+        # Convert back to the original format
+        matches = []
+        for match_dict in matches_data["matches"]:
+            match = {
+                "source_idx": match_dict["source_idx"],
+                "target_idx": match_dict["target_idx"],
+                "source_surface_idx": match_dict["source_surface_idx"],
+                "target_surface_idx": match_dict["target_surface_idx"],
+                "transformation": np.array(
+                    match_dict["transformation"]
+                ),  # Convert back to numpy array
+                "score": match_dict["score"],
+                "rmse": match_dict["rmse"],
+                "confidence": match_dict["confidence"],
+                "source_name": match_dict["source_name"],
+                "target_name": match_dict["target_name"],
+            }
+            matches.append(match)
+
+        print(f"  ✅ Loaded {len(matches)} pairwise matches from: {filepath}")
+        return matches
+
+    except Exception as e:
+        print(f"  ❌ Could not load pairwise matches: {e}")
+        return None

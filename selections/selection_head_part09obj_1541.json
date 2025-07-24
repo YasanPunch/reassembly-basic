@@ -1,5 +1,5 @@
 {
-  "fragment_name": "head_part05.obj",
+  "fragment_name": "head_part09.obj",
   "params": {
     "// --- I. Preprocessing, Point Cloud Generation ---": null,
     "voxel_downsample_size": 1.0,
@@ -58,6 +58,12 @@
     "// Set to false to disable snapping (useful when snapping messes up correctly aligned fragments)": null,
     "snap_score_threshold": 0.7,
     "// Minimum match score required for snapping (higher = more selective snapping)": null,
+    "// --- VIII. Match Caching Configuration ---": null,
+    "// Cache pairwise matches to avoid recomputation on subsequent runs": null,
+    "use_match_caching": true,
+    "// Enable/disable loading and saving of cached pairwise matches": null,
+    "matches_cache_dir": "matches_cache",
+    "// Directory to store/load cached pairwise matches": null,
     "max_curvature_deg": 30.0,
     "area_limit_fraction": 0.02,
     "elevation_map_resolution": 64,
@@ -67,110 +73,70 @@
     "force_interactive": false,
     "skip_interactive_if_saved": true
   },
-  "total_regions": 10,
+  "total_regions": 6,
   "selected_regions": [
-    0,
-    3
+    3,
+    5
   ],
   "region_info": [
     {
-      "index": 0,
-      "num_faces": 7236,
-      "area_fraction": 0.15536650766095086,
-      "avg_normal": [
-        0.8010659212023925,
-        -0.27701354250230015,
-        0.5306193429931563
-      ]
-    },
-    {
-      "index": 4,
-      "num_faces": 6531,
-      "area_fraction": 0.12965962096166062,
-      "avg_normal": [
-        -0.3317487354061382,
-        0.6337773387832053,
-        -0.6987625214629833
-      ]
-    },
-    {
       "index": 1,
-      "num_faces": 3977,
-      "area_fraction": 0.12768178417951828,
+      "num_faces": 5366,
+      "area_fraction": 0.32034562472001155,
       "avg_normal": [
-        0.5133721437626567,
-        -0.7882522868373065,
-        0.33927477699394437
+        0.3364160208414903,
+        -0.06296911319676292,
+        0.939605849122062
       ]
     },
     {
-      "index": 5,
-      "num_faces": 5980,
-      "area_fraction": 0.11501878083720646,
-      "avg_normal": [
-        -0.6461743639774851,
-        0.7567793397600321,
-        -0.09871029455260692
-      ]
-    },
-    {
-      "index": 3,
+      "index": 0,
       "num_faces": 4754,
-      "area_fraction": 0.11054606339647832,
+      "area_fraction": 0.3014883309378287,
       "avg_normal": [
-        -0.26013458749414586,
-        -0.8728665725658648,
-        0.4128364602192621
-      ]
-    },
-    {
-      "index": 6,
-      "num_faces": 5013,
-      "area_fraction": 0.09267045337489369,
-      "avg_normal": [
-        0.10971699168918767,
-        0.1822513529003336,
-        -0.9771113683202508
+        -0.2939512529263358,
+        0.10531516511890136,
+        -0.9500007246834162
       ]
     },
     {
       "index": 2,
-      "num_faces": 1986,
-      "area_fraction": 0.08864417851521945,
+      "num_faces": 2848,
+      "area_fraction": 0.14320210481290394,
       "avg_normal": [
-        0.33070312646693745,
-        -0.3381118163288309,
-        0.8810878740533272
+        0.10909760231065219,
+        0.11051324404649024,
+        -0.9878686836115352
       ]
     },
     {
-      "index": 7,
-      "num_faces": 3431,
-      "area_fraction": 0.07117633219542961,
+      "index": 3,
+      "num_faces": 2609,
+      "area_fraction": 0.12913888455303646,
       "avg_normal": [
-        -0.33149610111633776,
-        0.9388631945770457,
-        0.09298514297053789
+        -0.5048945599927215,
+        -0.009670555632686064,
+        0.8631268525793363
       ]
     },
     {
-      "index": 8,
-      "num_faces": 2938,
-      "area_fraction": 0.05721259555750291,
+      "index": 5,
+      "num_faces": 1570,
+      "area_fraction": 0.057265370575816536,
       "avg_normal": [
-        -0.5068815038305626,
-        0.05832123986971625,
-        -0.8600405653540573
+        0.773338847342763,
+        0.18446748264495294,
+        -0.6065630841365148
       ]
     },
     {
-      "index": 9,
-      "num_faces": 2766,
-      "area_fraction": 0.052023683321139755,
+      "index": 4,
+      "num_faces": 599,
+      "area_fraction": 0.04855968440040289,
       "avg_normal": [
-        -0.7395112997767049,
-        0.4184786620029483,
-        -0.5272557699549533
+        -0.1174583674074174,
+        -0.6821857678851483,
+        0.7216828320120514
       ]
     }
   ]

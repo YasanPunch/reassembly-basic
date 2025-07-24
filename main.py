@@ -122,11 +122,19 @@ def main(args):
     # 4. Pairwise Matching --------------------------------------------------------------------------------------------
     print("\n[4. Finding Pairwise Matches]")
     # pairwise_matches will be list of dicts. Indices refer to `valid_fragments_data`
+
+    # Get caching settings from config file
+    use_cached_matches = params.get("use_match_caching", True)
+    matches_cache_dir = params.get("matches_cache_dir", "matches_cache")
+
     pairwise_matches = src.matching.find_pairwise_matches(
         valid_fragments_data,
         params,
         debug=args.debug_pairwise_matching,
         top_n_per_pair=args.top_n_matches_per_pair,
+        use_cached_matches=use_cached_matches,
+        save_matches=use_cached_matches,
+        matches_cache_dir=matches_cache_dir,
     )
 
     if not pairwise_matches:
