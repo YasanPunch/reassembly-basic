@@ -7,6 +7,8 @@ from collections import deque
 from scipy import ndimage
 from scipy.spatial import cKDTree
 from collections import Counter
+import json
+import os
 
 
 def get_color(index, total_items=20, cmap_name='tab10', num_variations=3):
@@ -57,6 +59,114 @@ def get_color(index, total_items=20, cmap_name='tab10', num_variations=3):
         print(f"Error in get_color: {e}. Using fallback.")
         colors = [[1,0,0],[0,0,1],[0,1,0]]
         return colors[index % len(colors)]
+
+
+def get_selection_filename(fragment_name, params):
+    """
+    Generate a filename for saving/loading selection data.
+    """
+    # Create a hash of the parameters to ensure consistency
+    param_hash = hash(str(sorted(params.items())))
+    safe_fragment_name = "".join(
+        c for c in fragment_name if c.isalnum() or c in (" ", "-", "_")
+    ).rstrip()
+    safe_fragment_name = safe_fragment_name.replace(" ", "_")
+
+    return f"selection_{safe_fragment_name}_{abs(param_hash) % 10000}.json"
+
+
+def save_selection_data(fragment_name, region_properties, selected_regions, params):
+    """
+    Save selection data to a JSON file.
+    """
+    try:
+        filename = get_selection_filename(fragment_name, params)
+
+        # Create selections directory if it doesn't exist
+        selections_dir = "selections"
+        os.makedirs(selections_dir, exist_ok=True)
+
+        filepath = os.path.join(selections_dir, filename)
+
+        # Prepare data for saving
+        selection_data = {
+            "fragment_name": fragment_name,
+            "params": params,
+            "total_regions": len(region_properties),
+            "selected_regions": selected_regions,
+            "region_info": [],
+        }
+
+        # Save basic info about each region for validation
+        for props in region_properties:
+            region_info = {
+                "index": props["index"],
+                "num_faces": props["num_faces"],
+                "area_fraction": props["area_fraction"],
+                "avg_normal": (
+                    props["avg_normal"].tolist()
+                    if isinstance(props["avg_normal"], np.ndarray)
+                    else props["avg_normal"]
+                ),
+            }
+            selection_data["region_info"].append(region_info)
+
+        with open(filepath, "w") as f:
+            json.dump(selection_data, f, indent=2)
+
+        print(f"    Selection saved to: {filepath}")
+        return filepath
+
+    except Exception as e:
+        print(f"    Warning: Could not save selection data: {e}")
+        return None
+
+
+def load_selection_data(fragment_name, region_properties, params):
+    """
+    Load selection data from a JSON file if available and compatible.
+    """
+    try:
+        filename = get_selection_filename(fragment_name, params)
+        filepath = os.path.join("selections", filename)
+
+        if not os.path.exists(filepath):
+            return None
+
+        with open(filepath, "r") as f:
+            selection_data = json.load(f)
+
+        # Validate that the loaded data is compatible
+        if selection_data["fragment_name"] != fragment_name or selection_data[
+            "total_regions"
+        ] != len(region_properties):
+            print(f"    Warning: Saved selection data incompatible with current mesh")
+            return None
+
+        # Validate region properties match
+        for i, (saved_info, current_props) in enumerate(
+            zip(selection_data["region_info"], region_properties)
+        ):
+            if (
+                saved_info["num_faces"] != current_props["num_faces"]
+                or abs(saved_info["area_fraction"] - current_props["area_fraction"])
+                > 1e-6
+            ):
+                print(
+                    f"    Warning: Region {i} properties changed, ignoring saved selection"
+                )
+                return None
+
+        print(f"    Loaded selection from: {filepath}")
+        print(
+            f"    Previously selected regions: {[r+1 for r in selection_data['selected_regions']]}"
+        )
+
+        return selection_data["selected_regions"]
+
+    except Exception as e:
+        print(f"    Warning: Could not load selection data: {e}")
+        return None
 
 
 def calculate_region_average_normal(tri_mesh, face_indices):
@@ -313,6 +423,9 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         "bumpiness_threshold": params.get("bumpiness_threshold", 0.2),
         "use_bumpiness_detection": params.get("use_bumpiness_detection", False),
         "visualize_merged_regions": params.get("visualize_merged_regions", False),
+        "use_saved_selections": params.get("use_saved_selections", True),
+        "force_interactive": params.get("force_interactive", False),
+        "skip_interactive_if_saved": params.get("skip_interactive_if_saved", True),
     }
 
     # Update params with defaults
@@ -405,34 +518,78 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
     if params['visualize_segmentation'] and len(regions) > 0:
         print(f"\n    Visualizing {len(regions)} regions for interactive selection...")
 
-        shared_state = {'confirmed_selection': False, 'quit_without_selection': False, 'current_page': 0}
-        PAGE_SIZE = 10
+        # Try to load saved selection data (unless forced interactive)
+        should_use_saved = (
+            not params["force_interactive"] and params["use_saved_selections"]
+        )
+        saved_selections = None
 
-        drawable_segment_infos = []
-        highlight_color = np.array([0.0, 0.0, 0.0])  # Black highlight
+        if should_use_saved:
+            saved_selections = load_selection_data(
+                fragment_name, region_properties, params
+            )
+            if saved_selections is not None:
+                selected_regions = saved_selections
+                print(f"    Using previously saved selections")
+                # Skip interactive mode if we have valid saved selections and option is enabled
+                if params["skip_interactive_if_saved"]:
+                    face_is_fracture_candidate.fill(False)
+                    for region_idx in selected_regions:
+                        face_is_fracture_candidate[
+                            region_properties[region_idx]["faces"]
+                        ] = True
+                    print(f"    Applied {len(selected_regions)} saved selections")
+                    # Continue to the rest of the function without interactive mode
+                else:
+                    print(
+                        f"    Loaded saved selections but will still show interactive mode for review"
+                    )
+            else:
+                print(f"    No saved selection data found, starting interactive mode")
+        else:
+            if params["force_interactive"]:
+                print(f"    Force interactive mode enabled")
+            else:
+                print(f"    Saved selections disabled, starting interactive mode")
 
-        mesh_vis = copy.deepcopy(o3d_mesh_fragment)
+        # Only proceed with interactive mode if we don't have valid saved selections or if we want to review them
+        if saved_selections is None or not params["skip_interactive_if_saved"]:
+            shared_state = {
+                "confirmed_selection": False,
+                "quit_without_selection": False,
+                "current_page": 0,
+            }
+            PAGE_SIZE = 10
 
-        for i, props in enumerate(region_properties):
-            seg_mesh = o3d.geometry.TriangleMesh()
-            seg_mesh.vertices = o3d_mesh_fragment.vertices
-            seg_mesh.triangles = o3d.utility.Vector3iVector(tri_mesh.faces[props['faces']])
-            seg_mesh.remove_unreferenced_vertices()
+            drawable_segment_infos = []
+            highlight_color = np.array([0.0, 0.0, 0.0])  # Black highlight
 
-            if not seg_mesh.has_vertices() or not seg_mesh.has_triangles():
-                continue
+            mesh_vis = copy.deepcopy(o3d_mesh_fragment)
 
-            seg_mesh.compute_vertex_normals()
-            base_color = get_color(i, len(regions))
-            seg_mesh.paint_uniform_color(base_color)
+            for i, props in enumerate(region_properties):
+                seg_mesh = o3d.geometry.TriangleMesh()
+                seg_mesh.vertices = o3d_mesh_fragment.vertices
+                seg_mesh.triangles = o3d.utility.Vector3iVector(
+                    tri_mesh.faces[props["faces"]]
+                )
+                seg_mesh.remove_unreferenced_vertices()
 
-            drawable_segment_infos.append({
-                'mesh': seg_mesh,
-                'id': props['index'],
-                'base_color': base_color,
-                'selected': props['index'] in selected_regions,
-                'properties': props
-            })
+                if not seg_mesh.has_vertices() or not seg_mesh.has_triangles():
+                    continue
+
+                seg_mesh.compute_vertex_normals()
+                base_color = get_color(i, len(regions))
+                seg_mesh.paint_uniform_color(base_color)
+
+                drawable_segment_infos.append(
+                    {
+                        "mesh": seg_mesh,
+                        "id": props["index"],
+                        "base_color": base_color,
+                        "selected": props["index"] in selected_regions,
+                        "properties": props,
+                    }
+                )
 
         if drawable_segment_infos:
             num_total_segments = len(drawable_segment_infos)
@@ -537,6 +694,12 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
                     if info['selected']:
                         face_is_fracture_candidate[info['properties']['faces']] = True
                 print(f"\n    User selected {len(selected_regions)} regions")
+
+                # Save the selection data
+                save_selection_data(
+                    fragment_name, region_properties, selected_regions, params
+                )
+
             elif shared_state['quit_without_selection']:
                 print(f"\n    User quit selection. No regions selected.")
                 return None

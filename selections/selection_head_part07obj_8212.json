@@ -1,0 +1,219 @@
+{
+  "fragment_name": "head_part07.obj",
+  "params": {
+    "// --- I. Preprocessing, Point Cloud Generation ---": null,
+    "voxel_downsample_size": 1.0,
+    "fracture_surface_dense_sample_points": 10000,
+    "add_preprocessing_noise": true,
+    "preprocessing_noise_factor": 0.01,
+    "// --- Normal Estimation (for features PCD & fallbacks in alignment) ---": null,
+    "normal_estimation_radius": 14.0,
+    "normal_estimation_max_nn": 30,
+    "orient_normals_k": 15,
+    "// --- II. Segmentation (New Parameters based on Region Growing) ---": null,
+    "visualize_segmentation": true,
+    "// Enables interactive selection of segments from extract_fracture_surface_mesh": null,
+    "visualize_merged_regions": false,
+    "// Enables visualization of merged regions after clustering (debug feature)": null,
+    "debug_voxel_downsampling": false,
+    "// Enables visualization of voxel downsampled point clouds before FPFH feature extraction": null,
+    "max_angle_deviation_deg": 30.0,
+    "// Max angle (degrees) for region growing normal similarity (e.g., 20-45)": null,
+    "min_region_area_percentage": 2.0,
+    "// Min area percentage for a region to survive cleanup (e.g., 1-5%)": null,
+    "fracture_roughness_threshold": 0.1,
+    "// Threshold for `calculate_region_roughness` if automatic selection is used (e.g., 0.05-0.25 radians). Higher = only very rough regions selected.": null,
+    "min_final_segment_size_after_cleanup": 50,
+    "// Optional: Min number of faces for a segment after cleanup to be considered for selection (e.g., 20-100)": null,
+    "// --- III. Feature Extraction (FPFH) ---": null,
+    "fpfh_feature_radius": 10.0,
+    "fpfh_feature_max_nn": 100,
+    "// --- IV. Alignment: RANSAC (Global Registration) ---": null,
+    "ransac_distance_threshold_factor": 1.5,
+    "ransac_edge_length_factor": 0.9,
+    "ransac_iterations": 4000000,
+    "ransac_n_points": 4,
+    "ransac_confidence": 0.999,
+    "// --- V. Alignment: ICP (Local Refinement) ---": null,
+    "icp_max_correspondence_distance_factor": 2.0,
+    "icp_relative_fitness": 1e-06,
+    "icp_relative_rmse": 1e-06,
+    "icp_max_iteration": 50,
+    "// --- VI. Matching and Assembly ---": null,
+    "min_match_score": 0.3,
+    "// Minimum ICP fitness for a pairwise alignment to be considered valid": null,
+    "// --- Boolean Penetration Test Configuration ---": null,
+    "// Penetration test performed during PAIRWISE MATCHING to reject bad matches early": null,
+    "// - use_boolean_intersection_test: Mathematically precise geometric intersection test": null,
+    "// - Set to false to disable penetration tests (not recommended)": null,
+    "use_boolean_intersection_test": true,
+    "// Boolean penetration test parameters:": null,
+    "boolean_penetration_threshold": 0.05,
+    "// Maximum allowed penetration ratio (0.1 = 10% of smaller fragment volume)": null,
+    "debug_assembly": true,
+    "disable_overlap_check": true,
+    "// --- VII. Post-Processing Snapping Configuration ---": null,
+    "// Post-processing step that snaps adjacent fragments together": null,
+    "enable_post_processing_snapping": false,
+    "// Set to false to disable snapping (useful when snapping messes up correctly aligned fragments)": null,
+    "snap_score_threshold": 0.7,
+    "// Minimum match score required for snapping (higher = more selective snapping)": null,
+    "max_curvature_deg": 30.0,
+    "area_limit_fraction": 0.02,
+    "elevation_map_resolution": 64,
+    "bumpiness_threshold": 0.2,
+    "use_bumpiness_detection": false,
+    "use_saved_selections": true,
+    "force_interactive": false,
+    "skip_interactive_if_saved": true
+  },
+  "total_regions": 14,
+  "selected_regions": [
+    6,
+    4,
+    7,
+    11
+  ],
+  "region_info": [
+    {
+      "index": 0,
+      "num_faces": 3080,
+      "area_fraction": 0.15275304286539515,
+      "avg_normal": [
+        -0.8360246919637262,
+        0.14471676663560545,
+        0.5292634239029678
+      ]
+    },
+    {
+      "index": 1,
+      "num_faces": 1280,
+      "area_fraction": 0.10851284506120162,
+      "avg_normal": [
+        -0.9845955215964115,
+        0.09096739917686134,
+        -0.14932043108459028
+      ]
+    },
+    {
+      "index": 8,
+      "num_faces": 4228,
+      "area_fraction": 0.10370965834641406,
+      "avg_normal": [
+        -0.8462039072127282,
+        0.47285511143104625,
+        0.24565624561863947
+      ]
+    },
+    {
+      "index": 2,
+      "num_faces": 1503,
+      "area_fraction": 0.09665262955793048,
+      "avg_normal": [
+        0.8132391382794132,
+        -0.14548510269745923,
+        -0.5634502541162505
+      ]
+    },
+    {
+      "index": 3,
+      "num_faces": 1781,
+      "area_fraction": 0.09058796030116696,
+      "avg_normal": [
+        0.8897665970936267,
+        -0.3917091597927442,
+        0.2342633919990276
+      ]
+    },
+    {
+      "index": 6,
+      "num_faces": 2714,
+      "area_fraction": 0.07472781802354915,
+      "avg_normal": [
+        0.9054958354452014,
+        -0.06530654513514403,
+        0.419299829661196
+      ]
+    },
+    {
+      "index": 10,
+      "num_faces": 2719,
+      "area_fraction": 0.07152657599805953,
+      "avg_normal": [
+        -0.9690423682351615,
+        -0.13239038452204524,
+        -0.20839787583201172
+      ]
+    },
+    {
+      "index": 4,
+      "num_faces": 1823,
+      "area_fraction": 0.06270920252273013,
+      "avg_normal": [
+        0.4780045836601977,
+        0.7418844404126391,
+        -0.4702330221001779
+      ]
+    },
+    {
+      "index": 7,
+      "num_faces": 1670,
+      "area_fraction": 0.051353437043017584,
+      "avg_normal": [
+        0.5790021040871273,
+        -0.34766273523295765,
+        -0.7374870751362479
+      ]
+    },
+    {
+      "index": 5,
+      "num_faces": 1322,
+      "area_fraction": 0.050637556471018856,
+      "avg_normal": [
+        0.9844000071852164,
+        0.03766563376073521,
+        0.17186601143666552
+      ]
+    },
+    {
+      "index": 11,
+      "num_faces": 1527,
+      "area_fraction": 0.044944333844996555,
+      "avg_normal": [
+        -0.31992453236359314,
+        -0.9445034658730974,
+        -0.0745754419741715
+      ]
+    },
+    {
+      "index": 9,
+      "num_faces": 1219,
+      "area_fraction": 0.044549534333987506,
+      "avg_normal": [
+        0.7712447128911221,
+        -0.3490780028808141,
+        -0.5322838911166042
+      ]
+    },
+    {
+      "index": 12,
+      "num_faces": 613,
+      "area_fraction": 0.0230214183533255,
+      "avg_normal": [
+        -0.012446371441035104,
+        0.11555840051375153,
+        0.9932227060980106
+      ]
+    },
+    {
+      "index": 13,
+      "num_faces": 534,
+      "area_fraction": 0.02245165373318387,
+      "avg_normal": [
+        0.9032181420756412,
+        0.3796132436479337,
+        -0.20022680408107538
+      ]
+    }
+  ]
+}

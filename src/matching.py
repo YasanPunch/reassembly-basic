@@ -147,7 +147,13 @@ def find_pairwise_matches(fragments_data, params, debug=False, top_n_per_pair=3)
         return []
 
     print(f"\nFinding pairwise matches among {num_fragments} fragments...")
-    pairs = list(combinations(range(num_fragments), 2))
+    # Generate all unique pairs (i,j) where i < j to avoid redundancy
+    # This produces pairs like: (0,1), (0,2), (1,2) for 3 fragments
+    pairs = []
+    for i in range(num_fragments):
+        for j in range(i + 1, num_fragments):
+            pairs.append((i, j))
+
     results = []
 
     # Use deterministic sequential processing instead of parallel processing
