@@ -1,10 +1,12 @@
 import os
+import copy
 
 import open3d.visualization.gui as gui
 import open3d.visualization.rendering as rendering
 
 import src.io_utils
 import src.preprocessing
+import src.matching
 
 class ProcessingPanel:
     def __init__(self, app):
@@ -96,104 +98,49 @@ class ProcessingPanel:
         return selected_items
 
     def _on_pairwise_matching(self):
-        """Test with new window approach"""
+        """Execute pairwise matching using the processed fragments data."""
+        print("\n[4. Finding Pairwise Matches]")
 
-        import open3d as o3d
-        import open3d.visualization.gui as gui
-        import open3d.visualization.rendering as rendering
+        # Check if we have processed fragments data
+        if not self.processed_fragments_pipeline_data:
+            print(
+                "No processed fragments data available. Please run segmentation first."
+            )
+            return
 
-        # Create dummy meshes
-        candidate_mesh = o3d.geometry.TriangleMesh.create_box(
-            width=1.0, height=1.0, depth=1.0
+        # Get valid fragments (those with features)
+        valid_fragments_data = [
+            fd
+            for fd in self.processed_fragments_pipeline_data
+            if fd.get("features_list")
+            and any(f is not None and f.num() > 0 for f in fd["features_list"])
+        ]
+
+        if len(valid_fragments_data) < 2:
+            print(
+                "Not enough valid fragments for pairwise matching. Need at least 2 fragments with features."
+            )
+            # Save unaligned fragments
+            self._save_unaligned_fragments(
+                valid_fragments_data, "insufficient_fragments"
+            )
+            return
+
+        print(
+            f"  Processing {len(valid_fragments_data)} valid fragments for pairwise matching..."
         )
-        candidate_mesh.paint_uniform_color([0.8, 0.2, 0.2])  # Red
-        candidate_mesh.compute_vertex_normals()
 
-        placed_meshes = []
-        for i in range(3):
-            sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.5)
-            sphere.paint_uniform_color([0.7, 0.7, 0.7])  # Gray
-            sphere.compute_vertex_normals()
-            sphere.translate([i * 2.0, 0, 0])
-            placed_meshes.append(sphere)
-
-        # Create a new window with scene widget
-        scene_id = "pairwise_test"
-        scene_widget = self.app.add_scene_widget(
-            scene_id, title="Pairwise Matching Test", width=800, height=600
+        # Call the matching function
+        pairwise_matches = src.matching.find_pairwise_matches(
+            valid_fragments_data,
+            self.app.params,
+            debug=self.app.params.get("debug_pairwise_matching", False),
+            top_n_per_pair=self.app.params.get("top_n_matches_per_pair", 3),
+            processing_panel=self,  # Pass self for GUI visualization
         )
 
-        # Add geometries to the new scene
-        candidate_material = rendering.MaterialRecord()
-        candidate_material.shader = "defaultLit"
-        candidate_material.base_color = [0.8, 0.2, 0.2, 1.0]  # Red
-
-        placed_material = rendering.MaterialRecord()
-        placed_material.shader = "defaultLit"
-        placed_material.base_color = [0.7, 0.7, 0.7, 1.0]  # Gray
-
-        scene_widget.scene.add_geometry("candidate", candidate_mesh, candidate_material)
-
-        for i, mesh in enumerate(placed_meshes):
-            scene_widget.scene.add_geometry(f"placed_{i}", mesh, placed_material)
-
-        # Set camera for the new scene
-        bounds = scene_widget.scene.bounding_box
-        scene_widget.setup_camera(60, bounds, bounds.get_center())
-
-        # Create a dialog for user interaction
-        em = self.app.window.theme.font_size
-        dlg = gui.Dialog("Pairwise Matching Test")
-
-        dlg_layout = gui.Vert(em, gui.Margins(em, em, em, em))
-        dlg_layout.add_child(gui.Label("Red cube: Candidate fragment"))
-        dlg_layout.add_child(gui.Label("Gray spheres: Placed fragments"))
-        dlg_layout.add_child(gui.Label("Look at the new window for visualization"))
-
-        # Add buttons
-        button_layout = gui.Horiz()
-
-        accept_btn = gui.Button("Accept")
-        reject_btn = gui.Button("Reject")
-        finalize_btn = gui.Button("Finalize")
-        quit_btn = gui.Button("Quit")
-
-        def cleanup_and_close():
-            """Clean up scene and close dialog"""
-            # Close the window
-            self.app.remove_scene_widget(scene_id)
-            self.app.window.close_dialog()
-
-        def on_accept():
-            print("Match accepted!")
-            cleanup_and_close()
-
-        def on_reject():
-            print("Match rejected!")
-            cleanup_and_close()
-
-        def on_finalize():
-            print("Assembly finalized!")
-            cleanup_and_close()
-
-        def on_quit():
-            print("Selection aborted!")
-            cleanup_and_close()
-
-        accept_btn.set_on_clicked(on_accept)
-        reject_btn.set_on_clicked(on_reject)
-        finalize_btn.set_on_clicked(on_finalize)
-        quit_btn.set_on_clicked(on_quit)
-
-        button_layout.add_child(accept_btn)
-        button_layout.add_child(reject_btn)
-        button_layout.add_child(finalize_btn)
-        button_layout.add_child(quit_btn)
-
-        dlg_layout.add_child(button_layout)
-        dlg.add_child(dlg_layout)
-
-        self.app.window.show_dialog(dlg)
+        # Handle results and store them
+        self._handle_pairwise_matching_results(valid_fragments_data, pairwise_matches)
 
     def _on_multipiece_matching(self):
         pass
@@ -391,3 +338,145 @@ class ProcessingPanel:
         self.segmentation_queue = []
         self.current_segmentation_fragment = None
         self.segmentation_results = {}
+
+    def _handle_pairwise_matching_results(self, valid_fragments_data, pairwise_matches):
+        """Handle the results of pairwise matching."""
+        if not pairwise_matches:
+            print("No suitable pairwise matches found above threshold.")
+            # Save unaligned fragments
+            self._save_unaligned_fragments(valid_fragments_data, "no_matches")
+            return
+
+        print(
+            f"Found {len(pairwise_matches)} potential pairwise matches above threshold."
+        )
+
+        # Store results for next steps
+        self.pairwise_matches = pairwise_matches
+        self.valid_fragments_data = valid_fragments_data
+
+        # Show results dialog
+        self._show_pairwise_matching_results_dialog(
+            pairwise_matches, valid_fragments_data
+        )
+
+    def _save_unaligned_fragments(self, fragments_data, reason):
+        """Save unaligned fragments to output directory."""
+        if not fragments_data:
+            print("No fragments to save.")
+            return
+
+        try:
+            os.makedirs(self.app.params["output_dir"], exist_ok=True)
+            all_original_meshes = [fd["original_mesh"] for fd in fragments_data]
+            combined_unaligned = src.io_utils.combine_meshes(all_original_meshes)
+
+            filename = f"reconstructed_model_{reason}.obj"
+            output_path = os.path.join(self.app.params["output_dir"], filename)
+            src.io_utils.save_mesh(combined_unaligned, output_path)
+            print(f"  Saved unaligned fragments to {output_path}")
+        except Exception as e:
+            print(f"  Error saving unaligned fragments: {e}")
+
+    def _show_pairwise_matching_results_dialog(
+        self, pairwise_matches, valid_fragments_data
+    ):
+        """Show a dialog with pairwise matching results and visualization options."""
+        # Create dialog showing results
+        dlg = gui.Dialog("Pairwise Matching Results")
+        dlg_layout = gui.Vert()
+
+        # Info label
+        info_label = gui.Label(f"Found {len(pairwise_matches)} pairwise matches")
+        dlg_layout.add_child(info_label)
+
+        # Create scrollable area for match list
+        matches_layout = gui.Vert()
+
+        # Sort matches by score
+        sorted_matches = sorted(
+            pairwise_matches, key=lambda x: x["score"], reverse=True
+        )
+
+        for i, match in enumerate(sorted_matches[:10]):  # Show top 10 matches
+            source_name = valid_fragments_data[match["source_idx"]]["name"]
+            target_name = valid_fragments_data[match["target_idx"]]["name"]
+            score = match["score"]
+
+            match_label = gui.Label(
+                f"{i+1}. {source_name} → {target_name} (Score: {score:.3f})"
+            )
+            matches_layout.add_child(match_label)
+
+        # Add scrollable area
+        scroll = gui.ScrollableVert()
+        scroll.add_child(matches_layout)
+        dlg_layout.add_child(scroll)
+
+        # Buttons
+        buttons_layout = gui.Horiz()
+
+        visualize_btn = gui.Button("Visualize Top Match")
+
+        def on_visualize():
+            if sorted_matches:
+                self._visualize_pairwise_match(sorted_matches[0], valid_fragments_data)
+            dlg.close()
+
+        visualize_btn.set_on_clicked(on_visualize)
+
+        proceed_btn = gui.Button("Proceed to Assembly")
+
+        def on_proceed():
+            dlg.close()
+            # TODO: Start global assembly pipeline
+            print("Proceeding to global assembly...")
+
+        proceed_btn.set_on_clicked(on_proceed)
+
+        close_btn = gui.Button("Close")
+
+        def on_close():
+            dlg.close()
+
+        close_btn.set_on_clicked(on_close)
+
+        buttons_layout.add_child(visualize_btn)
+        buttons_layout.add_child(proceed_btn)
+        buttons_layout.add_child(close_btn)
+        dlg_layout.add_child(buttons_layout)
+
+        dlg.add_child(dlg_layout)
+        self.app.window.show_dialog(dlg)
+
+    def _visualize_pairwise_match(self, match_data, valid_fragments_data):
+        """Visualize a specific pairwise match using the GUI system."""
+        source_idx = match_data["source_idx"]
+        target_idx = match_data["target_idx"]
+        transformation = match_data["transformation"]
+
+        source_data = valid_fragments_data[source_idx]
+        target_data = valid_fragments_data[target_idx]
+
+        # Create copies for visualization
+        source_mesh = copy.deepcopy(source_data["original_mesh"])
+        target_mesh = copy.deepcopy(target_data["original_mesh"])
+
+        # Ensure normals for display
+        if not source_mesh.has_vertex_normals():
+            source_mesh.compute_vertex_normals()
+        if not target_mesh.has_vertex_normals():
+            target_mesh.compute_vertex_normals()
+
+        # Apply transformation to source mesh
+        source_mesh.transform(transformation)
+
+        # Color the meshes
+        source_mesh.paint_uniform_color([1, 0, 0])  # Red for source
+        target_mesh.paint_uniform_color([0, 1, 0])  # Green for target
+
+        # Show visualization
+        self.show_debug_visualization(
+            [source_mesh, target_mesh],
+            f"Pairwise Match: {source_data['name']} → {target_data['name']} (Score: {match_data['score']:.3f})",
+        )

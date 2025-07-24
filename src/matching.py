@@ -47,7 +47,10 @@ def test_proposed_pairwise_match(source_fragment, target_fragment, transformatio
         print(f"    ❌ Excessive penetration detected (ratio: {ratio:.3f}), exceeds threshold")
         return False  # Too much penetration - this transformation would cause excessive overlap
 
-def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
+
+def _match_fragment_pair(
+    i, j, frag_i_data, frag_j_data, params, debug=False, processing_panel=None
+):
     matches = []
     # Loop over all surface pairs
     for idx_i, (target_pcd, target_fpfh) in enumerate(zip(frag_i_data['pcds_for_features'], frag_i_data['features_list'])):
@@ -59,12 +62,24 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                 continue
             if debug:
                 transform_j_to_i, fitness_ji, rmse_ji = align_fragments_pcd(
-                    source_pcd, target_pcd, source_fpfh, target_fpfh, params, debug=debug,
-                    source_fragment=frag_j_data, target_fragment=frag_i_data
+                    source_pcd,
+                    target_pcd,
+                    source_fpfh,
+                    target_fpfh,
+                    params,
+                    debug=debug,
+                    source_fragment=frag_j_data,
+                    target_fragment=frag_i_data,
+                    processing_panel=processing_panel,
                 )
             else:
                 transform_j_to_i, fitness_ji, rmse_ji = align_fragments_pcd(
-                    source_pcd, target_pcd, source_fpfh, target_fpfh, params
+                    source_pcd,
+                    target_pcd,
+                    source_fpfh,
+                    target_fpfh,
+                    params,
+                    processing_panel=processing_panel,
                 )
             if transform_j_to_i is not None and fitness_ji >= params.get("min_match_score", 0.6):
                 # Step 3: Test if the transformation causes penetration
@@ -78,7 +93,7 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         continue
                     else:
                         print(f"  ✅ Penetration test passed: {frag_j_data['name']} -> {frag_i_data['name']} is a valid match.")
-                
+
                 confidence_ji = float(fitness_ji) / (rmse_ji + 1e-6)
                 matches.append({
                     'source_idx': j, 'target_idx': i,
@@ -91,12 +106,24 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
             # Also try the reverse direction (i to j)
             if debug:
                 transform_i_to_j, fitness_ij, rmse_ij = align_fragments_pcd(
-                    target_pcd, source_pcd, target_fpfh, source_fpfh, params, debug=debug,
-                    source_fragment=frag_i_data, target_fragment=frag_j_data
+                    target_pcd,
+                    source_pcd,
+                    target_fpfh,
+                    source_fpfh,
+                    params,
+                    debug=debug,
+                    source_fragment=frag_i_data,
+                    target_fragment=frag_j_data,
+                    processing_panel=processing_panel,
                 )
             else:
                 transform_i_to_j, fitness_ij, rmse_ij = align_fragments_pcd(
-                    target_pcd, source_pcd, target_fpfh, source_fpfh, params
+                    target_pcd,
+                    source_pcd,
+                    target_fpfh,
+                    source_fpfh,
+                    params,
+                    processing_panel=processing_panel,
                 )
             if transform_i_to_j is not None and fitness_ij >= params.get("min_match_score", 0.6):
                 # Step 3: Test if the transformation causes penetration
@@ -110,7 +137,7 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                         continue
                     else:
                         print(f"  ✅ Penetration test passed: {frag_i_data['name']} -> {frag_j_data['name']} is a valid match.")
-                
+
                 confidence_ij = float(fitness_ij) / (rmse_ij + 1e-6)
                 matches.append({
                     'source_idx': i, 'target_idx': j,
@@ -122,7 +149,10 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
                 })
     return matches
 
-def find_pairwise_matches(fragments_data, params, debug=False, top_n_per_pair=3):
+
+def find_pairwise_matches(
+    fragments_data, params, debug=False, top_n_per_pair=3, processing_panel=None
+):
     """
     Finds potential pairwise alignments between all unique pairs of fragments.
     Each item in fragments_data is a dict:
@@ -133,7 +163,9 @@ def find_pairwise_matches(fragments_data, params, debug=False, top_n_per_pair=3)
     Args:
         fragments_data (list of dict): List of fragment data, including precomputed PCDs and features.
         params (dict): Configuration parameters.
+        debug (bool): Whether to enable debug visualization.
         top_n_per_pair (int): Number of top matches to keep per fragment pair.
+        processing_panel: Optional processing panel for GUI visualization.
 
     Returns:
         list of dict: Each dict represents a potential match:
@@ -153,7 +185,9 @@ def find_pairwise_matches(fragments_data, params, debug=False, top_n_per_pair=3)
     # Use deterministic sequential processing instead of parallel processing
     # This ensures consistent results across runs
     for i, j in pairs:
-        matches = _match_fragment_pair(i, j, fragments_data[i], fragments_data[j], params, debug)
+        matches = _match_fragment_pair(
+            i, j, fragments_data[i], fragments_data[j], params, debug, processing_panel
+        )
         if matches:
             # Only keep top N matches for this pair (by score)
             matches_sorted = sorted(matches, key=lambda x: x['score'], reverse=True)
