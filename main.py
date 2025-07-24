@@ -160,31 +160,50 @@ def main(args):
     # Direct visualization of all pairwise matches (runtime)
     if args.num_viz_pairwise > 0 and pairwise_matches:
         print(
-            f"  Visualizing all {len(pairwise_matches)} pairwise matches (using original meshes)..."
+            f"  Found {len(pairwise_matches)} pairwise matches available for visualization."
         )
-        sorted_matches_for_viz = sorted(
-            pairwise_matches, key=lambda x: x["score"], reverse=True
-        )
-        for i_viz, match_viz in enumerate(sorted_matches_for_viz):
-            s_data = valid_fragments_data[match_viz["source_idx"]]
-            t_data = valid_fragments_data[match_viz["target_idx"]]
 
-            # Use original meshes instead of pcd_for_features
-            source_geom_to_viz = copy.deepcopy(s_data["original_mesh"])
-            target_geom_to_viz = copy.deepcopy(t_data["original_mesh"])
-
-            # Ensure they have normals for consistent display if not already computed
-            if not source_geom_to_viz.has_vertex_normals():
-                source_geom_to_viz.compute_vertex_normals()
-            if not target_geom_to_viz.has_vertex_normals():
-                target_geom_to_viz.compute_vertex_normals()
-
-            draw_registration_result(
-                source_geom_to_viz,
-                target_geom_to_viz,
-                match_viz["transformation"],
-                window_name=f"Pairwise Match {i_viz+1}/{len(sorted_matches_for_viz)}: {s_data['name']} to {t_data['name']} (Score: {match_viz['score']:.3f})",
+        # Ask for user confirmation before visualization
+        user_input = (
+            input(
+                f"  Do you want to visualize the top {min(args.num_viz_pairwise, len(pairwise_matches))} pairwise matches? (y/n): "
             )
+            .strip()
+            .lower()
+        )
+
+        if user_input in ["y", "yes"]:
+            print(
+                f"  Visualizing top {min(args.num_viz_pairwise, len(pairwise_matches))} pairwise matches (using original meshes)..."
+            )
+            sorted_matches_for_viz = sorted(
+                pairwise_matches, key=lambda x: x["score"], reverse=True
+            )
+            # Limit to the requested number of visualizations
+            matches_to_viz = sorted_matches_for_viz[: args.num_viz_pairwise]
+
+            for i_viz, match_viz in enumerate(matches_to_viz):
+                s_data = valid_fragments_data[match_viz["source_idx"]]
+                t_data = valid_fragments_data[match_viz["target_idx"]]
+
+                # Use original meshes instead of pcd_for_features
+                source_geom_to_viz = copy.deepcopy(s_data["original_mesh"])
+                target_geom_to_viz = copy.deepcopy(t_data["original_mesh"])
+
+                # Ensure they have normals for consistent display if not already computed
+                if not source_geom_to_viz.has_vertex_normals():
+                    source_geom_to_viz.compute_vertex_normals()
+                if not target_geom_to_viz.has_vertex_normals():
+                    target_geom_to_viz.compute_vertex_normals()
+
+                draw_registration_result(
+                    source_geom_to_viz,
+                    target_geom_to_viz,
+                    match_viz["transformation"],
+                    window_name=f"Pairwise Match {i_viz+1}/{len(matches_to_viz)}: {s_data['name']} to {t_data['name']} (Score: {match_viz['score']:.3f})",
+                )
+        else:
+            print("  Skipping pairwise match visualization.")
 
     # 5. Global Assembly --------------------------------------------------------------------------------------------
     print("\n[5. Performing Global Assembly]")
