@@ -49,7 +49,7 @@ def refine_registration_icp(source_pcd, target_pcd, initial_transform, params):
     """
     voxel_size = params["voxel_downsample_size"]
     distance_threshold_icp = voxel_size * params.get("icp_max_correspondence_distance_factor", 2.0)
-    
+
     # Ensure point clouds have normals for point-to-plane ICP
     if not source_pcd.has_normals():
         source_pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=params["normal_estimation_radius"], max_nn=params["normal_estimation_max_nn"]))
@@ -67,7 +67,18 @@ def refine_registration_icp(source_pcd, target_pcd, initial_transform, params):
     )
     return result_icp
 
-def align_fragments_pcd(source_pcd, target_pcd, source_fpfh, target_fpfh, params, debug=False, source_fragment=None, target_fragment=None):
+
+def align_fragments_pcd(
+    source_pcd,
+    target_pcd,
+    source_fpfh,
+    target_fpfh,
+    params,
+    debug=False,
+    source_fragment=None,
+    target_fragment=None,
+    processing_panel=None,
+):
     """
     Aligns two point clouds (fragments) using global RANSAC + local ICP.
     Args:
@@ -113,7 +124,17 @@ def align_fragments_pcd(source_pcd, target_pcd, source_fpfh, target_fpfh, params
             src_fract_vis.paint_uniform_color([1,0,0])
             src_fract_vis.transform(result_ransac.transformation)
             vis_geoms.append(src_fract_vis)
-        o3d.visualization.draw_geometries(vis_geoms, window_name=f"[DEBUG] After RANSAC Alignment (Gray=Full Mesh, Red=Source Fracture, Green=Target Fracture)")
+        # Use GUI-based debug visualization if processing_panel is available
+        if processing_panel is not None:
+            processing_panel.show_debug_visualization(
+                vis_geoms,
+                "[DEBUG] After RANSAC Alignment (Gray=Full Mesh, Red=Source Fracture, Green=Target Fracture)",
+            )
+        else:
+            # Fallback to console-based visualization for standalone mode
+            print(
+                "[DEBUG] RANSAC alignment visualization skipped (no processing panel)"
+            )
     # RANSAC heuristic
     if result_ransac.fitness < 0.1 and result_ransac.inlier_rmse > params["voxel_downsample_size"] * 5:
         return None, result_ransac.fitness, result_ransac.inlier_rmse
@@ -140,7 +161,15 @@ def align_fragments_pcd(source_pcd, target_pcd, source_fpfh, target_fpfh, params
             src_fract_vis.paint_uniform_color([1,0,0])
             src_fract_vis.transform(result_icp.transformation)
             vis_geoms.append(src_fract_vis)
-        o3d.visualization.draw_geometries(vis_geoms, window_name=f"[DEBUG] After ICP Alignment (Gray=Full Mesh, Red=Source Fracture, Green=Target Fracture)")
+        # Use GUI-based debug visualization if processing_panel is available
+        if processing_panel is not None:
+            processing_panel.show_debug_visualization(
+                vis_geoms,
+                "[DEBUG] After ICP Alignment (Gray=Full Mesh, Red=Source Fracture, Green=Target Fracture)",
+            )
+        else:
+            # Fallback to console-based visualization for standalone mode
+            print("[DEBUG] ICP alignment visualization skipped (no processing panel)")
     min_fitness = params.get("min_match_score", 0.7)
     if result_icp.fitness > min_fitness and result_icp.inlier_rmse < params["voxel_downsample_size"] * 2.0:
         return result_icp.transformation, result_icp.fitness, result_icp.inlier_rmse

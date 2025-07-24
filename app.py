@@ -534,6 +534,16 @@ def main(args):
 
     w = App(1024, 768, config_file=args.config_file)
 
+    # Add command line arguments to app parameters
+    w.params["input_dir"] = args.input_dir
+    w.params["output_dir"] = args.output_dir
+    w.params["visualize_final"] = args.visualize_final
+    w.params["num_viz_pairwise"] = args.num_viz_pairwise
+    w.params["visualize_segmentation"] = args.visualize_segmentation
+    w.params["debug_pairwise_matching"] = args.debug_pairwise_matching
+    w.params["top_n_matches_per_pair"] = args.top_n_matches_per_pair
+    w.params["disable_snapping"] = args.disable_snapping
+
     # Load fragments
     fragments_data_raw = src.io_utils.load_fragments_from_directory(args.input_dir)
     for frag_info_raw in fragments_data_raw:

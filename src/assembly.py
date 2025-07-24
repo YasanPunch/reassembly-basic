@@ -523,9 +523,10 @@ class Assembler:
             mesh_pg = copy.deepcopy(mesh)
             mesh_pg.transform(transform)
             pose_graph_meshes.append(mesh_pg)
-        o3d.visualization.draw_geometries(
-            pose_graph_meshes,
-            window_name="Final Composite Assembly: After Pose Graph Optimization",
+        # Note: This visualization is not compatible with GUI mode
+        # In GUI mode, this would need to be handled differently
+        print(
+            "[Visualization] Pose graph optimization visualization not available in GUI mode"
         )
 
         # --- POST-PROCESSING SNAPPING STEP ---
@@ -575,9 +576,10 @@ class Assembler:
             print(
                 "[Post-Processing] Snapping complete. Visualizing snapped fragments..."
             )
-            o3d.visualization.draw_geometries(
-                snapped_meshes,
-                window_name="Final Composite Assembly: Snapped Fragments",
+            # Note: This visualization is not compatible with GUI mode
+            # In GUI mode, this would need to be handled differently
+            print(
+                "[Visualization] Snapped fragments visualization not available in GUI mode"
             )
             final_mesh = combine_meshes(
                 snapped_meshes, [np.eye(4)] * len(snapped_meshes)

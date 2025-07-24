@@ -20,7 +20,11 @@ def get_color(index, total_items=20): # Added total_items for better cmap indexi
 
 
 def draw_registration_result(
-    source, target, transformation, window_name="Registration Result"
+    source,
+    target,
+    transformation,
+    window_name="Registration Result",
+    processing_panel=None,
 ):
     # ... (remains the same, but ensure geometries are copies if modified)
     source_temp = copy.deepcopy(source)
@@ -29,13 +33,21 @@ def draw_registration_result(
     target_temp.paint_uniform_color([0, 0.651, 0.929])
     if transformation is not None:
         source_temp.transform(transformation)
-    o3d.visualization.draw_geometries(
-        [source_temp, target_temp], window_name=window_name
-    )
+
+    # Use GUI-based debug visualization if processing_panel is available
+    if processing_panel is not None:
+        processing_panel.show_debug_visualization(
+            [source_temp, target_temp], window_name
+        )
+    else:
+        # Fallback to console-based visualization for standalone mode
+        print(
+            f"[DEBUG] Registration result visualization skipped (no processing panel): {window_name}"
+        )
 
 
 def debug_visualize_voxel_downsampling(
-    original_mesh, surf, pcd, fragment_name, surface_index
+    original_mesh, surf, pcd, fragment_name, surface_index, processing_panel=None
 ):
     """
     Debug visualization function to show voxel downsampling results.
@@ -77,4 +89,12 @@ def debug_visualize_voxel_downsampling(
 
     # Display with informative window title
     window_title = f"[DEBUG] Voxel Downsampling: {fragment_name} Surface {surface_index} (Gray=Original, Green=Surface, Red=Downsampled Points)"
-    o3d.visualization.draw_geometries(vis_geoms, window_name=window_title)
+
+    # Use GUI-based debug visualization if processing_panel is available
+    if processing_panel is not None:
+        processing_panel.show_debug_visualization(vis_geoms, window_title)
+    else:
+        # Fallback to console-based visualization for standalone mode
+        print(
+            f"[DEBUG] Voxel downsampling visualization skipped (no processing panel): {window_title}"
+        )

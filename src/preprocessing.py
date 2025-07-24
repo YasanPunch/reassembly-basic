@@ -9,7 +9,7 @@ print("\nDEBUG: preprocessing.py top level executed")
 np.random.seed(42)
 
 
-def preprocess_fragment(fragment_info, params):
+def preprocess_fragment(fragment_info, params, processing_panel=None):
     """
     Preprocesses a single fragment:
     1. Identifies fracture surfaces using normal-based segmentation.
@@ -38,7 +38,7 @@ def preprocess_fragment(fragment_info, params):
     # --- Step 1: Identify and Extract Fracture Surface Meshes (now a list) ---
     print(f"    Preprocessing: Segmenting fracture surfaces for {fragment_name}...")
     fracture_surfaces = extract_fracture_surface_mesh(
-        original_mesh, fragment_name, params
+        original_mesh, fragment_name, params, processing_panel
     )
     if not isinstance(fracture_surfaces, list):
         fracture_surfaces = [fracture_surfaces] if fracture_surfaces is not None else []

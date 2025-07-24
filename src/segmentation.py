@@ -1,13 +1,15 @@
 import open3d as o3d
 import trimesh
 import numpy as np
-import copy
 import matplotlib.pyplot as plt
 from collections import deque
 from scipy import ndimage
 from scipy.spatial import cKDTree
 from collections import Counter
+import time
 
+import open3d.visualization.gui as gui
+import open3d.visualization.rendering as rendering
 
 def get_color(index, total_items=20, cmap_name='tab10', num_variations=3):
     """
@@ -228,14 +230,14 @@ def calculate_region_bumpiness(tri_mesh, region_faces, params):
     """
     if len(region_faces) < 10:  # Too few faces
         return 0.0
-    
+
     # Get region bounds
     region_vertices = tri_mesh.vertices[tri_mesh.faces[region_faces].flatten()]
     region_avg_normal = calculate_region_average_normal(tri_mesh, region_faces)
-    
+
     # Project vertices onto plane perpendicular to average normal
     centroid = np.mean(region_vertices, axis=0)
-    
+
     # Create coordinate system with z-axis aligned to average normal
     z_axis = region_avg_normal
     # Find arbitrary perpendicular vectors
@@ -245,42 +247,42 @@ def calculate_region_bumpiness(tri_mesh, region_faces, params):
         x_axis = np.cross([1, 0, 0], z_axis)
     x_axis = x_axis / np.linalg.norm(x_axis)
     y_axis = np.cross(z_axis, x_axis)
-    
+
     # Project vertices to 2D
     relative_verts = region_vertices - centroid
     u_coords = np.dot(relative_verts, x_axis)
     v_coords = np.dot(relative_verts, y_axis)
     depths = np.dot(relative_verts, z_axis)
-    
+
     # Create elevation map (simplified - using scatter interpolation)
     resolution = params.get('elevation_map_resolution', 64)
     u_min, u_max = u_coords.min(), u_coords.max()
     v_min, v_max = v_coords.min(), v_coords.max()
-    
+
     if u_max - u_min < 1e-6 or v_max - v_min < 1e-6:
         return 0.0
-    
+
     # Create grid
     u_grid = np.linspace(u_min, u_max, resolution)
     v_grid = np.linspace(v_min, v_max, resolution)
     uu, vv = np.meshgrid(u_grid, v_grid)
-    
+
     # Simple nearest neighbor interpolation for elevation map
     elevation_map = np.zeros((resolution, resolution))
     for i in range(resolution):
         for j in range(resolution):
             u_pt = uu[i, j]
             v_pt = vv[i, j]
-            
+
             # Find nearest vertex
             distances = (u_coords - u_pt)**2 + (v_coords - v_pt)**2
             nearest_idx = np.argmin(distances)
             elevation_map[i, j] = depths[nearest_idx]
-    
+
     # Apply Laplacian operator
     # Using scipy's Laplacian filter
     laplacian = ndimage.laplace(elevation_map)
-    
+
     # Calculate bumpiness as average absolute Laplacian
     # Exclude infinite values
     valid_mask = np.isfinite(laplacian)
@@ -288,11 +290,17 @@ def calculate_region_bumpiness(tri_mesh, region_faces, params):
         bumpiness = np.mean(np.abs(laplacian[valid_mask]))
     else:
         bumpiness = 0.0
-    
+
     return bumpiness
 
 
-def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", params=None):
+def extract_fracture_surface_mesh(
+    o3d_mesh_fragment,
+    fragment_name="Unnamed",
+    params=None,
+    processing_panel=None,
+    pre_selected_regions=None,
+):
     """
     Main segmentation function using the paper's region growing approach.
     """
@@ -397,16 +405,23 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
                 print(f"    Region {props['index']+1} selected as fracture candidate (bumpiness: {props['bumpiness']:.4f})")
 
     # Interactive visualization if enabled
-    if params['visualize_segmentation'] and len(regions) > 0:
+    # Handle pre-selected regions (for reconstruction from previous selection)
+    if pre_selected_regions is not None:
+        print(
+            f"\n    Using pre-selected regions for {fragment_name}: {pre_selected_regions}"
+        )
+        # Update face_is_fracture_candidate based on pre-selected regions
+        face_is_fracture_candidate.fill(False)
+        for region_id in pre_selected_regions:
+            if region_id < len(region_properties):
+                face_is_fracture_candidate[region_properties[region_id]["faces"]] = True
+        # Continue to fracture surface creation without showing dialog
+    # If interactive visualization is enabled, show dialog for user selection
+    elif params["visualize_segmentation"] and len(regions) > 0:
         print(f"\n    Visualizing {len(regions)} regions for interactive selection...")
-
-        shared_state = {'confirmed_selection': False, 'quit_without_selection': False, 'current_page': 0}
-        PAGE_SIZE = 10
 
         drawable_segment_infos = []
         highlight_color = np.array([0.0, 0.0, 0.0])  # Black highlight
-
-        mesh_vis = copy.deepcopy(o3d_mesh_fragment)
 
         for i, props in enumerate(region_properties):
             seg_mesh = o3d.geometry.TriangleMesh()
@@ -429,135 +444,24 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
                 'properties': props
             })
 
-        if drawable_segment_infos:
-            num_total_segments = len(drawable_segment_infos)
-            num_pages = (num_total_segments + PAGE_SIZE - 1) // PAGE_SIZE
+        if not drawable_segment_infos:
+            print("    No valid segments to display")
+            return None
 
-            vis = o3d.visualization.VisualizerWithKeyCallback()
-            vis.create_window(
-                window_name=f"Select: {fragment_name} (Page 1/{num_pages}. N/P=Page. S=Confirm. Q=Skip.)",
-                width=1280, height=960
-            )
+        # Asynchronous approach - show dialog and let user interact
+        _show_segmentation_dialog_async(
+            drawable_segment_infos, fragment_name, params, processing_panel
+        )
+        # Return None for now - the result will be handled by the callback
+        return None
 
-            for info in drawable_segment_infos:
-                vis.add_geometry(info['mesh'])
-                if info['selected']:
-                    info['mesh'].paint_uniform_color(highlight_color)
-
-            def print_current_page_and_selection():
-                page_idx = shared_state['current_page']
-                global_start = page_idx * PAGE_SIZE + 1
-                global_end = min((page_idx + 1) * PAGE_SIZE, num_total_segments)
-
-                print(f"\n  --- Page {page_idx + 1}/{num_pages} (Regions {global_start}-{global_end}) ---")
-                print(f"  Keys 1-9, 0 (for 10th) toggle selection.")
-
-                # Show properties for visible regions
-                for i in range(page_idx * PAGE_SIZE, min((page_idx + 1) * PAGE_SIZE, num_total_segments)):
-                    if i < len(drawable_segment_infos):
-                        info = drawable_segment_infos[i]
-                        props = info['properties']
-                        selected_marker = "*" if info['selected'] else " "
-                        print(f"  {selected_marker}[{(i % PAGE_SIZE) + 1}] Region {props['index']+1}: "
-                              f"{props['num_faces']} faces ({props['area_fraction']*100:.1f}%)")
-                        if params['use_bumpiness_detection']:
-                            print(f"       Bumpiness: {props['bumpiness']:.4f}")
-
-                selected_ids = sorted([info['id'] + 1 for info in drawable_segment_infos if info['selected']])
-                print(f"  Selected: {selected_ids if selected_ids else 'None'}")
-
-            print_current_page_and_selection()
-
-            def toggle_segment_on_current_page(visualizer, key_idx):
-                page_idx = shared_state['current_page']
-                segment_idx = page_idx * PAGE_SIZE + key_idx
-
-                if 0 <= segment_idx < num_total_segments:
-                    info = drawable_segment_infos[segment_idx]
-                    info['selected'] = not info['selected']
-
-                    if info['selected']:
-                        info['mesh'].paint_uniform_color(highlight_color)
-                    else:
-                        info['mesh'].paint_uniform_color(info['base_color'])
-
-                    visualizer.update_geometry(info['mesh'])
-                    print_current_page_and_selection()
-
-                return False
-
-            # Register key callbacks
-            for i in range(PAGE_SIZE):
-                key_char = str((i + 1) % 10)
-                vis.register_key_callback(ord(key_char), 
-                    lambda v, idx=i: toggle_segment_on_current_page(v, idx))
-
-            def change_page(visualizer, direction):
-                old_page = shared_state['current_page']
-                shared_state['current_page'] = (shared_state['current_page'] + direction + num_pages) % num_pages
-                if old_page != shared_state['current_page']:
-                    print_current_page_and_selection()
-                return False
-
-            vis.register_key_callback(ord('N'), lambda v: change_page(v, 1))
-            vis.register_key_callback(ord('P'), lambda v: change_page(v, -1))
-
-            def confirm_and_close(visualizer):
-                shared_state['confirmed_selection'] = True
-                print("\n  Selection Confirmed. Closing...")
-                visualizer.close()
-                return False
-
-            def quit_and_close(visualizer):
-                shared_state['quit_without_selection'] = True
-                print("\n  Selection Aborted. Closing...")
-                visualizer.close()
-                return False
-
-            vis.register_key_callback(ord('S'), confirm_and_close)
-            vis.register_key_callback(ord('Q'), quit_and_close)
-
-            print("\n=== Interactive Region Selection ===")
-            print(f"  Fragment: {fragment_name}")
-            print("  N/P: Navigate pages | 1-9,0: Toggle selection")
-            print("  S: Save selection | Q: Quit without saving")
-
-            vis.run()
-            vis.destroy_window()
-
-            if shared_state['confirmed_selection']:
-                selected_regions = [info['id'] for info in drawable_segment_infos if info['selected']]
-                face_is_fracture_candidate.fill(False)
-                for info in drawable_segment_infos:
-                    if info['selected']:
-                        face_is_fracture_candidate[info['properties']['faces']] = True
-                print(f"\n    User selected {len(selected_regions)} regions")
-            elif shared_state['quit_without_selection']:
-                print(f"\n    User quit selection. No regions selected.")
-                return None
-
-    # Console fallback for non-interactive mode
+    # No console fallback - only interactive visualization is supported
     elif not params['visualize_segmentation'] and len(regions) > 0 and not params['use_bumpiness_detection']:
-        print("\n=== Region Selection (Console) ===")
-        for i, props in enumerate(region_properties):
-            print(f"  Region {i+1}: {props['num_faces']} faces ({props['area_fraction']*100:.1f}% of area)")
-
-        selection_str = input(f"Enter region numbers to select (1-{len(regions)}, comma-separated, 'all', or 'none'): ")
-
-        if selection_str.lower() == 'all':
-            selected_regions = list(range(len(regions)))
-        elif selection_str.lower() == 'none' or not selection_str.strip():
-            selected_regions = []
-        else:
-            try:
-                selected_regions = [int(x.strip()) - 1 for x in selection_str.split(',') if x.strip()]
-                selected_regions = [r for r in selected_regions if 0 <= r < len(regions)]
-            except ValueError:
-                print("    Invalid input. No regions selected.")
-                selected_regions = []
-
-        for region_idx in selected_regions:
-            face_is_fracture_candidate[region_properties[region_idx]['faces']] = True
+        print(f"\n    No interactive visualization enabled for {fragment_name}")
+        print(
+            f"    Enable 'visualize_segmentation' in parameters to select regions interactively"
+        )
+        return None
 
     # Collect selected regions' face indices and normals for merging
     selected_region_faces = []
@@ -637,16 +541,27 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         cluster_faces_arr = np.array(sorted(cluster_faces), dtype=np.int32)
         cluster_triangles = all_triangles[cluster_faces_arr]
         cluster_mesh = o3d.geometry.TriangleMesh()
-        cluster_mesh.vertices = mesh_vis.vertices  # Use full vertex set
+        cluster_mesh.vertices = o3d_mesh_fragment.vertices  # Use full vertex set
         cluster_mesh.triangles = o3d.utility.Vector3iVector(cluster_triangles)
         cluster_mesh.compute_vertex_normals()
         color = get_color(idx, len(merged_clusters))
         cluster_mesh.paint_uniform_color(color)
         print(f"[DEBUG] Merged regions {merged_idxs} into face {idx} (color {idx}), triangles: {len(cluster_triangles)}, vertices: {len(cluster_mesh.vertices)}, color: {color}")
         # Create wireframe for base mesh
-        wireframe = o3d.geometry.LineSet.create_from_triangle_mesh(mesh_vis)
+        wireframe = o3d.geometry.LineSet.create_from_triangle_mesh(o3d_mesh_fragment)
         wireframe.paint_uniform_color([0.5, 0.5, 0.5])
-        o3d.visualization.draw_geometries([wireframe, cluster_mesh], window_name=f"[DEBUG] Merged Face {idx} (Color {idx})")
+
+        # Skip debug visualization during reconstruction phase to avoid multiple windows
+        # Debug visualization is only useful during initial segmentation
+        if processing_panel is not None and pre_selected_regions is None:
+            processing_panel.show_debug_visualization(
+                [wireframe, cluster_mesh], f"[DEBUG] Merged Face {idx} (Color {idx})"
+            )
+        else:
+            # Skip visualization during reconstruction or standalone mode
+            print(
+                f"[DEBUG] Merged Face {idx} visualization skipped (reconstruction phase or no processing panel)"
+            )
     # Store merged faces as separate fracture surfaces for downstream processing
     merged_fracture_surfaces = []
     for cluster_faces, merged_idxs in merged_clusters:
@@ -655,7 +570,7 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         cluster_faces_arr = np.array(sorted(cluster_faces), dtype=np.int32)
         cluster_triangles = all_triangles[cluster_faces_arr]
         cluster_mesh = o3d.geometry.TriangleMesh()
-        cluster_mesh.vertices = mesh_vis.vertices
+        cluster_mesh.vertices = o3d_mesh_fragment.vertices
         cluster_mesh.triangles = o3d.utility.Vector3iVector(cluster_triangles)
         cluster_mesh.remove_unreferenced_vertices()
         cluster_mesh.remove_degenerate_triangles()
@@ -664,3 +579,306 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
             merged_fracture_surfaces.append(cluster_mesh)
     # Return merged fracture surfaces for this fragment
     return merged_fracture_surfaces
+
+
+# This function has been replaced by _show_segmentation_dialog_async
+# and is no longer used in the new asynchronous approach
+
+
+def _interactive_selection_standalone(drawable_segment_infos, fragment_name, params):
+    """
+    Original standalone interactive selection approach using key callbacks.
+    """
+    shared_state = {
+        "confirmed_selection": False,
+        "quit_without_selection": False,
+        "current_page": 0,
+    }
+    PAGE_SIZE = 10
+    highlight_color = np.array([0.0, 0.0, 0.0])  # Black highlight
+
+    num_total_segments = len(drawable_segment_infos)
+    num_pages = (num_total_segments + PAGE_SIZE - 1) // PAGE_SIZE
+
+    vis = o3d.visualization.VisualizerWithKeyCallback()
+    vis.create_window(
+        window_name=f"Select: {fragment_name} (Page 1/{num_pages}. N/P=Page. S=Confirm. Q=Skip.)",
+        width=1280,
+        height=960,
+    )
+
+    for info in drawable_segment_infos:
+        vis.add_geometry(info["mesh"])
+        if info["selected"]:
+            info["mesh"].paint_uniform_color(highlight_color)
+
+    def print_current_page_and_selection():
+        page_idx = shared_state["current_page"]
+        global_start = page_idx * PAGE_SIZE + 1
+        global_end = min((page_idx + 1) * PAGE_SIZE, num_total_segments)
+
+        print(
+            f"\n  --- Page {page_idx + 1}/{num_pages} (Regions {global_start}-{global_end}) ---"
+        )
+        print(f"  Keys 1-9, 0 (for 10th) toggle selection.")
+
+        # Show properties for visible regions
+        for i in range(
+            page_idx * PAGE_SIZE, min((page_idx + 1) * PAGE_SIZE, num_total_segments)
+        ):
+            if i < len(drawable_segment_infos):
+                info = drawable_segment_infos[i]
+                props = info["properties"]
+                selected_marker = "*" if info["selected"] else " "
+                print(
+                    f"  {selected_marker}[{(i % PAGE_SIZE) + 1}] Region {props['index']+1}: "
+                    f"{props['num_faces']} faces ({props['area_fraction']*100:.1f}%)"
+                )
+                if params.get("use_bumpiness_detection"):
+                    print(f"       Bumpiness: {props['bumpiness']:.4f}")
+
+        selected_ids = sorted(
+            [info["id"] + 1 for info in drawable_segment_infos if info["selected"]]
+        )
+        print(f"  Selected: {selected_ids if selected_ids else 'None'}")
+
+    print_current_page_and_selection()
+
+    def toggle_segment_on_current_page(visualizer, key_idx):
+        page_idx = shared_state["current_page"]
+        segment_idx = page_idx * PAGE_SIZE + key_idx
+
+        if 0 <= segment_idx < num_total_segments:
+            info = drawable_segment_infos[segment_idx]
+            info["selected"] = not info["selected"]
+
+            if info["selected"]:
+                info["mesh"].paint_uniform_color(highlight_color)
+            else:
+                info["mesh"].paint_uniform_color(info["base_color"])
+
+            visualizer.update_geometry(info["mesh"])
+            print_current_page_and_selection()
+
+        return False
+
+    # Register key callbacks
+    for i in range(PAGE_SIZE):
+        key_char = str((i + 1) % 10)
+        vis.register_key_callback(
+            ord(key_char), lambda v, idx=i: toggle_segment_on_current_page(v, idx)
+        )
+
+    def change_page(visualizer, direction):
+        old_page = shared_state["current_page"]
+        shared_state["current_page"] = (
+            shared_state["current_page"] + direction + num_pages
+        ) % num_pages
+        if old_page != shared_state["current_page"]:
+            print_current_page_and_selection()
+        return False
+
+    vis.register_key_callback(ord("N"), lambda v: change_page(v, 1))
+    vis.register_key_callback(ord("P"), lambda v: change_page(v, -1))
+
+    def confirm_and_close(visualizer):
+        shared_state["confirmed_selection"] = True
+        print("\n  Selection Confirmed. Closing...")
+        visualizer.close()
+        return False
+
+    def quit_and_close(visualizer):
+        shared_state["quit_without_selection"] = True
+        print("\n  Selection Aborted. Closing...")
+        visualizer.close()
+        return False
+
+    vis.register_key_callback(ord("S"), confirm_and_close)
+    vis.register_key_callback(ord("Q"), quit_and_close)
+
+    print("\n=== Interactive Region Selection ===")
+    print(f"  Fragment: {fragment_name}")
+    print("  N/P: Navigate pages | 1-9,0: Toggle selection")
+    print("  S: Save selection | Q: Quit without saving")
+
+    vis.run()
+    vis.destroy_window()
+
+    if shared_state["confirmed_selection"]:
+        selected_regions = [
+            info["id"] for info in drawable_segment_infos if info["selected"]
+        ]
+        print(f"\n    User selected {len(selected_regions)} regions")
+        return selected_regions
+    elif shared_state["quit_without_selection"]:
+        print(f"\n    User quit selection. No regions selected.")
+        return None
+
+    return None
+
+
+def _show_segmentation_dialog_async(
+    drawable_segment_infos, fragment_name, params, processing_panel
+):
+    """
+    Asynchronous segmentation dialog that shows one window at a time and waits for user input.
+    This function creates the dialog and window, then returns immediately. The result is handled
+    by callbacks that trigger the next step in the processing pipeline.
+    """
+    # Create a new window with scene widget using app.py functions
+    scene_id = f"segmentation_{fragment_name}"
+    scene_widget = processing_panel.app.add_scene_widget(
+        scene_id, title=f"Segmentation: {fragment_name}", width=1000, height=800
+    )
+
+    # Add all segment meshes to the scene
+    for info in drawable_segment_infos:
+        material = rendering.MaterialRecord()
+        material.shader = "defaultLit"
+        if info["selected"]:
+            material.base_color = [0.0, 0.0, 0.0, 1.0]  # Black for selected
+        else:
+            material.base_color = [*info["base_color"], 1.0]
+
+        scene_widget.scene.add_geometry(f"segment_{info['id']}", info["mesh"], material)
+
+    # Set camera for the scene
+    bounds = scene_widget.scene.bounding_box
+    scene_widget.setup_camera(60, bounds, bounds.get_center())
+
+    # Create dialog for user interaction
+    em = processing_panel.app.window.theme.font_size
+    dlg = gui.Dialog(f"Select Fracture Surfaces: {fragment_name}")
+
+    dlg_layout = gui.Vert(em, gui.Margins(em, em, em, em))
+
+    # Add description
+    dlg_layout.add_child(gui.Label("Select fracture surface regions:"))
+    dlg_layout.add_child(
+        gui.Label("Look at the visualization window to see the segments")
+    )
+
+    # Create scrollable list of segments
+    scroll = gui.ScrollableVert(em, gui.Margins(0, 0, 0, 0))
+
+    # Track selection state
+    selection_state = {info["id"]: info["selected"] for info in drawable_segment_infos}
+
+    def update_visualization():
+        """Update the visualization based on current selection"""
+        for info in drawable_segment_infos:
+            # Remove the existing geometry
+            scene_widget.scene.remove_geometry(f"segment_{info['id']}")
+
+            # Create new material with updated color
+            material = rendering.MaterialRecord()
+            material.shader = "defaultLit"
+            if selection_state[info["id"]]:
+                material.base_color = [0.0, 0.0, 0.0, 1.0]  # Black for selected
+            else:
+                material.base_color = [*info["base_color"], 1.0]
+
+            # Re-add the geometry with new material
+            scene_widget.scene.add_geometry(
+                f"segment_{info['id']}", info["mesh"], material
+            )
+
+    # Create checkboxes for each segment
+    for info in drawable_segment_infos:
+        props = info["properties"]
+        checkbox = gui.Checkbox(
+            f"Region {props['index']+1}: {props['num_faces']} faces ({props['area_fraction']*100:.1f}%)"
+        )
+        checkbox.checked = info["selected"]
+
+        def on_toggle(checked, segment_id=info["id"]):
+            selection_state[segment_id] = checked
+            update_visualization()
+
+        checkbox.set_on_checked(on_toggle)
+        scroll.add_child(checkbox)
+
+        # Add bumpiness info if available
+        if params.get("use_bumpiness_detection") and props.get("bumpiness", 0) > 0:
+            bumpiness_label = gui.Label(f"    Bumpiness: {props['bumpiness']:.4f}")
+            scroll.add_child(bumpiness_label)
+
+    dlg_layout.add_child(scroll)
+
+    # Add buttons
+    button_layout = gui.Horiz()
+
+    select_all_btn = gui.Button("Select All")
+    select_none_btn = gui.Button("Select None")
+    confirm_btn = gui.Button("Confirm")
+    cancel_btn = gui.Button("Cancel")
+
+    def on_select_all():
+        for info in drawable_segment_infos:
+            selection_state[info["id"]] = True
+        update_visualization()
+        # Update checkboxes
+        for child in scroll.get_children():
+            if isinstance(child, gui.Checkbox):
+                child.checked = True
+
+    def on_select_none():
+        for info in drawable_segment_infos:
+            selection_state[info["id"]] = False
+        update_visualization()
+        # Update checkboxes
+        for child in scroll.get_children():
+            if isinstance(child, gui.Checkbox):
+                child.checked = False
+
+    def on_confirm():
+        # Update the original drawable_segment_infos with selection
+        for info in drawable_segment_infos:
+            info["selected"] = selection_state[info["id"]]
+
+        # Get selected regions
+        selected_regions = [
+            info["id"] for info in drawable_segment_infos if info["selected"]
+        ]
+
+        print(
+            f"\n    User selected {len(selected_regions)} regions for {fragment_name}"
+        )
+
+        # Reset the view before closing
+        processing_panel.app.window.set_needs_layout()
+
+        # Clean up and close
+        processing_panel.app.remove_scene_widget(scene_id)
+        processing_panel.app.window.close_dialog()
+
+        # Trigger next step in processing pipeline
+        processing_panel.continue_segmentation_pipeline(fragment_name, selected_regions)
+
+    def on_cancel():
+        print(
+            f"\n    User cancelled selection for {fragment_name}. No regions selected."
+        )
+
+        # Clean up and close
+        processing_panel.app.remove_scene_widget(scene_id)
+        processing_panel.app.window.close_dialog()
+
+        # Trigger next step in processing pipeline with no selection
+        processing_panel.continue_segmentation_pipeline(fragment_name, [])
+
+    select_all_btn.set_on_clicked(on_select_all)
+    select_none_btn.set_on_clicked(on_select_none)
+    confirm_btn.set_on_clicked(on_confirm)
+    cancel_btn.set_on_clicked(on_cancel)
+
+    button_layout.add_child(select_all_btn)
+    button_layout.add_child(select_none_btn)
+    button_layout.add_child(confirm_btn)
+    button_layout.add_child(cancel_btn)
+
+    dlg_layout.add_child(button_layout)
+    dlg.add_child(dlg_layout)
+
+    # Show dialog and return immediately (non-blocking)
+    processing_panel.app.window.show_dialog(dlg)

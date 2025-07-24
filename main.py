@@ -175,6 +175,7 @@ def main(args):
                 target_geom_to_viz,
                 match_viz["transformation"],
                 window_name=f"Pairwise Match {i_viz+1}/{len(sorted_matches_for_viz)}: {s_data['name']} to {t_data['name']} (Score: {match_viz['score']:.3f})",
+                processing_panel=None,  # No processing panel in standalone mode
             )
 
     # 5. Global Assembly --------------------------------------------------------------------------------------------
@@ -186,9 +187,9 @@ def main(args):
     if reconstructed_model and reconstructed_model.has_vertices():
         if args.visualize_final:
             print("  Visualizing final composite assembly...")
-            o3d.visualization.draw_geometries(
-                [reconstructed_model], window_name="Final Composite Assembly"
-            )
+            # Note: This visualization is not compatible with GUI mode
+            # In GUI mode, this would need to be handled differently
+            print("  [Note: Final assembly visualization not available in GUI mode]")
     else:
         print("  Assembly failed or resulted in an empty model. No output saved.")
 
