@@ -10,6 +10,7 @@ from collections import Counter
 import json
 import os
 import hashlib
+import time
 
 
 def get_color(index, total_items=20, cmap_name='tab10', num_variations=3):
@@ -169,6 +170,256 @@ def load_selection_data(fragment_name, region_properties, params):
     except Exception as e:
         print(f"    Warning: Could not load selection data: {e}")
         return None
+
+
+def get_segmentation_filename(fragment_name, params):
+    """
+    Generate a filename for saving/loading complete segmentation data.
+    """
+    # Create a hash of the parameters to ensure consistency
+    param_str = str(sorted(params.items()))
+    param_hash = hashlib.md5(param_str.encode()).hexdigest()[:8]
+    safe_fragment_name = "".join(
+        c for c in fragment_name if c.isalnum() or c in (" ", "-", "_")
+    ).rstrip()
+    safe_fragment_name = safe_fragment_name.replace(" ", "_")
+
+    return f"segmentation_{safe_fragment_name}_{param_hash}.json"
+
+
+def save_segmentation_results(
+    fragment_name, regions, region_properties, merged_fracture_surfaces, params
+):
+    """
+    Save complete segmentation results to a JSON file.
+
+    Args:
+        fragment_name (str): Name of the fragment
+        regions (list): List of region face indices arrays
+        region_properties (list): List of region property dictionaries
+        merged_fracture_surfaces (list): List of Open3D meshes (merged fracture surfaces)
+        params (dict): Segmentation parameters used
+
+    Returns:
+        str: Path to saved file, or None if saving failed
+    """
+    try:
+        filename = get_segmentation_filename(fragment_name, params)
+
+        # Create segmentations directory if it doesn't exist
+        segmentations_dir = "segmentations"
+        os.makedirs(segmentations_dir, exist_ok=True)
+
+        filepath = os.path.join(segmentations_dir, filename)
+
+        # Prepare data for saving
+        segmentation_data = {
+            "fragment_name": fragment_name,
+            "params": params,
+            "total_regions": len(regions),
+            "regions": [],
+            "region_properties": [],
+            "merged_fracture_surfaces": [],
+            "metadata": {
+                "total_faces": sum(len(region) for region in regions),
+                "total_merged_surfaces": len(merged_fracture_surfaces),
+                "timestamp": time.time() if "time" in globals() else None,
+            },
+        }
+
+        # Save region face indices
+        for region in regions:
+            segmentation_data["regions"].append(region.tolist())
+
+        # Save region properties (convert numpy arrays to lists)
+        for props in region_properties:
+            serializable_props = {
+                "index": props["index"],
+                "num_faces": props["num_faces"],
+                "area": float(props["area"]),
+                "area_fraction": float(props["area_fraction"]),
+                "avg_normal": (
+                    props["avg_normal"].tolist()
+                    if isinstance(props["avg_normal"], np.ndarray)
+                    else props["avg_normal"]
+                ),
+                "bumpiness": float(props["bumpiness"]),
+            }
+            segmentation_data["region_properties"].append(serializable_props)
+
+        # Save merged fracture surfaces as mesh data
+        for i, surface_mesh in enumerate(merged_fracture_surfaces):
+            if (
+                surface_mesh is not None
+                and surface_mesh.has_vertices()
+                and surface_mesh.has_triangles()
+            ):
+                surface_data = {
+                    "index": i,
+                    "vertices": np.asarray(surface_mesh.vertices).tolist(),
+                    "triangles": np.asarray(surface_mesh.triangles).tolist(),
+                    "vertex_count": len(surface_mesh.vertices),
+                    "triangle_count": len(surface_mesh.triangles),
+                }
+                segmentation_data["merged_fracture_surfaces"].append(surface_data)
+
+        with open(filepath, "w") as f:
+            json.dump(segmentation_data, f, indent=2)
+
+        print(f"    Segmentation results saved to: {filepath}")
+        print(
+            f"    - {len(regions)} regions, {len(merged_fracture_surfaces)} merged surfaces"
+        )
+        return filepath
+
+    except Exception as e:
+        print(f"    Warning: Could not save segmentation results: {e}")
+        return None
+
+
+def load_segmentation_results(fragment_name, params):
+    """
+    Load segmentation results from a JSON file if available and compatible.
+
+    Args:
+        fragment_name (str): Name of the fragment
+        params (dict): Segmentation parameters to validate against
+
+    Returns:
+        tuple: (regions, region_properties, merged_fracture_surfaces) or (None, None, None) if loading failed
+    """
+    try:
+        filename = get_segmentation_filename(fragment_name, params)
+        filepath = os.path.join("segmentations", filename)
+
+        if not os.path.exists(filepath):
+            print(f"    No saved segmentation results found at: {filepath}")
+            return None, None, None
+
+        with open(filepath, "r") as f:
+            segmentation_data = json.load(f)
+
+        # Validate that the loaded data is compatible
+        if segmentation_data["fragment_name"] != fragment_name:
+            print(f"    Warning: Saved segmentation data for different fragment")
+            return None, None, None
+
+        # Validate parameters match (basic check)
+        saved_params = segmentation_data["params"]
+        current_param_str = str(sorted(params.items()))
+        saved_param_str = str(sorted(saved_params.items()))
+
+        if current_param_str != saved_param_str:
+            print(
+                f"    Warning: Segmentation parameters changed, ignoring saved results"
+            )
+            print(f"    Current params: {current_param_str[:50]}...")
+            print(f"    Saved params: {saved_param_str[:50]}...")
+            return None, None, None
+
+        # Reconstruct regions
+        regions = []
+        for region_data in segmentation_data["regions"]:
+            regions.append(np.array(region_data, dtype=np.int32))
+
+        # Reconstruct region properties
+        region_properties = []
+        for props_data in segmentation_data["region_properties"]:
+            props = {
+                "index": props_data["index"],
+                "num_faces": props_data["num_faces"],
+                "area": props_data["area"],
+                "area_fraction": props_data["area_fraction"],
+                "avg_normal": np.array(props_data["avg_normal"]),
+                "bumpiness": props_data["bumpiness"],
+                "faces": regions[props_data["index"]],  # Reconstruct faces reference
+            }
+            region_properties.append(props)
+
+        # Reconstruct merged fracture surfaces
+        merged_fracture_surfaces = []
+        for surface_data in segmentation_data["merged_fracture_surfaces"]:
+            surface_mesh = o3d.geometry.TriangleMesh()
+            surface_mesh.vertices = o3d.utility.Vector3dVector(surface_data["vertices"])
+            surface_mesh.triangles = o3d.utility.Vector3iVector(
+                surface_data["triangles"]
+            )
+            surface_mesh.compute_vertex_normals()
+            merged_fracture_surfaces.append(surface_mesh)
+
+        print(f"    Loaded segmentation results from: {filepath}")
+        print(
+            f"    - {len(regions)} regions, {len(merged_fracture_surfaces)} merged surfaces"
+        )
+
+        return regions, region_properties, merged_fracture_surfaces
+
+    except Exception as e:
+        print(f"    Warning: Could not load segmentation results: {e}")
+        return None, None, None
+
+
+def validate_segmentation_results(
+    regions, region_properties, merged_fracture_surfaces, fragment_name
+):
+    """
+    Validate loaded segmentation results for consistency.
+
+    Args:
+        regions (list): List of region face indices arrays
+        region_properties (list): List of region property dictionaries
+        merged_fracture_surfaces (list): List of Open3D meshes
+        fragment_name (str): Name of the fragment for validation
+
+    Returns:
+        bool: True if validation passes, False otherwise
+    """
+    try:
+        # Check basic structure
+        if not isinstance(regions, list) or not isinstance(region_properties, list):
+            print(
+                f"    Warning: Invalid segmentation data structure for {fragment_name}"
+            )
+            return False
+
+        if len(regions) != len(region_properties):
+            print(f"    Warning: Region count mismatch for {fragment_name}")
+            return False
+
+        # Check region properties consistency
+        for i, (region, props) in enumerate(zip(regions, region_properties)):
+            if props["index"] != i:
+                print(f"    Warning: Region index mismatch at {i} for {fragment_name}")
+                return False
+
+            if len(region) != props["num_faces"]:
+                print(
+                    f"    Warning: Face count mismatch in region {i} for {fragment_name}"
+                )
+                return False
+
+        # Check merged surfaces
+        if not isinstance(merged_fracture_surfaces, list):
+            print(f"    Warning: Invalid merged surfaces structure for {fragment_name}")
+            return False
+
+        for i, surface in enumerate(merged_fracture_surfaces):
+            if (
+                surface is None
+                or not surface.has_vertices()
+                or not surface.has_triangles()
+            ):
+                print(f"    Warning: Invalid merged surface {i} for {fragment_name}")
+                return False
+
+        print(f"    Segmentation results validation passed for {fragment_name}")
+        return True
+
+    except Exception as e:
+        print(
+            f"    Warning: Error validating segmentation results for {fragment_name}: {e}"
+        )
+        return False
 
 
 def calculate_region_average_normal(tri_mesh, face_indices):
@@ -428,12 +679,47 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         "use_saved_selections": params.get("use_saved_selections", True),
         "force_interactive": params.get("force_interactive", False),
         "skip_interactive_if_saved": params.get("skip_interactive_if_saved", True),
+        "use_saved_segmentation": params.get("use_saved_segmentation", True),
+        "force_recompute": params.get("force_recompute", False),
     }
 
     # Update params with defaults
     for key, value in default_params.items():
         if key not in params:
             params[key] = value
+
+    # Check for saved segmentation results first
+    if params["use_saved_segmentation"] and not params["force_recompute"]:
+        print(f"    Checking for saved segmentation results...")
+        saved_regions, saved_region_properties, saved_merged_surfaces = (
+            load_segmentation_results(fragment_name, params)
+        )
+
+        if (
+            saved_regions is not None
+            and saved_region_properties is not None
+            and saved_merged_surfaces is not None
+        ):
+            # Validate the loaded results
+            if validate_segmentation_results(
+                saved_regions,
+                saved_region_properties,
+                saved_merged_surfaces,
+                fragment_name,
+            ):
+                print(f"    Using saved segmentation results for {fragment_name}")
+                print(
+                    f"    - {len(saved_regions)} regions, {len(saved_merged_surfaces)} merged surfaces"
+                )
+                return saved_merged_surfaces
+            else:
+                print(
+                    f"    Saved segmentation results failed validation, recomputing..."
+                )
+        else:
+            print(
+                f"    No valid saved segmentation results found, computing from scratch..."
+            )
 
     # Convert to trimesh
     if not o3d_mesh_fragment.has_triangles() or not o3d_mesh_fragment.has_vertices():
@@ -842,5 +1128,13 @@ def extract_fracture_surface_mesh(o3d_mesh_fragment, fragment_name="Unnamed", pa
         if cluster_mesh.has_triangles():
             cluster_mesh.compute_vertex_normals()
             merged_fracture_surfaces.append(cluster_mesh)
+
+    # Save segmentation results for future use
+    if params["use_saved_segmentation"] and len(merged_fracture_surfaces) > 0:
+        print(f"    Saving segmentation results for {fragment_name}...")
+        save_segmentation_results(
+            fragment_name, regions, region_properties, merged_fracture_surfaces, params
+        )
+
     # Return merged fracture surfaces for this fragment
     return merged_fracture_surfaces

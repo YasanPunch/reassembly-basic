@@ -324,7 +324,7 @@ def find_pairwise_matches(
     use_cached_matches=True,
     save_matches=True,
     matches_cache_dir="matches_cache",
-    disable_parallel=False,
+    disable_parallel=True,
 ):
     """
     Finds potential pairwise alignments between all unique pairs of fragments.

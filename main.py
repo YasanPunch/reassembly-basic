@@ -295,7 +295,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--disable_parallel",
-        action="store_true",
+        default=True,
         help="Disable parallel processing for pairwise matching (use sequential processing). Note: Parallel processing now works reliably with Open3D.",
     )
 
