@@ -71,6 +71,7 @@ def main(args):
                     "name": frag_info_raw["name"],
                     "original_index": frag_info_raw["original_index"],
                     "original_mesh": frag_info_raw["mesh"],
+                    "path": frag_info_raw.get("path", ""),  # Preserve the file path
                     "fracture_surfaces": fracture_surfaces,
                     "pcds_for_features": [],
                     "features_list": [],
@@ -84,6 +85,7 @@ def main(args):
                 "name": frag_info_raw["name"],
                 "original_index": frag_info_raw["original_index"],
                 "original_mesh": frag_info_raw["mesh"],
+                "path": frag_info_raw.get("path", ""),  # Preserve the file path
                 "fracture_surfaces": fracture_surfaces,
                 "pcds_for_features": pcds_for_features_list,
                 "features_list": features_list,
@@ -136,6 +138,7 @@ def main(args):
         use_cached_matches=use_cached_matches,
         save_matches=use_cached_matches,
         matches_cache_dir=matches_cache_dir,
+        disable_parallel=args.disable_parallel,
     )
 
     if not pairwise_matches:
@@ -285,6 +288,11 @@ if __name__ == "__main__":
         type=int,
         default=None,
         help="Number of parallel jobs for pairwise matching (default: use all CPU cores)",
+    )
+    parser.add_argument(
+        "--disable_parallel",
+        action="store_true",
+        help="Disable parallel processing for pairwise matching (use sequential processing). Note: Parallel processing now works reliably with Open3D.",
     )
 
     parsed_args = parser.parse_args()

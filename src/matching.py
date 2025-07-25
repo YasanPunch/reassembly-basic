@@ -1,3 +1,30 @@
+"""
+Pairwise fragment matching with parallel processing support.
+
+This module implements parallel processing for pairwise fragment matching using Open3D.
+The multiprocessing start method is set to 'spawn' or 'forkserver' to avoid hanging
+issues that occur when forking multithreaded processes (Open3D uses OpenMP internally).
+
+IMPORTANT: Parallel processing is now enabled using file-based loading to avoid Open3D object pickling limitations.
+Open3D objects (TriangleMesh, PointCloud, etc.) cannot be pickled and passed between processes.
+The solution implemented here:
+1. Pass only file paths and indices to worker processes
+2. Load Open3D objects from files in each worker process
+3. Use spawn/forkserver start method to avoid hanging issues
+4. Preprocess fragments in each worker to get required features
+
+Common Open3D operations that hang without proper start method:
+- remove_statistical_outlier()
+- estimate_normals()
+- cluster_connected_triangles()
+- Point cloud registration algorithms
+- Feature extraction (FPFH, etc.)
+
+References:
+- Python multiprocessing docs: https://docs.python.org/3/library/multiprocessing.html
+- Open3D community solutions for similar issues
+"""
+
 from itertools import combinations
 from src.alignment import align_fragments_pcd
 import copy
@@ -8,22 +35,50 @@ import os
 import json
 import numpy as np
 import hashlib
+import platform
+
+# Set multiprocessing start method to avoid issues with Open3D's OpenMP threads
+# This prevents hanging when forking multithreaded processes
+# Common Open3D operations that hang without this: remove_statistical_outlier,
+# estimate_normals, cluster_connected_triangles, and various point cloud operations
+# See: https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods
+if platform.system() != "Windows":
+    try:
+        # Try spawn first (most reliable), fallback to forkserver
+        mp.set_start_method("spawn", force=True)
+        print(
+            "  ℹ️  Set multiprocessing start method to 'spawn' for Open3D compatibility"
+        )
+    except RuntimeError:
+        try:
+            # Fallback to forkserver if spawn fails
+            mp.set_start_method("forkserver", force=True)
+            print(
+                "  ℹ️  Set multiprocessing start method to 'forkserver' for Open3D compatibility"
+            )
+        except RuntimeError:
+            # Method already set, ignore
+            pass
 
 # Global variable to store fragments data for parallel processing
 _global_fragments_data = None
 _global_params = None
 _global_top_n_per_pair = 3
+_global_fragments_paths = None
 
 
-def _init_worker(fragments_data, params, top_n_per_pair=3):
+def _init_worker(fragments_paths, params, top_n_per_pair=3):
     """
-    Initialize worker process with fragments data and parameters.
-    This avoids the need to pickle Open3D objects.
+    Initialize worker process with fragments file paths and parameters.
+    Loads fragments from files to avoid pickling Open3D objects.
     """
-    global _global_fragments_data, _global_params, _global_top_n_per_pair
-    _global_fragments_data = fragments_data
+    global _global_fragments_data, _global_params, _global_top_n_per_pair, _global_fragments_paths
+
+    # Store file paths for later loading
+    _global_fragments_paths = fragments_paths
     _global_params = params
     _global_top_n_per_pair = top_n_per_pair
+    _global_fragments_data = None  # Will be loaded on demand
 
 
 def test_proposed_pairwise_match(source_fragment, target_fragment, transformation, params):
@@ -146,10 +201,67 @@ def _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False):
     return matches
 
 
+def _load_fragments_from_paths(fragments_paths):
+    """
+    Load fragments from file paths. This function is used in worker processes
+    to avoid pickling Open3D objects.
+
+    Args:
+        fragments_paths (list): List of file paths to load fragments from
+
+    Returns:
+        list: List of fragment data dictionaries with loaded Open3D objects
+    """
+    import src.io_utils
+
+    fragments_data = []
+    for i, file_path in enumerate(fragments_paths):
+        # Load the fragment using the existing io_utils function
+        fragment_info = {
+            "mesh": src.io_utils.load_fragment(file_path),
+            "name": os.path.basename(file_path),
+            "original_index": i,
+            "path": file_path,
+        }
+
+        if fragment_info["mesh"] is not None:
+            # Preprocess the fragment to get the required data structure
+            from src.preprocessing import preprocess_fragment
+
+            # Create the fragment data structure expected by the matching pipeline
+            fragment_data = {
+                "name": fragment_info["name"],
+                "original_index": fragment_info["original_index"],
+                "original_mesh": fragment_info["mesh"],
+                "fracture_surfaces": [],
+                "pcds_for_features": [],
+                "features_list": [],
+            }
+
+            # Preprocess to get features
+            pcds_for_features, features_list, fracture_surfaces = preprocess_fragment(
+                fragment_info, _global_params
+            )
+
+            fragment_data["pcds_for_features"] = pcds_for_features
+            fragment_data["features_list"] = features_list
+            fragment_data["fracture_surfaces"] = fracture_surfaces
+
+            fragments_data.append(fragment_data)
+        else:
+            print(f"    Warning: Failed to load fragment from {file_path}")
+
+    return fragments_data
+
+
 def _match_fragment_pair_wrapper(pair_indices):
     """
     Wrapper function for parallel processing of fragment pair matching.
-    Uses global variables to access fragments data, avoiding pickling issues.
+    Uses file paths to load fragments in each worker process, avoiding pickling issues.
+
+    Note: This function uses Open3D operations that require spawn/forkserver
+    multiprocessing start method to avoid hanging (e.g., point cloud operations,
+    feature extraction, registration algorithms).
 
     Args:
         pair_indices: Tuple containing (i, j) indices of fragments to match
@@ -157,9 +269,18 @@ def _match_fragment_pair_wrapper(pair_indices):
     Returns:
         list: Matches for this fragment pair
     """
-    global _global_fragments_data, _global_params, _global_top_n_per_pair
+    global _global_fragments_data, _global_params, _global_top_n_per_pair, _global_fragments_paths
 
     i, j = pair_indices
+
+    # Load fragments data if not already loaded
+    if _global_fragments_data is None:
+        _global_fragments_data = _load_fragments_from_paths(_global_fragments_paths)
+
+    if i >= len(_global_fragments_data) or j >= len(_global_fragments_data):
+        print(f"    Error: Invalid fragment indices ({i}, {j})")
+        return []
+
     frag_i_data = _global_fragments_data[i]
     frag_j_data = _global_fragments_data[j]
     params = _global_params
@@ -168,12 +289,30 @@ def _match_fragment_pair_wrapper(pair_indices):
     # Set process name for debugging
     process_name = f"Worker-{os.getpid()}"
 
-    matches = _match_fragment_pair(i, j, frag_i_data, frag_j_data, params, debug=False)
-    if matches:
-        # Only keep top N matches for this pair (by score)
-        matches_sorted = sorted(matches, key=lambda x: x["score"], reverse=True)
-        return matches_sorted[:top_n_per_pair]
-    return []
+    try:
+        print(
+            f"    {process_name}: Processing pair ({i}, {j}) - {frag_i_data['name']} vs {frag_j_data['name']}"
+        )
+
+        matches = _match_fragment_pair(
+            i, j, frag_i_data, frag_j_data, params, debug=False
+        )
+
+        if matches:
+            # Only keep top N matches for this pair (by score)
+            matches_sorted = sorted(matches, key=lambda x: x["score"], reverse=True)
+            result = matches_sorted[:top_n_per_pair]
+            print(
+                f"    {process_name}: Found {len(result)} matches for pair ({i}, {j})"
+            )
+            return result
+        else:
+            print(f"    {process_name}: No matches found for pair ({i}, {j})")
+            return []
+
+    except Exception as e:
+        print(f"    {process_name}: Error processing pair ({i}, {j}): {e}")
+        return []
 
 
 def find_pairwise_matches(
@@ -185,6 +324,7 @@ def find_pairwise_matches(
     use_cached_matches=True,
     save_matches=True,
     matches_cache_dir="matches_cache",
+    disable_parallel=False,
 ):
     """
     Finds potential pairwise alignments between all unique pairs of fragments.
@@ -236,7 +376,7 @@ def find_pairwise_matches(
 
     # Determine number of jobs
     if n_jobs is None:
-        n_jobs = min(mp.cpu_count(), len(pairs))
+        n_jobs = min(mp.cpu_count(), len(pairs))  # Use all available CPU cores
     else:
         n_jobs = min(n_jobs, len(pairs))
 
@@ -245,27 +385,70 @@ def find_pairwise_matches(
     results = []
 
     # Use parallel processing for better performance
-    if n_jobs > 1 and len(pairs) > 1 and not debug:
+    # Note: Open3D operations are now safe with spawn/forkserver start method
+    # and file-based loading to avoid pickling issues
+    if n_jobs > 1 and len(pairs) > 1 and not debug and not disable_parallel:
         try:
-            # Use global variable approach to avoid pickling Open3D objects
+            print(f"  Attempting parallel processing with {n_jobs} workers...")
+
+            # Extract file paths from fragments data to avoid pickling Open3D objects
+            fragments_paths = [
+                frag["path"]
+                for frag in fragments_data
+                if "path" in frag and frag["path"]
+            ]
+
+            if len(fragments_paths) != len(fragments_data):
+                print(
+                    f"  ⚠️  Some fragments missing file paths ({len(fragments_paths)}/{len(fragments_data)}), falling back to sequential processing..."
+                )
+                print(
+                    f"     Missing paths for fragments: {[frag['name'] for frag in fragments_data if 'path' not in frag or not frag['path']]}"
+                )
+                raise ValueError("Not all fragments have file paths")
+
+            # Use file paths to avoid pickling Open3D objects
             with mp.Pool(
                 processes=n_jobs,
                 initializer=_init_worker,
-                initargs=(fragments_data, params, top_n_per_pair),
+                initargs=(fragments_paths, params, top_n_per_pair),
             ) as pool:
                 # Pass only the pair indices to avoid pickling issues
-                parallel_results = pool.map(_match_fragment_pair_wrapper, pairs)
+                # Use map_async with timeout to prevent hanging
+                async_result = pool.map_async(_match_fragment_pair_wrapper, pairs)
 
-                # Flatten results
-                for result in parallel_results:
-                    if result:
-                        results.extend(result)
+                # Wait for results with a reasonable timeout (30 seconds per pair)
+                timeout = len(pairs) * 30  # 30 seconds per pair
+                try:
+                    parallel_results = async_result.get(timeout=timeout)
+
+                    # Flatten results
+                    for result in parallel_results:
+                        if result:
+                            results.extend(result)
+
+                    print(f"  ✅ Parallel processing completed successfully")
+
+                except mp.TimeoutError:
+                    print(f"  ⚠️  Parallel processing timed out after {timeout} seconds")
+                    print(f"  Falling back to sequential processing...")
+                    # Fall back to sequential processing
+                    results = []
+                    for i, j in pairs:
+                        matches = _match_fragment_pair(
+                            i, j, fragments_data[i], fragments_data[j], params, debug
+                        )
+                        if matches:
+                            matches_sorted = sorted(
+                                matches, key=lambda x: x["score"], reverse=True
+                            )
+                            results.extend(matches_sorted[:top_n_per_pair])
 
         except Exception as e:
-            print(
-                f"Parallel processing failed: {e}. Falling back to sequential processing."
-            )
+            print(f"  ❌ Parallel processing failed: {e}")
+            print(f"  Falling back to sequential processing...")
             # Fallback to sequential processing
+            results = []
             for i, j in pairs:
                 matches = _match_fragment_pair(
                     i, j, fragments_data[i], fragments_data[j], params, debug
@@ -276,7 +459,11 @@ def find_pairwise_matches(
                     )
                     results.extend(matches_sorted[:top_n_per_pair])
     else:
-        # Sequential processing for small numbers of pairs, single job, or debug mode
+        # Sequential processing for small numbers of pairs, single job, debug mode, or disabled parallel
+        if disable_parallel:
+            print(f"  Using sequential processing (parallel processing disabled)...")
+        else:
+            print(f"  Using sequential processing...")
         for i, j in pairs:
             matches = _match_fragment_pair(
                 i, j, fragments_data[i], fragments_data[j], params, debug
