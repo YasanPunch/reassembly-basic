@@ -1,8 +1,8 @@
 {
-  "fragment_name": "pc1.obj",
+  "fragment_name": "brick_part01.obj",
   "params": {
     "// --- I. Preprocessing, Point Cloud Generation ---": null,
-    "voxel_downsample_size": 1.0,
+    "voxel_downsample_size": 3.0,
     "fracture_surface_dense_sample_points": 10000,
     "add_preprocessing_noise": true,
     "preprocessing_noise_factor": 0.01,
@@ -71,71 +71,85 @@
     "use_bumpiness_detection": false,
     "use_saved_selections": true,
     "force_interactive": false,
-    "skip_interactive_if_saved": true
+    "skip_interactive_if_saved": true,
+    "use_saved_segmentation": true,
+    "force_recompute": false
   },
-  "total_regions": 6,
+  "total_regions": 7,
   "selected_regions": [
-    0
+    2,
+    3,
+    6
   ],
   "region_info": [
     {
       "index": 0,
-      "num_faces": 4328,
-      "area_fraction": 0.22205460183742654,
+      "num_faces": 8219,
+      "area_fraction": 0.2618948541410075,
       "avg_normal": [
-        -0.2585886859755225,
-        -0.9652709401347503,
-        -0.03720085505506269
-      ]
-    },
-    {
-      "index": 2,
-      "num_faces": 3735,
-      "area_fraction": 0.1967347697594421,
-      "avg_normal": [
-        0.23474112238976594,
-        0.9626253982881902,
-        0.1350886672881788
+        0.01912108328582594,
+        -0.999766064842826,
+        -0.010109389826621507
       ]
     },
     {
       "index": 1,
-      "num_faces": 3934,
-      "area_fraction": 0.18048161502488896,
+      "num_faces": 6676,
+      "area_fraction": 0.15905143267706717,
       "avg_normal": [
-        -0.8424595808738292,
-        0.21082503901413127,
-        -0.4957969922443883
+        0.005963390344304876,
+        0.9999812849455672,
+        0.001366650728526089
+      ]
+    },
+    {
+      "index": 2,
+      "num_faces": 11423,
+      "area_fraction": 0.15121429765879718,
+      "avg_normal": [
+        0.8026639256706986,
+        0.29284389607625655,
+        0.5195893329907589
       ]
     },
     {
       "index": 3,
-      "num_faces": 3814,
-      "area_fraction": 0.17436869719690784,
+      "num_faces": 9916,
+      "area_fraction": 0.11561240304973804,
       "avg_normal": [
-        0.842828373211136,
-        -0.22517169105851537,
-        0.4888128914586017
+        -0.8622586845045029,
+        0.48778655312011876,
+        0.13628734200855774
       ]
     },
     {
       "index": 4,
-      "num_faces": 2499,
-      "area_fraction": 0.12203744119518743,
+      "num_faces": 5844,
+      "area_fraction": 0.11516626725017408,
       "avg_normal": [
-        0.50020617449316,
-        0.04173206334567479,
-        -0.8649001201802615
+        0.7800795760858995,
+        -0.010153078740105063,
+        -0.6255979299564063
       ]
     },
     {
       "index": 5,
-      "num_faces": 2122,
-      "area_fraction": 0.10432287498614704,
+      "num_faces": 6434,
+      "area_fraction": 0.11308195190525737,
       "avg_normal": [
-        -0.43672575450575873,
-        0.14636208887740745,
-        0.8876084464958733
+        -0.6334751815035248,
+        0.022780802268374555,
+        -0.7734275851474949
+      ]
+    },
+    {
+      "index": 6,
+      "num_faces": 7264,
+      "area_fraction": 0.08397879331795875,
+      "avg_normal": [
+        -0.509385029758408,
+        0.07649281842567067,
+        0.8571322769487352
       ]
     }
   ]

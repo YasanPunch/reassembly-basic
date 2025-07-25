@@ -1,0 +1,1721 @@
+{
+  "metadata": {
+    "num_fragments": 6,
+    "num_matches": 44,
+    "top_n_per_pair": 3,
+    "fragment_names": [
+      "brick_part01.obj",
+      "brick_part02.obj",
+      "brick_part03.obj",
+      "brick_part04.obj",
+      "brick_part05.obj",
+      "brick_part06.obj"
+    ],
+    "params_hash": "a400d921"
+  },
+  "params": {
+    "// --- I. Preprocessing, Point Cloud Generation ---": null,
+    "voxel_downsample_size": 3.0,
+    "fracture_surface_dense_sample_points": 10000,
+    "add_preprocessing_noise": true,
+    "preprocessing_noise_factor": 0.01,
+    "// --- Normal Estimation (for features PCD & fallbacks in alignment) ---": null,
+    "normal_estimation_radius": 14.0,
+    "normal_estimation_max_nn": 30,
+    "orient_normals_k": 15,
+    "// --- II. Segmentation (New Parameters based on Region Growing) ---": null,
+    "visualize_segmentation": true,
+    "// Enables interactive selection of segments from extract_fracture_surface_mesh": null,
+    "visualize_merged_regions": false,
+    "// Enables visualization of merged regions after clustering (debug feature)": null,
+    "debug_voxel_downsampling": false,
+    "// Enables visualization of voxel downsampled point clouds before FPFH feature extraction": null,
+    "max_angle_deviation_deg": 30.0,
+    "// Max angle (degrees) for region growing normal similarity (e.g., 20-45)": null,
+    "min_region_area_percentage": 2.0,
+    "// Min area percentage for a region to survive cleanup (e.g., 1-5%)": null,
+    "fracture_roughness_threshold": 0.1,
+    "// Threshold for `calculate_region_roughness` if automatic selection is used (e.g., 0.05-0.25 radians). Higher = only very rough regions selected.": null,
+    "min_final_segment_size_after_cleanup": 50,
+    "// Optional: Min number of faces for a segment after cleanup to be considered for selection (e.g., 20-100)": null,
+    "// --- III. Feature Extraction (FPFH) ---": null,
+    "fpfh_feature_radius": 10.0,
+    "fpfh_feature_max_nn": 100,
+    "// --- IV. Alignment: RANSAC (Global Registration) ---": null,
+    "ransac_distance_threshold_factor": 1.5,
+    "ransac_edge_length_factor": 0.9,
+    "ransac_iterations": 4000000,
+    "ransac_n_points": 4,
+    "ransac_confidence": 0.999,
+    "// --- V. Alignment: ICP (Local Refinement) ---": null,
+    "icp_max_correspondence_distance_factor": 2.0,
+    "icp_relative_fitness": 1e-06,
+    "icp_relative_rmse": 1e-06,
+    "icp_max_iteration": 50,
+    "// --- VI. Matching and Assembly ---": null,
+    "min_match_score": 0.3,
+    "// Minimum ICP fitness for a pairwise alignment to be considered valid": null,
+    "// --- Boolean Penetration Test Configuration ---": null,
+    "// Penetration test performed during PAIRWISE MATCHING to reject bad matches early": null,
+    "// - use_boolean_intersection_test: Mathematically precise geometric intersection test": null,
+    "// - Set to false to disable penetration tests (not recommended)": null,
+    "use_boolean_intersection_test": true,
+    "// Boolean penetration test parameters:": null,
+    "boolean_penetration_threshold": 0.05,
+    "// Maximum allowed penetration ratio (0.1 = 10% of smaller fragment volume)": null,
+    "debug_assembly": true,
+    "disable_overlap_check": true,
+    "// --- VII. Post-Processing Snapping Configuration ---": null,
+    "// Post-processing step that snaps adjacent fragments together": null,
+    "enable_post_processing_snapping": false,
+    "// Set to false to disable snapping (useful when snapping messes up correctly aligned fragments)": null,
+    "snap_score_threshold": 0.7,
+    "// Minimum match score required for snapping (higher = more selective snapping)": null,
+    "// --- VIII. Match Caching Configuration ---": null,
+    "// Cache pairwise matches to avoid recomputation on subsequent runs": null,
+    "use_match_caching": true,
+    "// Enable/disable loading and saving of cached pairwise matches": null,
+    "matches_cache_dir": "matches_cache",
+    "// Directory to store/load cached pairwise matches": null,
+    "max_curvature_deg": 30.0,
+    "area_limit_fraction": 0.02,
+    "elevation_map_resolution": 64,
+    "bumpiness_threshold": 0.2,
+    "use_bumpiness_detection": false,
+    "use_saved_selections": true,
+    "force_interactive": false,
+    "skip_interactive_if_saved": true,
+    "use_saved_segmentation": true,
+    "force_recompute": false
+  },
+  "matches": [
+    {
+      "source_idx": 2,
+      "target_idx": 0,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.991241595223637,
+          0.07651132103370387,
+          -0.10763882966743882,
+          20.77150851900653
+        ],
+        [
+          -0.08049536427318546,
+          0.9962031770039496,
+          -0.033162123842708266,
+          7.65836410819159
+        ],
+        [
+          0.10469286618020121,
+          0.04153610334286981,
+          0.9936368329978835,
+          -1.332876505783031
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 1.4533942264660826,
+      "confidence": 0.6880440927492868,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 4,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.6078266192647619,
+          0.45169227243642407,
+          0.6530856696746516,
+          -258.70496827601715
+        ],
+        [
+          0.7240787413106204,
+          -0.6528982710317096,
+          -0.22233718552197063,
+          64.66775643804813
+        ],
+        [
+          0.32597051599062954,
+          0.6080279094786872,
+          -0.7239097208905121,
+          178.75133674197988
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 1.6729457282559146,
+      "confidence": 0.5977476647104735,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part05.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 0,
+      "source_surface_idx": 2,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          -0.21065219644494804,
+          -0.24823154807130787,
+          -0.9455193021165892,
+          69.35846784196721
+        ],
+        [
+          -0.5628187921255993,
+          0.821631289345598,
+          -0.09031628645250288,
+          -11.41258535812456
+        ],
+        [
+          0.7992875949013583,
+          0.5131307074327274,
+          -0.3127878158215059,
+          132.94450019738605
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9980392156862745,
+      "rmse": 1.7924972253473714,
+      "confidence": 0.5567867245686465,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 1,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.09124804547666493,
+          -0.9955684832918279,
+          -0.02274179572274102,
+          -88.60814003464206
+        ],
+        [
+          0.403413141185783,
+          0.05783449868122082,
+          -0.9131883750250616,
+          143.55449755946626
+        ],
+        [
+          0.910456825838167,
+          0.07415231512433218,
+          0.4069026940761058,
+          4.431771041473861
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.996078431372549,
+      "rmse": 1.6725110675046653,
+      "confidence": 0.5955582926577423,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part02.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 4,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.5074401508535961,
+          0.5110598591425421,
+          0.6937739643968235,
+          -331.8371363346823
+        ],
+        [
+          0.33268715473132005,
+          -0.626509285962624,
+          0.7048442180222391,
+          -70.52022618067537
+        ],
+        [
+          0.794873417833594,
+          0.5884759425633376,
+          0.1478929161445313,
+          196.1289996006046
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.996078431372549,
+      "rmse": 1.7529781270311888,
+      "confidence": 0.5682203604212265,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part05.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 0,
+      "source_surface_idx": 1,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          -0.7074474675608954,
+          0.6925534307777648,
+          -0.14102420416233533,
+          16.40987661047814
+        ],
+        [
+          -0.1731921550206653,
+          0.023577814970357935,
+          0.9846057912080964,
+          -62.03261638610112
+        ],
+        [
+          0.6852171612569048,
+          0.72098115936491,
+          0.10326475565195758,
+          104.42225397443792
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9905992949471211,
+      "rmse": 2.16761340577397,
+      "confidence": 0.4569997746409223,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 4,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.21656409608560132,
+          -0.9708617170660984,
+          0.10260369692215805,
+          -279.30110364232166
+        ],
+        [
+          0.1327896645878269,
+          -0.07482771128494563,
+          -0.9883155966605552,
+          82.8195190304197
+        ],
+        [
+          0.9671953769871309,
+          0.22765838433785912,
+          0.11271540611379002,
+          193.78293107464611
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9905992949471211,
+      "rmse": 2.3007151706827282,
+      "confidence": 0.4305612780794098,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part05.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 5,
+      "source_surface_idx": 3,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.9904516488101391,
+          -0.03255242891005275,
+          0.1339621989269327,
+          -33.50794239443966
+        ],
+        [
+          0.04190284555426173,
+          0.9968334188973773,
+          -0.06758170243361945,
+          21.742158112426182
+        ],
+        [
+          -0.13133804819525322,
+          0.07254980593651858,
+          0.9886793427369824,
+          -46.70030244265472
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9814159292035398,
+      "rmse": 1.5434295434506413,
+      "confidence": 0.6358665981880807,
+      "source_name": "brick_part04.obj",
+      "target_name": "brick_part06.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 1,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.2549523584878151,
+          0.5494333519242907,
+          -0.7956898181419298,
+          136.95635334883318
+        ],
+        [
+          -0.9489400497012884,
+          0.30026287377339445,
+          -0.09672119057507413,
+          -149.57662192454333
+        ],
+        [
+          0.18577426348775392,
+          0.7797212312272799,
+          0.5979320401174392,
+          -127.30459629374316
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9734513274336283,
+      "rmse": 2.599543092408807,
+      "confidence": 0.37447001967625876,
+      "source_name": "brick_part04.obj",
+      "target_name": "brick_part02.obj"
+    },
+    {
+      "source_idx": 0,
+      "target_idx": 3,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9897830908641733,
+          0.038933808999196615,
+          -0.13716264635889086,
+          22.593247295731377
+        ],
+        [
+          -0.04048813745563398,
+          0.9991433575771338,
+          -0.008559306914909418,
+          5.402751366569118
+        ],
+        [
+          0.1367119005965966,
+          0.014025317333451448,
+          0.9905115580895368,
+          -2.507228023399646
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9554162312783002,
+      "rmse": 1.7259957926332976,
+      "confidence": 0.5535446157003876,
+      "source_name": "brick_part01.obj",
+      "target_name": "brick_part04.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 4,
+      "source_surface_idx": 0,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.988227199421028,
+          0.019006879243614716,
+          -0.15180823714770295,
+          38.10611291751243
+        ],
+        [
+          -0.005233940720131205,
+          0.9958722461150398,
+          0.0906149837627138,
+          -22.160870380130557
+        ],
+        [
+          0.15290391816108762,
+          -0.08875363631534947,
+          0.9842475216386322,
+          64.0025975464504
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9540863177226814,
+      "rmse": 1.6118416734485737,
+      "confidence": 0.5919227313180586,
+      "source_name": "brick_part06.obj",
+      "target_name": "brick_part05.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 5,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9889906939137464,
+          -0.012885157810767992,
+          0.14741567101293365,
+          -46.49189944206986
+        ],
+        [
+          0.026623366466590533,
+          0.9954395524174716,
+          -0.09160400559414786,
+          30.992288462940895
+        ],
+        [
+          -0.14556305750425688,
+          0.09452021049013055,
+          0.9848234999729198,
+          -53.537795322909936
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9523350987000482,
+      "rmse": 1.7405907299072205,
+      "confidence": 0.5471329561877276,
+      "source_name": "brick_part05.obj",
+      "target_name": "brick_part06.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 4,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.999781484953404,
+          -0.0014695192369705362,
+          0.020852406517693513,
+          1.9307865813236313
+        ],
+        [
+          0.0013414658599107945,
+          0.9999801666434929,
+          0.006153599678136914,
+          -1.4703998653771975
+        ],
+        [
+          -0.020861035777584774,
+          -0.006124282232576116,
+          0.9997636272406707,
+          4.796971619446083
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9445329933057061,
+      "rmse": 1.600878229963536,
+      "confidence": 0.5900088998763637,
+      "source_name": "brick_part04.obj",
+      "target_name": "brick_part05.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 4,
+      "source_surface_idx": 3,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.09597965443388431,
+          0.1376990561946846,
+          -0.9858127996013468,
+          143.47216439412944
+        ],
+        [
+          -0.009110128208448923,
+          -0.9902221115867135,
+          -0.13920192271939127,
+          71.71098832194583
+        ],
+        [
+          -0.9953416054294016,
+          0.022341433433037634,
+          -0.09378672002676763,
+          -87.77290646132002
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9300884955752212,
+      "rmse": 2.0785832032233285,
+      "confidence": 0.4474625055520496,
+      "source_name": "brick_part04.obj",
+      "target_name": "brick_part05.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 1,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.9989404393772215,
+          0.024609738411317337,
+          0.03888906468625232,
+          -9.985604730611412
+        ],
+        [
+          -0.025721467195951368,
+          0.9992670676627131,
+          0.028350195943814837,
+          -4.2685860659877575
+        ],
+        [
+          -0.03816287072708949,
+          -0.02932044099415329,
+          0.9988412822054246,
+          0.7947537989693944
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9291736930860034,
+      "rmse": 1.9188282499946585,
+      "confidence": 0.484239904665092,
+      "source_name": "brick_part05.obj",
+      "target_name": "brick_part02.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 4,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.6418650632016294,
+          -0.3606345520306211,
+          -0.6767214792829045,
+          163.95548060426597
+        ],
+        [
+          -0.5992308729349928,
+          0.3147575697470528,
+          -0.7361046346875524,
+          118.96496751854684
+        ],
+        [
+          0.47846797339292674,
+          0.8779922506312908,
+          -0.014071470024946062,
+          196.50813760905572
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9283185840707965,
+      "rmse": 2.2591644114230687,
+      "confidence": 0.4109121799479216,
+      "source_name": "brick_part04.obj",
+      "target_name": "brick_part05.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 0,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.9068713316151269,
+          -0.3237423947078197,
+          0.26976888212589384,
+          -80.43585208641245
+        ],
+        [
+          0.3007471698846322,
+          -0.04879275330957269,
+          0.9524549370079695,
+          33.27108002354343
+        ],
+        [
+          -0.2951872756420778,
+          0.9448863048501223,
+          0.1416133581470709,
+          -5.588548109517049
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9235525576166386,
+      "rmse": 2.6815390811021076,
+      "confidence": 0.3444112449130577,
+      "source_name": "brick_part05.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 1,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.24422334842566223,
+          0.5777985617038583,
+          -0.778783524592496,
+          27.379495605061457
+        ],
+        [
+          -0.2255734168741078,
+          0.7472217525311502,
+          0.6251210171990833,
+          -216.3097605130462
+        ],
+        [
+          0.9431180147168736,
+          0.32834200863920615,
+          -0.05215300259116502,
+          265.5068966771332
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9215214251324025,
+      "rmse": 2.7932772781342976,
+      "confidence": 0.32990677382416417,
+      "source_name": "brick_part05.obj",
+      "target_name": "brick_part02.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 5,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.8005563411529946,
+          0.3635752494119168,
+          -0.4763639182964981,
+          -255.05787334486564
+        ],
+        [
+          -0.051409829086663264,
+          -0.8336612176267437,
+          -0.5498781716874885,
+          163.5571861314782
+        ],
+        [
+          -0.5970482175779528,
+          -0.4157186695833575,
+          0.6860841155768242,
+          -53.16150183584014
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9168141592920354,
+      "rmse": 2.094748640687111,
+      "confidence": 0.4376724270454133,
+      "source_name": "brick_part04.obj",
+      "target_name": "brick_part06.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 0,
+      "source_surface_idx": 1,
+      "target_surface_idx": 2,
+      "transformation": [
+        [
+          0.7561637281227873,
+          0.6223723207558937,
+          0.20216110068054663,
+          -10.11170649430829
+        ],
+        [
+          -0.6039869691406772,
+          0.7826764485917128,
+          -0.15039055132594795,
+          -74.47858160660701
+        ],
+        [
+          -0.25182564877253083,
+          -0.008382790513116628,
+          0.967736312971415,
+          -161.58843450329704
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9008425145819832,
+      "rmse": 2.60365821830725,
+      "confidence": 0.34599094545393666,
+      "source_name": "brick_part06.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 1,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.17220392107284124,
+          0.5194451277433971,
+          0.8369722628801906,
+          -271.3510814828971
+        ],
+        [
+          -0.09846298099959652,
+          0.8544866007278473,
+          -0.5100565562261137,
+          99.96101748967457
+        ],
+        [
+          -0.9801279768172177,
+          0.005422954933884953,
+          0.19829205889286944,
+          -268.17292819886524
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8999081726354453,
+      "rmse": 2.5799414512977994,
+      "confidence": 0.34880939773782965,
+      "source_name": "brick_part06.obj",
+      "target_name": "brick_part02.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 0,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.28188672282890315,
+          -0.0339052794164371,
+          -0.958848427813528,
+          167.35372737626403
+        ],
+        [
+          -0.6573439118359469,
+          -0.7347931153418157,
+          -0.16726643183401937,
+          -55.576144803738806
+        ],
+        [
+          -0.698884008305381,
+          0.6774433627056687,
+          -0.22941585224443584,
+          -36.912103085064025
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8930654569021387,
+      "rmse": 2.5602599569174673,
+      "confidence": 0.34881813687358726,
+      "source_name": "brick_part06.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 0,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.26257392950569575,
+          0.21690414149679135,
+          0.9402167435998356,
+          -232.61874290077313
+        ],
+        [
+          -0.9642370867401181,
+          -0.0954182675825121,
+          -0.24726947803253616,
+          -50.23940180781446
+        ],
+        [
+          0.03608007897536048,
+          -0.9715183722468104,
+          0.23420136696449811,
+          39.083873636663014
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8872326636422554,
+      "rmse": 2.310748594822188,
+      "confidence": 0.3839588095699862,
+      "source_name": "brick_part06.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 2,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.6740900429273194,
+          0.46989655159153715,
+          0.5699121378147919,
+          -242.17916001692134
+        ],
+        [
+          -0.7380031604804319,
+          -0.3961895707275648,
+          -0.5462464271440141,
+          96.946709243419
+        ],
+        [
+          -0.030886067200899144,
+          -0.7888162364258797,
+          0.6138525849125108,
+          -107.07596629560493
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8716814159292036,
+      "rmse": 2.4706271865728637,
+      "confidence": 0.35281772492782815,
+      "source_name": "brick_part04.obj",
+      "target_name": "brick_part03.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 0,
+      "source_surface_idx": 3,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.9286677977025957,
+          0.06141953886995812,
+          0.36579196513211293,
+          -399.3128954381184
+        ],
+        [
+          -0.18393362570771674,
+          0.7801362967263981,
+          -0.597959680801335,
+          118.1669171490142
+        ],
+        [
+          -0.3220939969080845,
+          -0.6225873422862219,
+          -0.7131903381151159,
+          172.0504042274526
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8699115044247787,
+      "rmse": 2.2302058647837986,
+      "confidence": 0.3900586614457892,
+      "source_name": "brick_part04.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 3,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.6723701275981058,
+          -0.7255162777774545,
+          -0.14678059201970647,
+          87.57648675727863
+        ],
+        [
+          0.6576505129114445,
+          0.4945021142194483,
+          0.5682987435317891,
+          64.0137098422431
+        ],
+        [
+          -0.3397266759926609,
+          -0.4786374303295172,
+          0.8096246018412077,
+          44.28523768995284
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8588726513569938,
+      "rmse": 2.7119456432871014,
+      "confidence": 0.3166996863610745,
+      "source_name": "brick_part02.obj",
+      "target_name": "brick_part04.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 4,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.4492372095224189,
+          -0.3418364670796925,
+          -0.8254294393556513,
+          -46.99362648176584
+        ],
+        [
+          0.031627458531180506,
+          0.9294120882796533,
+          -0.3676858360428246,
+          36.90804257577507
+        ],
+        [
+          0.8928525261471623,
+          0.13907192360115977,
+          0.4283379117221639,
+          293.1225508236584
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8534446764091858,
+      "rmse": 2.6809782708299887,
+      "confidence": 0.3183331873151607,
+      "source_name": "brick_part02.obj",
+      "target_name": "brick_part05.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 0,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.25012338209354673,
+          -0.46304973310544784,
+          -0.8503077315896044,
+          -18.537284851046543
+        ],
+        [
+          -0.80876154507321,
+          -0.5827466550400197,
+          0.07944242726945133,
+          -99.15075754833597
+        ],
+        [
+          -0.532299781082876,
+          0.6678257861977499,
+          -0.5202553818544112,
+          1.833159013149349
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.851602023608769,
+      "rmse": 2.3082587845670632,
+      "confidence": 0.3689368195480195,
+      "source_name": "brick_part05.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 0,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.8805648830600583,
+          0.09239726222764877,
+          -0.46483140239688975,
+          -160.72199293510528
+        ],
+        [
+          0.22865849007210384,
+          0.9419303675133632,
+          -0.24593185575295187,
+          142.47534912310448
+        ],
+        [
+          0.41511538352531596,
+          -0.3228466024120123,
+          -0.8505582223878925,
+          302.37494676714203
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8380480905233381,
+      "rmse": 2.688179063797522,
+      "confidence": 0.311752959487189,
+      "source_name": "brick_part04.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 0,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.2162956170976164,
+          0.5584506372518262,
+          0.8008427384807771,
+          -213.57518033715894
+        ],
+        [
+          0.953126834475098,
+          0.29853632853107304,
+          0.04924731414672997,
+          155.33961305819338
+        ],
+        [
+          -0.2115784569086396,
+          0.7739566824443189,
+          -0.5968463875001194,
+          23.04240541882556
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8217118997912317,
+      "rmse": 2.763798448716492,
+      "confidence": 0.29731241902260114,
+      "source_name": "brick_part02.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 4,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.3041566678952095,
+          -0.5973628923230279,
+          0.742055453622134,
+          -249.78084576892468
+        ],
+        [
+          0.9241102255627334,
+          0.37417074263572037,
+          -0.07756639972196966,
+          273.1534613386837
+        ],
+        [
+          -0.23132015127368039,
+          0.709333370306867,
+          0.6658356834713964,
+          -87.66479679605055
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.8195592286501377,
+      "rmse": 2.7398470901311125,
+      "confidence": 0.29912579153646385,
+      "source_name": "brick_part06.obj",
+      "target_name": "brick_part05.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 1,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.5565396717738273,
+          -0.5959495421397181,
+          -0.5788849082203997,
+          110.63562480936405
+        ],
+        [
+          0.6953130923525422,
+          -0.047282477656272005,
+          0.7171499640311154,
+          9.022747719171674
+        ],
+        [
+          -0.45475630544834206,
+          -0.8016286612454324,
+          0.3880569444357742,
+          -98.5195872055695
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7874270900842515,
+      "rmse": 2.5991099013638777,
+      "confidence": 0.3029601736774875,
+      "source_name": "brick_part06.obj",
+      "target_name": "brick_part02.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 5,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.404053077918536,
+          0.8727623659171683,
+          0.2739105015570341,
+          -201.93873539038034
+        ],
+        [
+          0.43619508658244294,
+          0.0793713104550594,
+          -0.8963448228879234,
+          74.95326428907819
+        ],
+        [
+          -0.804036663757251,
+          0.4816492995067211,
+          -0.34862443347934224,
+          349.5089775975571
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7861339600470035,
+      "rmse": 2.0635009671433573,
+      "confidence": 0.3809707829526816,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part06.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 3,
+      "source_surface_idx": 1,
+      "target_surface_idx": 3,
+      "transformation": [
+        [
+          0.9852925884756502,
+          0.00182697748056833,
+          -0.17086596281366262,
+          35.127048182158255
+        ],
+        [
+          0.01798889160402345,
+          0.9932773107541069,
+          0.11435289117441985,
+          -23.11562631571847
+        ],
+        [
+          0.16992620419997953,
+          -0.11574474542879051,
+          0.9786359072871849,
+          60.08910294467294
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7686325340246274,
+      "rmse": 2.041324148471283,
+      "confidence": 0.37653606266509987,
+      "source_name": "brick_part06.obj",
+      "target_name": "brick_part04.obj"
+    },
+    {
+      "source_idx": 4,
+      "target_idx": 0,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.6000369286338464,
+          -0.0010962441484173274,
+          0.7999715510719299,
+          -201.36290151302606
+        ],
+        [
+          0.7121327572058951,
+          -0.4548438429653472,
+          -0.5347747326032175,
+          318.5459861604189
+        ],
+        [
+          0.3644483782238439,
+          0.89057053441335,
+          -0.27214243117295933,
+          132.7037570998611
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7558979297063072,
+      "rmse": 2.764015101643204,
+      "confidence": 0.27347812093313306,
+      "source_name": "brick_part05.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 3,
+      "source_surface_idx": 1,
+      "target_surface_idx": 3,
+      "transformation": [
+        [
+          -0.8225504337430006,
+          0.42963961170437004,
+          -0.37258634972811194,
+          -81.93994005926842
+        ],
+        [
+          -0.4088495836483895,
+          0.008631320493455868,
+          0.9125609668712974,
+          -22.78584823430478
+        ],
+        [
+          0.39528825165913956,
+          0.9029591930763298,
+          0.16855827994852035,
+          264.8959015446912
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.7297297297297297,
+      "rmse": 2.3154582147682077,
+      "confidence": 0.3151555100065886,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part04.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 3,
+      "source_surface_idx": 2,
+      "target_surface_idx": 3,
+      "transformation": [
+        [
+          -0.6829959129258562,
+          -0.09361866604302821,
+          -0.7243977693884054,
+          -51.21574660825891
+        ],
+        [
+          -0.7118088960716301,
+          0.30777248733086887,
+          0.6313510841959923,
+          -49.21218736049041
+        ],
+        [
+          0.16384345699435474,
+          0.9468429866722856,
+          -0.27684595028579584,
+          285.96908269096326
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.703921568627451,
+      "rmse": 2.312917170647572,
+      "confidence": 0.3043434815639702,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part04.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 0,
+      "source_surface_idx": 1,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.3148123743988403,
+          -0.7947024723333921,
+          -0.5189808757483839,
+          181.83196196297996
+        ],
+        [
+          -0.16475538423882508,
+          0.49272888889511496,
+          -0.8544436233084688,
+          83.40243394130665
+        ],
+        [
+          0.9347453301780552,
+          0.35449431944021365,
+          0.024185640263141177,
+          156.10326308051813
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6617954070981211,
+      "rmse": 2.92076107245003,
+      "confidence": 0.22658312819810947,
+      "source_name": "brick_part02.obj",
+      "target_name": "brick_part01.obj"
+    },
+    {
+      "source_idx": 3,
+      "target_idx": 1,
+      "source_surface_idx": 2,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          -0.6163454476810901,
+          -0.23565272591821462,
+          -0.7513894342417339,
+          -120.77017739882248
+        ],
+        [
+          -0.19469404204850493,
+          0.9701529822094133,
+          -0.14455940336414352,
+          29.12515068002281
+        ],
+        [
+          0.7630285178901325,
+          0.05719251592207839,
+          -0.6438295558677706,
+          330.0698790258091
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6485148514851485,
+      "rmse": 2.48273457359066,
+      "confidence": 0.26120979551085777,
+      "source_name": "brick_part04.obj",
+      "target_name": "brick_part02.obj"
+    },
+    {
+      "source_idx": 2,
+      "target_idx": 1,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.7587493710079551,
+          -0.40485178951061845,
+          0.5102885659360618,
+          -155.61446468355788
+        ],
+        [
+          -0.4182501334435106,
+          -0.9033696121942637,
+          -0.09481650509520854,
+          92.90309502842003
+        ],
+        [
+          0.49936581567976623,
+          -0.14148629719529385,
+          -0.8547604400277586,
+          -3.4704496154878544
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5890581286913273,
+      "rmse": 2.866774464669909,
+      "confidence": 0.2054775952811336,
+      "source_name": "brick_part03.obj",
+      "target_name": "brick_part02.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 2,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.38899814553250883,
+          -0.7482867757403507,
+          -0.537352160156055,
+          125.18211339106952
+        ],
+        [
+          0.6115272578041904,
+          0.6459886369425741,
+          -0.45687317047903064,
+          89.2064799823703
+        ],
+        [
+          0.6889955411573843,
+          -0.15088267691549098,
+          0.7088861418253711,
+          108.59237237315067
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.5244328097731239,
+      "rmse": 3.1514673876508934,
+      "confidence": 0.16640903390563166,
+      "source_name": "brick_part02.obj",
+      "target_name": "brick_part03.obj"
+    },
+    {
+      "source_idx": 5,
+      "target_idx": 2,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.3273499242231092,
+          0.2894648276810151,
+          -0.8994732573271566,
+          347.15600636461335
+        ],
+        [
+          0.5428456086950708,
+          0.7215410866111487,
+          0.4297640113509754,
+          -61.95901387340199
+        ],
+        [
+          0.7734084769587167,
+          -0.6289583244282602,
+          0.07906170944770453,
+          205.8865823811482
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.49125081011017496,
+      "rmse": 2.892050785929416,
+      "confidence": 0.16986238368906043,
+      "source_name": "brick_part06.obj",
+      "target_name": "brick_part03.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 5,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.270141793770428,
+          0.6859628608366981,
+          -0.6756318263753045,
+          -146.90544803180822
+        ],
+        [
+          -0.5568297349236943,
+          -0.46115809835211474,
+          -0.6908500956278933,
+          23.055682544484807
+        ],
+        [
+          -0.7854705962436167,
+          0.5628393748459626,
+          0.25738644206659805,
+          82.32274977974768
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.4697286012526096,
+      "rmse": 2.520665108923578,
+      "confidence": 0.18635098063551223,
+      "source_name": "brick_part02.obj",
+      "target_name": "brick_part06.obj"
+    },
+    {
+      "source_idx": 0,
+      "target_idx": 1,
+      "source_surface_idx": 1,
+      "target_surface_idx": 1,
+      "transformation": [
+        [
+          0.016723131177107796,
+          0.9934939534184096,
+          0.11265035022001821,
+          -147.39090537540457
+        ],
+        [
+          0.32050470891061056,
+          -0.11204737333373618,
+          0.9405966817372554,
+          51.815546432820426
+        ],
+        [
+          0.9470992917586611,
+          0.02037524601250143,
+          -0.32029327326712953,
+          202.26644880683517
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.45110578204103385,
+      "rmse": 2.690078876513782,
+      "confidence": 0.1676923373091976,
+      "source_name": "brick_part01.obj",
+      "target_name": "brick_part02.obj"
+    }
+  ]
+}

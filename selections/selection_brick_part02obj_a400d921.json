@@ -1,8 +1,8 @@
 {
-  "fragment_name": "head_part03.obj",
+  "fragment_name": "brick_part02.obj",
   "params": {
     "// --- I. Preprocessing, Point Cloud Generation ---": null,
-    "voxel_downsample_size": 1.0,
+    "voxel_downsample_size": 3.0,
     "fracture_surface_dense_sample_points": 10000,
     "add_preprocessing_noise": true,
     "preprocessing_noise_factor": 0.01,
@@ -71,94 +71,64 @@
     "use_bumpiness_detection": false,
     "use_saved_selections": true,
     "force_interactive": false,
-    "skip_interactive_if_saved": true
+    "skip_interactive_if_saved": true,
+    "use_saved_segmentation": true,
+    "force_recompute": false
   },
-  "total_regions": 8,
+  "total_regions": 5,
   "selected_regions": [
-    3,
-    5,
-    4,
-    7
+    0,
+    1
   ],
   "region_info": [
     {
       "index": 0,
-      "num_faces": 3575,
-      "area_fraction": 0.2550953692796477,
+      "num_faces": 14013,
+      "area_fraction": 0.36389130586296886,
       "avg_normal": [
-        -0.26428754963991985,
-        0.14254839435278724,
-        0.9538511657343453
+        0.8373558221479273,
+        -0.5340377105003694,
+        -0.11678591900778308
       ]
     },
     {
       "index": 1,
-      "num_faces": 5985,
-      "area_fraction": 0.21387359310867807,
+      "num_faces": 9462,
+      "area_fraction": 0.23966151101302008,
       "avg_normal": [
-        0.06094835736837645,
-        -0.28267482911665104,
-        -0.9572775139519202
+        -0.6047042848055977,
+        0.1117909379557168,
+        0.7885654786564853
       ]
     },
     {
       "index": 2,
-      "num_faces": 6129,
-      "area_fraction": 0.19967289758638576,
+      "num_faces": 6633,
+      "area_fraction": 0.2222674569417161,
       "avg_normal": [
-        0.7806649128395153,
-        -0.2618694748483068,
-        -0.5674386944894962
+        -0.741508120180814,
+        0.2036310543495906,
+        -0.6392965676510313
       ]
     },
     {
       "index": 3,
-      "num_faces": 3127,
-      "area_fraction": 0.11615147863267224,
+      "num_faces": 2753,
+      "area_fraction": 0.1437325965190149,
       "avg_normal": [
-        0.2315033487023715,
-        0.9603869576134617,
-        0.15512282612674086
-      ]
-    },
-    {
-      "index": 5,
-      "num_faces": 2163,
-      "area_fraction": 0.08321435067529634,
-      "avg_normal": [
-        -0.8988246788145551,
-        -0.00536139065245929,
-        -0.438275543744097
+        0.06511535432067678,
+        0.9977491036033801,
+        -0.01602238716122805
       ]
     },
     {
       "index": 4,
-      "num_faces": 1639,
-      "area_fraction": 0.06496029266146294,
+      "num_faces": 1061,
+      "area_fraction": 0.03044712966328,
       "avg_normal": [
-        0.27920540352861356,
-        -0.6679198436778873,
-        0.6898749343625484
-      ]
-    },
-    {
-      "index": 7,
-      "num_faces": 923,
-      "area_fraction": 0.03356108800819948,
-      "avg_normal": [
-        -0.9642554696787463,
-        0.23130050093775495,
-        0.12927284115607554
-      ]
-    },
-    {
-      "index": 6,
-      "num_faces": 619,
-      "area_fraction": 0.03347093004765741,
-      "avg_normal": [
-        -0.8056979163175936,
-        0.0032525055794126105,
-        0.5923177262660166
+        -0.16785805714384774,
+        -0.9853479059092273,
+        -0.030218818179959004
       ]
     }
   ]

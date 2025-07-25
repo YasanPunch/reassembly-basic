@@ -1,0 +1,275 @@
+{
+  "metadata": {
+    "num_fragments": 3,
+    "num_matches": 5,
+    "top_n_per_pair": 3,
+    "fragment_names": [
+      "pc1.obj",
+      "pc2_f.obj",
+      "pc3.obj"
+    ],
+    "params_hash": "a400d921"
+  },
+  "params": {
+    "// --- I. Preprocessing, Point Cloud Generation ---": null,
+    "voxel_downsample_size": 3.0,
+    "fracture_surface_dense_sample_points": 10000,
+    "add_preprocessing_noise": true,
+    "preprocessing_noise_factor": 0.01,
+    "// --- Normal Estimation (for features PCD & fallbacks in alignment) ---": null,
+    "normal_estimation_radius": 14.0,
+    "normal_estimation_max_nn": 30,
+    "orient_normals_k": 15,
+    "// --- II. Segmentation (New Parameters based on Region Growing) ---": null,
+    "visualize_segmentation": true,
+    "// Enables interactive selection of segments from extract_fracture_surface_mesh": null,
+    "visualize_merged_regions": false,
+    "// Enables visualization of merged regions after clustering (debug feature)": null,
+    "debug_voxel_downsampling": false,
+    "// Enables visualization of voxel downsampled point clouds before FPFH feature extraction": null,
+    "max_angle_deviation_deg": 30.0,
+    "// Max angle (degrees) for region growing normal similarity (e.g., 20-45)": null,
+    "min_region_area_percentage": 2.0,
+    "// Min area percentage for a region to survive cleanup (e.g., 1-5%)": null,
+    "fracture_roughness_threshold": 0.1,
+    "// Threshold for `calculate_region_roughness` if automatic selection is used (e.g., 0.05-0.25 radians). Higher = only very rough regions selected.": null,
+    "min_final_segment_size_after_cleanup": 50,
+    "// Optional: Min number of faces for a segment after cleanup to be considered for selection (e.g., 20-100)": null,
+    "// --- III. Feature Extraction (FPFH) ---": null,
+    "fpfh_feature_radius": 10.0,
+    "fpfh_feature_max_nn": 100,
+    "// --- IV. Alignment: RANSAC (Global Registration) ---": null,
+    "ransac_distance_threshold_factor": 1.5,
+    "ransac_edge_length_factor": 0.9,
+    "ransac_iterations": 4000000,
+    "ransac_n_points": 4,
+    "ransac_confidence": 0.999,
+    "// --- V. Alignment: ICP (Local Refinement) ---": null,
+    "icp_max_correspondence_distance_factor": 2.0,
+    "icp_relative_fitness": 1e-06,
+    "icp_relative_rmse": 1e-06,
+    "icp_max_iteration": 50,
+    "// --- VI. Matching and Assembly ---": null,
+    "min_match_score": 0.3,
+    "// Minimum ICP fitness for a pairwise alignment to be considered valid": null,
+    "// --- Boolean Penetration Test Configuration ---": null,
+    "// Penetration test performed during PAIRWISE MATCHING to reject bad matches early": null,
+    "// - use_boolean_intersection_test: Mathematically precise geometric intersection test": null,
+    "// - Set to false to disable penetration tests (not recommended)": null,
+    "use_boolean_intersection_test": true,
+    "// Boolean penetration test parameters:": null,
+    "boolean_penetration_threshold": 0.05,
+    "// Maximum allowed penetration ratio (0.1 = 10% of smaller fragment volume)": null,
+    "debug_assembly": true,
+    "disable_overlap_check": true,
+    "// --- VII. Post-Processing Snapping Configuration ---": null,
+    "// Post-processing step that snaps adjacent fragments together": null,
+    "enable_post_processing_snapping": false,
+    "// Set to false to disable snapping (useful when snapping messes up correctly aligned fragments)": null,
+    "snap_score_threshold": 0.7,
+    "// Minimum match score required for snapping (higher = more selective snapping)": null,
+    "// --- VIII. Match Caching Configuration ---": null,
+    "// Cache pairwise matches to avoid recomputation on subsequent runs": null,
+    "use_match_caching": true,
+    "// Enable/disable loading and saving of cached pairwise matches": null,
+    "matches_cache_dir": "matches_cache",
+    "// Directory to store/load cached pairwise matches": null,
+    "max_curvature_deg": 30.0,
+    "area_limit_fraction": 0.02,
+    "elevation_map_resolution": 64,
+    "bumpiness_threshold": 0.2,
+    "use_bumpiness_detection": false,
+    "use_saved_selections": true,
+    "force_interactive": false,
+    "skip_interactive_if_saved": true,
+    "use_saved_segmentation": true,
+    "force_recompute": false
+  },
+  "matches": [
+    {
+      "source_idx": 2,
+      "target_idx": 0,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9910371511457079,
+          -0.036035938616076305,
+          -0.12863427294876512,
+          79.20634611861483
+        ],
+        [
+          0.033389098083031046,
+          0.9991851818505308,
+          -0.022674666470022656,
+          24.785119023049585
+        ],
+        [
+          0.12934656229757652,
+          0.018176454505304477,
+          0.99143284357712,
+          -4.39246722018714
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 1.0,
+      "rmse": 1.3879310120825168,
+      "confidence": 0.7204963869228395,
+      "source_name": "pc3.obj",
+      "target_name": "pc1.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 0,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.20554475012391288,
+          0.8913061553598078,
+          -0.40413449879244084,
+          153.62839376764953
+        ],
+        [
+          -0.7365941189034233,
+          -0.13098970076612645,
+          -0.6635290515795752,
+          559.2249316441857
+        ],
+        [
+          -0.6443449849990219,
+          0.4340680081633755,
+          0.629606626867676,
+          135.48452723836033
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9748110831234257,
+      "rmse": 1.5524529584942728,
+      "confidence": 0.6279162597961335,
+      "source_name": "pc2_f.obj",
+      "target_name": "pc1.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 0,
+      "source_surface_idx": 2,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.5272278745377915,
+          -0.39313636889014747,
+          0.7533090758554788,
+          -375.36502875141457
+        ],
+        [
+          0.019159926351399712,
+          0.8808082856514843,
+          0.47308525780233684,
+          138.9367927164256
+        ],
+        [
+          -0.849507896097835,
+          0.26385708135952146,
+          -0.45685421644531554,
+          555.0489684795025
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9383561643835616,
+      "rmse": 1.5396116340673724,
+      "confidence": 0.6094754898864384,
+      "source_name": "pc2_f.obj",
+      "target_name": "pc1.obj"
+    },
+    {
+      "source_idx": 1,
+      "target_idx": 2,
+      "source_surface_idx": 3,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          -0.17692367080245305,
+          -0.8379679319361953,
+          0.5162438956117157,
+          -261.7987497488153
+        ],
+        [
+          0.5577269072633037,
+          -0.5175340127059431,
+          -0.6489215997383615,
+          607.2535378729883
+        ],
+        [
+          0.8109492657523619,
+          0.1731135198043709,
+          0.5589212803576609,
+          223.2536693434305
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.9141104294478528,
+      "rmse": 1.9441639086076181,
+      "confidence": 0.4701815290465895,
+      "source_name": "pc2_f.obj",
+      "target_name": "pc3.obj"
+    },
+    {
+      "source_idx": 0,
+      "target_idx": 2,
+      "source_surface_idx": 0,
+      "target_surface_idx": 0,
+      "transformation": [
+        [
+          0.9891484731317544,
+          0.01867881643303352,
+          0.14572714200786055,
+          -81.114679256496
+        ],
+        [
+          -0.0213111501768595,
+          0.9996363444755655,
+          0.016523125662783196,
+          -20.896189699234526
+        ],
+        [
+          -0.14536551509645443,
+          -0.019449437528880217,
+          0.9891868308871441,
+          14.27231558065949
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "score": 0.6869965477560415,
+      "rmse": 1.845910570065054,
+      "confidence": 0.37217197123469475,
+      "source_name": "pc1.obj",
+      "target_name": "pc3.obj"
+    }
+  ]
+}
