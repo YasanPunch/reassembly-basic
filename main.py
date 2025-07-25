@@ -217,6 +217,10 @@ def main(args):
     if reconstructed_model and reconstructed_model.has_vertices():
         if args.visualize_final:
             print("  Visualizing final composite assembly...")
+            # Create a copy of the reconstructed model and paint it with a uniform color
+            reconstructed_model.paint_uniform_color(
+                [0.8, 0.8, 0.8]
+            )  # Light gray color for all parts
             o3d.visualization.draw_geometries(
                 [reconstructed_model], window_name="Final Composite Assembly"
             )

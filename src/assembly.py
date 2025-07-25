@@ -692,6 +692,9 @@ class Assembler:
             final_meshes_to_combine_o3d, final_transforms_for_combine
         ):
             mesh_pg = copy.deepcopy(mesh)
+            mesh_pg.paint_uniform_color(
+                [0.8, 0.8, 0.8]
+            )  # Light gray color for all parts
             mesh_pg.transform(transform)
             pose_graph_meshes.append(mesh_pg)
         o3d.visualization.draw_geometries(
